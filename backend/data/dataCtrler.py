@@ -1,8 +1,6 @@
-import copy
 import os
-import numpy as np
 import json
-from queue import PriorityQueue
+import data.reorder as reorder
 
 class DataCtrler(object):
 
@@ -17,10 +15,20 @@ class DataCtrler(object):
     def processStatisticData(self, data):     
         return data
 
-    def process(self, statisticData, predictData = None, trainImages = None):
+    def process(self, statisticData, predictData = None, trainImages = None, reordered=True):
         """process raw data
         """        
         self.statistic = self.processStatisticData(statisticData)
+
+        if reordered:
+            hierarchy_path = os.path.join('backend', 'data', 'hierarchy.json')
+            if not os.path.exists(hierarchy_path):
+                ordered_hierarchy = reorder.getOrderedHierarchy(self.statistic["confusion"])
+                with open(hierarchy_path, 'w') as f:
+                    json.dump(ordered_hierarchy, f)
+            with open(hierarchy_path) as fr:
+                ordered_hierarchy = json.load(fr)
+            self.statistic["confusion"]['hierarchy'] = ordered_hierarchy
 
         if predictData is not None:
             self.labels = predictData["labels"].astype(int)

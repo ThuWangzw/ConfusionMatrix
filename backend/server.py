@@ -48,7 +48,7 @@ def main():
         statisticData = json.load(f)
     trainImages = np.load(trainImagePath)
     
-    dataCtrler.process(statisticData, predictData = predictData, trainImages = trainImages)
+    dataCtrler.process(statisticData, predictData = predictData, trainImages = trainImages, reordered=True)
 
     app.run(port=args.port, host=args.host, threaded=True, debug=False)
 
