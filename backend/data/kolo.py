@@ -1,4 +1,4 @@
-from backend.data.tree import TreeNode
+from data.tree import TreeNode
 import itertools
 import math
 import copy

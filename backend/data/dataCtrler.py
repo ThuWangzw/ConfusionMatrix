@@ -21,7 +21,7 @@ class DataCtrler(object):
         self.statistic = self.processStatisticData(statisticData)
 
         if reordered:
-            hierarchy_path = os.path.join('backend', 'data', 'hierarchy.json')
+            hierarchy_path = os.path.join('buffer', 'hierarchy.json')
             if not os.path.exists(hierarchy_path):
                 ordered_hierarchy = reorder.getOrderedHierarchy(self.statistic["confusion"])
                 with open(hierarchy_path, 'w') as f:
