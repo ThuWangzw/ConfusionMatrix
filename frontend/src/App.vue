@@ -73,7 +73,7 @@ export default {
         initColor(hierarchy) {
             const that = this;
             const basecolors = ['#8dd3c7', '#fee789', '#fe614f', '#80b1d3',
-                '#fdb462', '#b3de69', '#fccde5', '#bc80bd', '#ccebc5', '#cdb2ab', '#a59132', '#d8ddef'];
+                '#fdb462', '#b3de69', '#fccde5', '#bc80bd', '#ccebc5', '#cdb2ab', '#a59132', '#d8ddef', '#C0C0C0'];
             // 1:ffffb3  2:fb8072
             const colors = {}; // fill and opacity
 

@@ -97,6 +97,14 @@ class DataCtrler(object):
                         "children": []
                     }
                 self.hierarchy[superCategory]["children"].append(categorys[classIdx]["name"])
+            self.hierarchy = list(self.hierarchy.values())
+            self.hierarchy.append({
+                    "name": "background",
+                    "children": ["background"]
+                })
+            self.names.append("background")
+            self.classID2Idx[-1]=len(categorys)
+                
             
         # compute (predict,label) pair
         self.compute_label_predict_pair()
@@ -111,7 +119,7 @@ class DataCtrler(object):
         
     def getMetaData(self):
         return {
-            "hierarchy": list(self.hierarchy.values()),
+            "hierarchy": self.hierarchy,
             "names": self.names
         }
             
@@ -162,14 +170,15 @@ class DataCtrler(object):
         """        
         # remove fn
         filtered = self.label_predict_pairs[np.where(self.label_predict_pairs[:,1]>-1)[0]]
+        fn = self.label_predict_pairs[np.where(self.label_predict_pairs[:,1]==-1)[0]]
         
         # confusion
-        y_true = self.raw_labels[filtered[:,0],0].astype(np.int32)
-        y_predict = self.raw_predicts[filtered[:,1],0].astype(np.int32)
+        y_true = np.concatenate((self.raw_labels[filtered[:,0],0].astype(np.int32), self.raw_labels[fn[:,0],0].astype(np.int32)))
+        y_predict = np.concatenate((self.raw_predicts[filtered[:,1],0].astype(np.int32), (len(self.classID2Idx)-1)*np.ones(len(fn), dtype=np.int32)))
         class_labels = np.zeros(len(self.classID2Idx))
         for id,idx in self.classID2Idx.items():
             class_labels[idx]=id
-        confusion = confusion_matrix(y_true,y_predict,labels = class_labels.astype(np.int32))
+        confusion = confusion_matrix(y_true,y_predict,labels = np.arange(len(self.classID2Idx)))
         return confusion.tolist()
         
         

@@ -22,8 +22,8 @@ def confusionMatrix():
 
 def main():
     parser = argparse.ArgumentParser(description='manual to this script')
-    parser.add_argument("--rawDataPath", type=str, default='../datasets/coco/')
-    parser.add_argument("--bufferPath", type=str, default='buffer/')
+    parser.add_argument("--rawDataPath", type=str, default='/data/zhaowei/ConfusionMatrix/datasets/coco/')
+    parser.add_argument("--bufferPath", type=str, default='/data/zhaowei/ConfusionMatrix/backend/buffer/')
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=5010)
     args = parser.parse_args()

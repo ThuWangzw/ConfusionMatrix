@@ -201,8 +201,8 @@ export default {
                 root.leafs = leafs;
                 return root;
             };
-            for (const root of Object.values(hierarchy)) {
-                postorder(root, 0);
+            for (let i=0; i<hierarchy.length; i++) {
+                hierarchy[i] = postorder(hierarchy[i], 0);
             }
             return hierarchy;
         },
