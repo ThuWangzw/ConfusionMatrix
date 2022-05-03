@@ -24,6 +24,7 @@
 import DataView from './components/DataView.vue';
 import Vue from 'vue';
 import VueRouter from 'vue-router';
+import * as d3 from 'd3';
 import {Menu, MenuItem} from 'element-ui';
 import axios from 'axios';
 import {simulatedAnnealing2FindBestPalette, evaluatePalette} from './js/optimizeFunc';
@@ -51,10 +52,10 @@ export default {
     mounted: function() {
         const store = this.$store;
         const that = this;
-        axios.post(store.getters.URL_GET_CONFUSION_MATRIX)
+        axios.post(store.getters.URL_GET_METADATA)
             .then(function(response) {
-                store.commit('setConfusionMatrix', response.data);
-                console.log('confusion matrix data', response.data);
+                store.commit('setMetadata', response.data);
+                console.log('meta data', response.data);
                 const colors = that.initColor(store.getters.labelHierarchy);
                 store.commit('setColors', colors);
                 // init hierarchy colors
@@ -72,7 +73,7 @@ export default {
         initColor(hierarchy) {
             const that = this;
             const basecolors = ['#8dd3c7', '#fee789', '#fe614f', '#80b1d3',
-                '#fdb462', '#b3de69', '#fccde5', '#bc80bd', '#ccebc5', '#ffed6f'];
+                '#fdb462', '#b3de69', '#fccde5', '#bc80bd', '#ccebc5', '#cdb2ab', '#a59132', '#d8ddef'];
             // 1:ffffb3  2:fb8072
             const colors = {}; // fill and opacity
 
@@ -269,7 +270,12 @@ export default {
                     const opacity = baseopacity;
                     // const minOpacity = baseopacity>0.4?0.4:0;
                     // const opacityStep = childcnt>1?(opacity-minOpacity)/(childcnt-1):0;
-                    const bestColors = simulatedAnnealing2FindBestPalette(basecolor, childcnt, (newpalette) => evaluatePalette(newpalette), that.colorsscope);
+                    let bestColors = {};
+                    if (childcnt===1) {
+                        bestColors = {id: [d3.rgb(basecolor)]};
+                    } else {
+                        bestColors = simulatedAnnealing2FindBestPalette(basecolor, childcnt, (newpalette) => evaluatePalette(newpalette), that.colorsscope);
+                    }
                     console.log(basecolor, bestColors);
                     node.children.forEach((child, idx) => {
                         const childname = typeof(child)==='string'?child:child.name;

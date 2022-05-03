@@ -1,4 +1,5 @@
 #! /usr/bin/python3
+from dataclasses import dataclass
 import os
 import pickle
 import json
@@ -9,6 +10,11 @@ from data.dataCtrler import dataCtrler
 from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
+
+
+@app.route('/api/metadata', methods=["POST"])
+def metaData():
+    return jsonify(dataCtrler.getMetaData())
 
 @app.route('/api/confusionMatrix', methods=["POST"])
 def confusionMatrix():

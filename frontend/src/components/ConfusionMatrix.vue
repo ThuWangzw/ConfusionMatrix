@@ -25,15 +25,17 @@ export default {
             type: Boolean,
             default: false,
         },
+        confusionMatrix: {
+            type: Array,
+            default: undefined,
+        },
     },
     computed: {
         ...mapGetters([
-            'confusionMatrix',
             'labelHierarchy',
             'labelnames',
             'hierarchyColors',
             'colors',
-            'shownClass',
         ]),
         baseMatrix: function() {
             return this.confusionMatrix;
@@ -114,8 +116,7 @@ export default {
         hierarchyColors: function() {
             this.getDataAndRender();
         },
-        shownClass: function(newShownClass, oldShownClass) {
-            this.updateHierarchy(newShownClass);
+        confusionMatrix: function() {
             this.getDataAndRender();
         },
     },
@@ -205,37 +206,6 @@ export default {
             }
             return hierarchy;
         },
-        updateHierarchy: function(shownClass) {
-            console.log('hierarchy', shownClass, this.hierarchy);
-            const travel = function(root) {
-                root.expand = false;
-                for (const child of root.children) {
-                    if (shownClass.indexOf(child.name) !== -1) {
-                        root.expand = true;
-                        break;
-                    }
-                }
-                if (root.expand) {
-                    for (const child of root.children) {
-                        travel(child);
-                    }
-                } else {
-                    setUnexpand(root);
-                }
-            };
-            const setUnexpand = function(root) {
-                if (!root) {
-                    return;
-                }
-                root.expand = false;
-                for (const child of root.children) {
-                    setUnexpand(child);
-                }
-            };
-            for (const child of this.hierarchy) {
-                travel(child);
-            }
-        },
         getShowNodes: function(hierarchy) {
             const showNodes = [];
             const stack = Object.values(hierarchy).reverse();
@@ -251,6 +221,9 @@ export default {
             return showNodes;
         },
         getDataAndRender: function() {
+            if (this.confusionMatrix===undefined || this.labelHierarchy===undefined || this.hierarchyColors===undefined) {
+                return;
+            }
             // this.setLabelColorsByHierarchy(this.colors, this.hierarchy);
             // get nodes to show
             this.showNodes = this.getShowNodes(this.hierarchy);

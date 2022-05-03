@@ -12,7 +12,9 @@ class DataCtrler(object):
         super().__init__()
         self.iou_threshold = 0.45
         self.conf_threshold = 0.25
-        self.classID2Idx = {}        
+        self.classID2Idx = {}      
+        self.hierarchy = {}  
+        self.names = []
 
     def process(self, rawDataPath, bufferPath, reordered=True):
         """process raw data
@@ -81,11 +83,20 @@ class DataCtrler(object):
             with open(self.raw_data_path, 'wb') as f:
                 pickle.dump((self.image2index, self.raw_labels, self.raw_label2imageid, self.imageid2raw_label, self.raw_predicts, self.raw_predict2imageid, self.imageid2raw_predict), f)
         
-        ## init class idx
-        classes = np.unique(self.raw_labels[:,0]).astype(np.int32)
-        for classIdx, classID in enumerate(classes):
-            self.classID2Idx[classID]=classIdx
-        
+        ## init meta data
+        with open(self.meta_path) as f:
+            metas = json.load(f)
+            categorys = metas["categories"]
+            for classIdx in range(len(categorys)):
+                self.classID2Idx[categorys[classIdx]["id"]] = classIdx
+                self.names.append(categorys[classIdx]["name"])
+                superCategory = categorys[classIdx]["supercategory"]
+                if superCategory not in self.hierarchy:
+                    self.hierarchy[superCategory] = {
+                        "name": superCategory,
+                        "children": []
+                    }
+                self.hierarchy[superCategory]["children"].append(categorys[classIdx]["name"])
             
         # compute (predict,label) pair
         self.compute_label_predict_pair()
@@ -98,7 +109,11 @@ class DataCtrler(object):
         self.predict_aspect_ratio = self.raw_predicts[:,4]/self.raw_predicts[:,5]
         ## TODO init direction
         
-        
+    def getMetaData(self):
+        return {
+            "hierarchy": list(self.hierarchy.values()),
+            "names": self.names
+        }
             
     def compute_label_predict_pair(self):
         def compute_per_image(detections, labels):
@@ -155,7 +170,7 @@ class DataCtrler(object):
         for id,idx in self.classID2Idx.items():
             class_labels[idx]=id
         confusion = confusion_matrix(y_true,y_predict,labels = class_labels.astype(np.int32))
-        return confusion
+        return confusion.tolist()
         
         
 def box_area(box):
