@@ -44,9 +44,5 @@ export default new Vuex.Store({
         hierarchyColors: (state) => state.hierarchyColors,
         shownClass: (state) => state.shownClass,
         URL_GET_CONFUSION_MATRIX: (state) => state.APIBASE + '/api/confusionMatrix',
-        URL_GET_IMAGES_IN_MATRIX_CELL: (state) => state.APIBASE+'/api/confusionMatrixCell',
-        URL_GET_IMAGE: (state) => {
-            return (imageID) => state.APIBASE + `/api/image?imageID=${imageID}`;
-        },
     },
 });

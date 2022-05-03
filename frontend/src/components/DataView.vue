@@ -1,7 +1,7 @@
 <template>
     <div id="data-content">
         <div id="confusion-matrix-container">
-            <confusion-matrix ref="matrix" id="confusion-matrix" @clickCell="clickConfusionCell" :showColor="true">
+            <confusion-matrix ref="matrix" id="confusion-matrix" :showColor="true">
             </confusion-matrix>
         </div>
     </div>
@@ -9,7 +9,6 @@
 
 <script>
 import ConfusionMatrix from './ConfusionMatrix.vue';
-import axios from 'axios';
 
 export default {
     components: {ConfusionMatrix},
@@ -19,16 +18,6 @@ export default {
         };
     },
     methods: {
-        clickConfusionCell: function(d) {
-            const store = this.$store;
-            axios.post(store.getters.URL_GET_IMAGES_IN_MATRIX_CELL, {
-                labels: d.rowNode.leafs,
-                preds: d.colNode.leafs,
-            }).then(function(response) {
-                const images = response.data;
-                console.log(images);
-            });
-        },
     },
 };
 </script>

@@ -461,10 +461,7 @@ export default {
                     .attr('opacity', 0)
                     .attr('cursor', that.cellAttrs['cursor'])
                     .attr('transform', (d) => `translate(${d.column*that.cellAttrs['size']}, 
-                        ${d.row*that.cellAttrs['size']})`)
-                    .on('click', function(e, d) {
-                        that.$emit('clickCell', d);
-                    });
+                        ${d.row*that.cellAttrs['size']})`);
 
                 matrixCellsinG.transition()
                     .duration(that.createDuration)
