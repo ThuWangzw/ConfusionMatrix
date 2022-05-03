@@ -307,7 +307,7 @@ export default {
                 const icony = that.cellAttrs['size']/2-that.horizonTextAttrs['font-size']/2+that.horizonTextAttrs['iconDy'];
                 horizonTextinG.filter((d) => d.children.length>0)
                     .append('image')
-                    .attr('xlink:href', '/static/images/arrow.png')
+                    .attr('xlink:href', (d) => '/static/images/'+(d.children.length>1?'arrow.png':'dot.png'))
                     .attr('x', 0)
                     .attr('y', icony)
                     .attr('width', that.horizonTextAttrs['font-size'])
@@ -316,6 +316,7 @@ export default {
                         ${that.horizonTextAttrs['font-size']/2} ${icony+that.horizonTextAttrs['font-size']/2})`)
                     .attr('cursor', 'pointer')
                     .on('click', function(e, d) {
+                        if (d.children.length===1) return;
                         d.expand = !d.expand;
                         that.getDataAndRender();
                     });
@@ -369,7 +370,7 @@ export default {
 
                 verticalTextinG.filter((d) => d.children.length>0)
                     .append('image')
-                    .attr('xlink:href', '/static/images/arrow.png')
+                    .attr('xlink:href', (d) => '/static/images/'+(d.children.length>1?'arrow.png':'dot.png'))
                     .attr('x', 0)
                     .attr('y', icony)
                     .attr('width', that.verticalTextAttrs['font-size'])
@@ -378,6 +379,7 @@ export default {
                         ${that.verticalTextAttrs['font-size']/2} ${icony+that.verticalTextAttrs['font-size']/2})`)
                     .attr('cursor', 'pointer')
                     .on('click', function(e, d) {
+                        if (d.children.length===1) return;
                         d.expand = !d.expand;
                         that.getDataAndRender();
                     });
