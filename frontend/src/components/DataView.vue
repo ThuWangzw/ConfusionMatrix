@@ -1,7 +1,7 @@
 <template>
     <div id="data-content">
         <div id="confusion-matrix-container">
-            <confusion-matrix ref="matrix" id="confusion-matrix" @clickCell="clickConfusionCell" :showColor="true">
+            <confusion-matrix ref="matrix" id="confusion-matrix" :showColor="true" :confusionMatrix="confusionMatrix">
             </confusion-matrix>
         </div>
     </div>
@@ -16,19 +16,18 @@ export default {
     name: 'DataView',
     data() {
         return {
+            confusionMatrix: undefined,
         };
     },
     methods: {
-        clickConfusionCell: function(d) {
-            const store = this.$store;
-            axios.post(store.getters.URL_GET_IMAGES_IN_MATRIX_CELL, {
-                labels: d.rowNode.leafs,
-                preds: d.colNode.leafs,
-            }).then(function(response) {
-                const images = response.data;
-                console.log(images);
+    },
+    mounted: function() {
+        const store = this.$store;
+        const that = this;
+        axios.post(store.getters.URL_GET_CONFUSION_MATRIX)
+            .then(function(response) {
+                that.confusionMatrix = response.data;
             });
-        },
     },
 };
 </script>

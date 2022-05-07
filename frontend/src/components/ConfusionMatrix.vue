@@ -25,15 +25,17 @@ export default {
             type: Boolean,
             default: false,
         },
+        confusionMatrix: {
+            type: Array,
+            default: undefined,
+        },
     },
     computed: {
         ...mapGetters([
-            'confusionMatrix',
             'labelHierarchy',
             'labelnames',
             'hierarchyColors',
             'colors',
-            'shownClass',
         ]),
         baseMatrix: function() {
             return this.confusionMatrix;
@@ -114,8 +116,7 @@ export default {
         hierarchyColors: function() {
             this.getDataAndRender();
         },
-        shownClass: function(newShownClass, oldShownClass) {
-            this.updateHierarchy(newShownClass);
+        confusionMatrix: function() {
             this.getDataAndRender();
         },
     },
@@ -200,41 +201,10 @@ export default {
                 root.leafs = leafs;
                 return root;
             };
-            for (const root of Object.values(hierarchy)) {
-                postorder(root, 0);
+            for (let i=0; i<hierarchy.length; i++) {
+                hierarchy[i] = postorder(hierarchy[i], 0);
             }
             return hierarchy;
-        },
-        updateHierarchy: function(shownClass) {
-            console.log('hierarchy', shownClass, this.hierarchy);
-            const travel = function(root) {
-                root.expand = false;
-                for (const child of root.children) {
-                    if (shownClass.indexOf(child.name) !== -1) {
-                        root.expand = true;
-                        break;
-                    }
-                }
-                if (root.expand) {
-                    for (const child of root.children) {
-                        travel(child);
-                    }
-                } else {
-                    setUnexpand(root);
-                }
-            };
-            const setUnexpand = function(root) {
-                if (!root) {
-                    return;
-                }
-                root.expand = false;
-                for (const child of root.children) {
-                    setUnexpand(child);
-                }
-            };
-            for (const child of this.hierarchy) {
-                travel(child);
-            }
         },
         getShowNodes: function(hierarchy) {
             const showNodes = [];
@@ -251,6 +221,9 @@ export default {
             return showNodes;
         },
         getDataAndRender: function() {
+            if (this.confusionMatrix===undefined || this.labelHierarchy===undefined || this.hierarchyColors===undefined) {
+                return;
+            }
             // this.setLabelColorsByHierarchy(this.colors, this.hierarchy);
             // get nodes to show
             this.showNodes = this.getShowNodes(this.hierarchy);
@@ -334,7 +307,7 @@ export default {
                 const icony = that.cellAttrs['size']/2-that.horizonTextAttrs['font-size']/2+that.horizonTextAttrs['iconDy'];
                 horizonTextinG.filter((d) => d.children.length>0)
                     .append('image')
-                    .attr('xlink:href', '/static/images/arrow.png')
+                    .attr('xlink:href', (d) => '/static/images/'+(d.children.length>1?'arrow.png':'dot.png'))
                     .attr('x', 0)
                     .attr('y', icony)
                     .attr('width', that.horizonTextAttrs['font-size'])
@@ -343,6 +316,7 @@ export default {
                         ${that.horizonTextAttrs['font-size']/2} ${icony+that.horizonTextAttrs['font-size']/2})`)
                     .attr('cursor', 'pointer')
                     .on('click', function(e, d) {
+                        if (d.children.length===1) return;
                         d.expand = !d.expand;
                         that.getDataAndRender();
                     });
@@ -396,7 +370,7 @@ export default {
 
                 verticalTextinG.filter((d) => d.children.length>0)
                     .append('image')
-                    .attr('xlink:href', '/static/images/arrow.png')
+                    .attr('xlink:href', (d) => '/static/images/'+(d.children.length>1?'arrow.png':'dot.png'))
                     .attr('x', 0)
                     .attr('y', icony)
                     .attr('width', that.verticalTextAttrs['font-size'])
@@ -405,6 +379,7 @@ export default {
                         ${that.verticalTextAttrs['font-size']/2} ${icony+that.verticalTextAttrs['font-size']/2})`)
                     .attr('cursor', 'pointer')
                     .on('click', function(e, d) {
+                        if (d.children.length===1) return;
                         d.expand = !d.expand;
                         that.getDataAndRender();
                     });
@@ -461,10 +436,7 @@ export default {
                     .attr('opacity', 0)
                     .attr('cursor', that.cellAttrs['cursor'])
                     .attr('transform', (d) => `translate(${d.column*that.cellAttrs['size']}, 
-                        ${d.row*that.cellAttrs['size']})`)
-                    .on('click', function(e, d) {
-                        that.$emit('clickCell', d);
-                    });
+                        ${d.row*that.cellAttrs['size']})`);
 
                 matrixCellsinG.transition()
                     .duration(that.createDuration)

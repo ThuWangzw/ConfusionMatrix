@@ -1,94 +1,249 @@
 import os
 import json
-import data.reorder as reorder
+import numpy as np
+# import data.reorder as reorder
+import pickle
+import torch
+from sklearn.metrics import confusion_matrix
 
 class DataCtrler(object):
 
     def __init__(self):
         super().__init__()
-        self.statistic = {}
-        self.labels = None
-        self.preds = None
-        self.features = None
-        self.trainImages = None
+        self.iou_threshold_localization = 0.5
+        self.iou_threshold_miss = 0.1
+        self.classID2Idx = {}      
+        self.hierarchy = {}  
+        self.names = []
 
-    def processStatisticData(self, data):     
-        return data
-
-    def process(self, statisticData, predictData = None, trainImages = None, reordered=True):
+    def process(self, rawDataPath, bufferPath, reordered=True):
         """process raw data
+        - rawDataPath/
+          - images/
+          - labels/
+          - predicts/
+          - meta.json
         """        
-        self.statistic = self.processStatisticData(statisticData)
-
-        if reordered:
-            hierarchy_path = os.path.join('buffer', 'hierarchy.json')
-            if not os.path.exists(hierarchy_path):
-                ordered_hierarchy = reorder.getOrderedHierarchy(self.statistic["confusion"])
-                with open(hierarchy_path, 'w') as f:
-                    json.dump(ordered_hierarchy, f)
-            with open(hierarchy_path) as fr:
-                ordered_hierarchy = json.load(fr)
-            self.statistic["confusion"]['hierarchy'] = ordered_hierarchy
-
-        if predictData is not None:
-            self.labels = predictData["labels"].astype(int)
-            self.preds = predictData["preds"].astype(int)
-            self.features = predictData["features"]
-            
-        self.trainImages = trainImages
+        # init paths
+        self.root_path = rawDataPath        
+        self.images_path = os.path.join(self.root_path, "images")
+        self.labels_path = os.path.join(self.root_path, "labels")
+        self.predicts_path = os.path.join(self.root_path, "predicts")
+        self.meta_path = os.path.join(self.root_path, "meta.json")
+        if not os.path.exists(bufferPath):
+            os.makedirs(bufferPath)
+        self.raw_data_path = os.path.join(bufferPath, "{}_raw_data.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
+        self.label_predict_iou_path = os.path.join(bufferPath, "{}_predict_label_iou.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         
-    def getConfusionMatrix(self):
-        """ confusion matrix
-        """        
-        return self.statistic["confusion"]
-
-    def getImagesInConsuionMatrixCell(self, labels: list, preds: list) -> list:
-        """return images in a cell of confusionmatrix
-
-        Args:
-            labels (list): true labels of corresponding cell
-            preds (list): predicted labels of corresponding cell
-
-        Returns:
-            list: images' id
-        """ 
-        # convert list of label names to dict
-        labelNames = self.statistic['confusion']['names']
-        name2idx = {}
-        for i in range(len(labelNames)):
-            name2idx[labelNames[i]]=i
-        
-        # find images
-        labelSet = set()
-        for label in labels:
-            labelSet.add(name2idx[label])
-        predSet = set()
-        for label in preds:
-            predSet.add(name2idx[label])
-        imageids = []
-        if self.labels is not None and self.preds is not None:
-            n = len(self.labels)
-            for i in range(n):
-                if self.labels[i] in labelSet and self.preds[i] in predSet:
-                    imageids.append(i)
-                    
-        # limit length of images
-        return imageids[:50]
-    
-    def getImage(self, imageID: int) -> list:
-        """ get image by id
-
-        Args:
-            imageID (int): image id
-
-        Returns:
-            list: image
-        """        
-        if self.trainImages is not None:
-            image = self.trainImages[imageID]
-            return image.tolist()
+        #read raw data
+        if os.path.exists(self.raw_data_path):
+            with open(self.raw_data_path, 'rb') as f:
+                self.image2index, self.raw_labels, self.raw_label2imageid, self.imageid2raw_label, self.raw_predicts, self.raw_predict2imageid, self.imageid2raw_predict = pickle.load(f)
         else:
-            return []
+            self.image2index = {}
+            id=0
+            for name in os.listdir(self.images_path):
+                self.image2index[name.split('.')[0]]=id
+                id += 1
+            ## read raw labels
+            self.raw_labels = np.zeros((0,5), dtype=np.float32)
+            self.raw_label2imageid = np.zeros(0, dtype=np.int32)
+            self.imageid2raw_label = np.zeros((id, 2), dtype=np.int32)
+            for imageName in os.listdir(self.labels_path):
+                label_path = os.path.join(self.labels_path, imageName)
+                imageid = self.image2index[imageName.split('.')[0]]
+                with open(label_path) as f:
+                    lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
+                    if any([len(x)>5 for x in lb]):
+                        #TODO segmentation
+                        pass
+                    lb = np.array(lb, dtype=np.float32)
+                    self.imageid2raw_label[imageid][0] = len(self.raw_labels)
+                    self.imageid2raw_label[imageid][1] = len(self.raw_labels)+len(lb)
+                    if len(lb)>0:
+                        self.raw_labels = np.concatenate((self.raw_labels, lb), axis=0)
+                        self.raw_label2imageid = np.concatenate((self.raw_label2imageid, np.ones(len(lb), dtype=np.int32)*imageid))
+                    
+                    
+            ## read raw predicts
+            self.raw_predicts = np.zeros((0,6), dtype=np.float32)
+            self.raw_predict2imageid = np.zeros(0, dtype=np.int32)
+            self.imageid2raw_predict = np.zeros((id, 2), dtype=np.int32)
+            for imageName in os.listdir(self.predicts_path):
+                predict_path = os.path.join(self.predicts_path, imageName)
+                imageid = self.image2index[imageName.split('.')[0]]
+                with open(predict_path) as f:
+                    lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
+                    if any([len(x)>6 for x in lb]):
+                        #TODO segmentation
+                        pass
+                    lb = np.array(lb, dtype=np.float32)
+                    self.imageid2raw_predict[imageid][0] = len(self.raw_predicts)
+                    self.imageid2raw_predict[imageid][1] = len(self.raw_predicts)+len(lb)
+                    if len(lb)>0:
+                        self.raw_predicts = np.concatenate((self.raw_predicts, lb), axis=0)
+                        self.raw_predict2imageid = np.concatenate((self.raw_predict2imageid, np.ones(len(lb), dtype=np.int32)*imageid))
+            with open(self.raw_data_path, 'wb') as f:
+                pickle.dump((self.image2index, self.raw_labels, self.raw_label2imageid, self.imageid2raw_label, self.raw_predicts, self.raw_predict2imageid, self.imageid2raw_predict), f)
+        
+        ## init meta data
+        with open(self.meta_path) as f:
+            metas = json.load(f)
+            categorys = metas["categories"]
+            for classIdx in range(len(categorys)):
+                self.classID2Idx[categorys[classIdx]["id"]] = classIdx
+                self.names.append(categorys[classIdx]["name"])
+                superCategory = categorys[classIdx]["supercategory"]
+                if superCategory not in self.hierarchy:
+                    self.hierarchy[superCategory] = {
+                        "name": superCategory,
+                        "children": []
+                    }
+                self.hierarchy[superCategory]["children"].append(categorys[classIdx]["name"])
+            self.hierarchy = list(self.hierarchy.values())
+            self.hierarchy.append({
+                    "name": "background",
+                    "children": ["background"]
+                })
+            self.names.append("background")
+            self.classID2Idx[-1]=len(categorys)
+                
+            
+        # compute (prediction, label) pair
+        if os.path.exists(self.label_predict_iou_path):
+            with open(self.label_predict_iou_path, 'rb') as f:
+                self.predict_label_pairs, self.predict_label_ious = pickle.load(f)
+        else:
+            self.predict_label_pairs, self.predict_label_ious = self.compute_label_predict_pair()
+            with open(self.label_predict_iou_path, 'wb') as f:
+                pickle.dump((self.predict_label_pairs, self.predict_label_ious), f)
+        
+        ## init size
+        self.label_size = self.raw_labels[:,3]*self.raw_labels[:,4]
+        self.predict_size = self.raw_predicts[:,4]*self.raw_predicts[:,5]
+        ## init aspect ratio
+        self.label_aspect_ratio = self.raw_labels[:,3]/self.raw_labels[:,4]
+        self.predict_aspect_ratio = self.raw_predicts[:,4]/self.raw_predicts[:,5]
+        ## TODO init direction
+        
+    def getMetaData(self):
+        return {
+            "hierarchy": self.hierarchy,
+            "names": self.names
+        }
+            
+    def compute_label_predict_pair(self):
+        def compute_per_image(detections, labels):
+            # Updated version of https://github.com/kaanakan/object_detection_confusion_matrix
+            iou = box_iou(detections[:, 1:5], labels[:, 1:])
+
+            x = np.where(iou > self.iou_threshold_miss)
+            if x[0].shape[0]:
+                matches = np.concatenate((np.stack(x, 1), iou[x[0], x[1]][:, None]), 1)
+                if x[0].shape[0] > 1:
+                    matches = matches[matches[:, 2].argsort()[::-1]]
+                    matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
+                    matches = matches[matches[:, 2].argsort()[::-1]]
+                    matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
+            else:
+                matches = np.zeros((0, 3))
+            final_match = -1*np.ones((len(detections),2), dtype=np.int32)
+            ious = np.zeros(len(detections))
+            final_match[:,0] = np.arange(len(detections), dtype=np.int32)
+            for match in matches:
+                final_match[int(match[0])] = match[:2].astype(np.int32)
+                ious[int(match[0])] = match[2]
+            return final_match, ious
+        self.predict_label_pairs = -1*np.ones((len(self.raw_predicts), 2), dtype=np.int32)
+        self.predict_label_ious = np.zeros(len(self.raw_predicts))
+        for imageidx in range(len(self.image2index)):
+            matches, ious = compute_per_image(self.raw_predicts[self.imageid2raw_predict[imageidx][0]:self.imageid2raw_predict[imageidx][1]],
+                                        self.raw_labels[self.imageid2raw_label[imageidx][0]:self.imageid2raw_label[imageidx][1]])
+            negaWeights = np.where(matches[:,1]==-1)[0]
+            if len(matches)>0:
+                matches[:,1]+=self.imageid2raw_label[imageidx][0]
+                matches[:,0]+=self.imageid2raw_predict[imageidx][0]
+                matches[negaWeights,1]=-1
+                self.predict_label_pairs[self.imageid2raw_predict[imageidx][0]:self.imageid2raw_predict[imageidx][1]] = matches
+                self.predict_label_ious[self.imageid2raw_predict[imageidx][0]:self.imageid2raw_predict[imageidx][1]] = ious
+        return self.predict_label_pairs, self.predict_label_ious
+            
+    def getConfusionMatrix(self, query = None):
+        """filtered confusion matrix
+
+        Args:
+            querys (dict): {label/predict size:[a, b], label/predict aspect_ratio:[a, b], direction: [0,..,8]}
+        """        
+        # remove fn
+        filtered = self.predict_label_pairs[np.where(self.predict_label_pairs[:,1]>-1)[0]]
+        fn = self.predict_label_pairs[np.where(self.predict_label_pairs[:,1]==-1)[0]]
+        if query is not None:
+            # size
+            label_selected = np.logical_and(self.label_size>=query["label_size"][0], self.label_size<=query["label_size"][1])
+            predict_selected = np.logical_and(self.predict_size>=query["predict_size"][0], self.predict_size<=query["predict_size"][1])
+            # aspect ratio
+            label_selected = np.logical_and(label_selected, np.logical_and(self.label_aspect_ratio>=query["label_aspect_ratio"][0], self.label_aspect_ratio<=query["label_aspect_ratio"][1]))
+            predict_selected = np.logical_and(predict_selected, np.logical_and(self.predict_aspect_ratio>=query["predict_aspect_ratio"][0], self.predict_aspect_ratio<=query["predict_aspect_ratio"][1]))
+            
+            label_selected = np.arange(len(self.raw_labels))[label_selected]
+            predict_selected = np.arange(len(self.raw_predicts))[predict_selected]
+            filtered = filtered[np.isin(filtered[:,1], label_selected)]
+            filtered = filtered[np.isin(filtered[:,0], predict_selected)]
+            fn = fn[np.isin(fn[:,0], predict_selected)]
+        # confusion
+        y_true = np.concatenate((self.raw_labels[filtered[:,1],0].astype(np.int32), (len(self.classID2Idx)-1)*np.ones(len(fn), dtype=np.int32)))
+        y_predict = np.concatenate((self.raw_predicts[filtered[:,0],0].astype(np.int32), self.raw_predicts[fn[:,0],0].astype(np.int32)))
+        class_labels = np.zeros(len(self.classID2Idx))
+        for id,idx in self.classID2Idx.items():
+            class_labels[idx]=id
+        confusion = confusion_matrix(y_true,y_predict,labels = np.arange(len(self.classID2Idx)))
+        return confusion.tolist()
+        
+        
+def box_area(box):
+    # box = xyxy(4,n)
+    return (box[2] - box[0]) * (box[3] - box[1])
+
+def xywh2xyxy(x):
+    # Convert nx4 boxes from [x, y, w, h] to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
+    y = x.clone() if isinstance(x, torch.Tensor) else np.copy(x)
+    y[:, 0] = x[:, 0] - x[:, 2] / 2  # top left x
+    y[:, 1] = x[:, 1] - x[:, 3] / 2  # top left y
+    y[:, 2] = x[:, 0] + x[:, 2] / 2  # bottom right x
+    y[:, 3] = x[:, 1] + x[:, 3] / 2  # bottom right y
+    return y
+
+def box_iou(box1, box2):
+    # https://github.com/pytorch/vision/blob/master/torchvision/ops/boxes.py
+    """
+    Return intersection-over-union (Jaccard index) of boxes.
+    Both sets of boxes are expected to be in (x1, y1, x2, y2) format.
+    Arguments:
+        box1 (Tensor[N, 4])
+        box2 (Tensor[M, 4])
+    Returns:
+        iou (Tensor[N, M]): the NxM matrix containing the pairwise
+            IoU values for every element in boxes1 and boxes2
+    """
+    # inter(N,M) = (rb(N,M,2) - lt(N,M,2)).clamp(0).prod(2)
+    box1, box2 = xywh2xyxy(box1), xywh2xyxy(box2)
+    (a1, a2), (b1, b2) = np.array_split(box1[:, None],2,axis=2), np.array_split(box2, 2, axis=1)
+    inter = (np.minimum(a2, b2) - np.maximum(a1, b1)).clip(0).prod(2)
     
+    # # IoU = inter / (area1 + area2 - inter)
+    return inter / (box_area(box1.T)[:, None] + box_area(box2.T) - inter)
 
 dataCtrler = DataCtrler()
+
+if __name__ == "__main__":
+    dataCtrler.process("/data/zhaowei/ConfusionMatrix//datasets/coco/", "/data/zhaowei/ConfusionMatrix/backend/buffer/")
+    matrix = dataCtrler.getConfusionMatrix({
+        "label_size": [0,1],
+        "predict_size": [0,1],
+        "label_aspect_ratio": [0,1],
+        "predict_aspect_ratio": [0,1],
+        "direction": [0,1,2,3,4,5,6,7,8],
+        "label": np.arange(80),
+        "predict": np.arange(80)
+    })
+    print(matrix)
