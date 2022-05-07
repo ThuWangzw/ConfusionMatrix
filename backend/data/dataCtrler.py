@@ -10,8 +10,8 @@ class DataCtrler(object):
 
     def __init__(self):
         super().__init__()
-        self.iou_threshold = 0.45
-        self.conf_threshold = 0.25
+        self.iou_threshold_localization = 0.5
+        self.iou_threshold_miss = 0.1
         self.classID2Idx = {}      
         self.hierarchy = {}  
         self.names = []
@@ -31,6 +31,7 @@ class DataCtrler(object):
         self.predicts_path = os.path.join(self.root_path, "predicts")
         self.meta_path = os.path.join(self.root_path, "meta.json")
         self.raw_data_path = os.path.join(bufferPath, "{}_raw_data.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
+        self.label_predict_iou_path = os.path.join(bufferPath, "{}_predict_label_iou.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         
         #read raw data
         if os.path.exists(self.raw_data_path):
@@ -106,8 +107,14 @@ class DataCtrler(object):
             self.classID2Idx[-1]=len(categorys)
                 
             
-        # compute (predict,label) pair
-        self.compute_label_predict_pair()
+        # compute (prediction, label) pair
+        if os.path.exists(self.label_predict_iou_path):
+            with open(self.label_predict_iou_path, 'rb') as f:
+                self.predict_label_pairs, self.predict_label_ious = pickle.load(f)
+        else:
+            self.predict_label_pairs, self.predict_label_ious = self.compute_label_predict_pair()
+            with open(self.label_predict_iou_path, 'wb') as f:
+                pickle.dump((self.predict_label_pairs, self.predict_label_ious), f)
         
         ## init size
         self.label_size = self.raw_labels[:,3]*self.raw_labels[:,4]
@@ -126,12 +133,9 @@ class DataCtrler(object):
     def compute_label_predict_pair(self):
         def compute_per_image(detections, labels):
             # Updated version of https://github.com/kaanakan/object_detection_confusion_matrix
-            detections = detections[detections[:, 5] > self.conf_threshold]
-            gt_classes = labels[:, 0].astype(np.int32)
-            detection_classes = detections[:, 0].astype(np.int32)
-            iou = box_iou(labels[:, 1:], detections[:, 1:5])
+            iou = box_iou(detections[:, 1:5], labels[:, 1:])
 
-            x = np.where(iou > self.iou_threshold)
+            x = np.where(iou > self.iou_threshold_miss)
             if x[0].shape[0]:
                 matches = np.concatenate((np.stack(x, 1), iou[x[0], x[1]][:, None]), 1)
                 if x[0].shape[0] > 1:
@@ -141,26 +145,26 @@ class DataCtrler(object):
                     matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
             else:
                 matches = np.zeros((0, 3))
-            final_match = -1*np.ones((len(labels),2), dtype=np.int32)
-            ious = np.zeros(len(labels))
-            final_match[:,0] = np.arange(len(labels), dtype=np.int32)
+            final_match = -1*np.ones((len(detections),2), dtype=np.int32)
+            ious = np.zeros(len(detections))
+            final_match[:,0] = np.arange(len(detections), dtype=np.int32)
             for match in matches:
                 final_match[int(match[0])] = match[:2].astype(np.int32)
                 ious[int(match[0])] = match[2]
             return final_match, ious
-        self.label_predict_pairs = -1*np.ones((len(self.raw_labels), 2), dtype=np.int32)
-        self.label_predict_ious = np.zeros(len(self.raw_labels))
+        self.predict_label_pairs = -1*np.ones((len(self.raw_predicts), 2), dtype=np.int32)
+        self.predict_label_ious = np.zeros(len(self.raw_predicts))
         for imageidx in range(len(self.image2index)):
             matches, ious = compute_per_image(self.raw_predicts[self.imageid2raw_predict[imageidx][0]:self.imageid2raw_predict[imageidx][1]],
                                         self.raw_labels[self.imageid2raw_label[imageidx][0]:self.imageid2raw_label[imageidx][1]])
             negaWeights = np.where(matches[:,1]==-1)[0]
             if len(matches)>0:
-                matches[:,1]+=self.imageid2raw_predict[imageidx][0]
-                matches[:,0]+=self.imageid2raw_label[imageidx][0]
+                matches[:,1]+=self.imageid2raw_label[imageidx][0]
+                matches[:,0]+=self.imageid2raw_predict[imageidx][0]
                 matches[negaWeights,1]=-1
-                self.label_predict_pairs[self.imageid2raw_label[imageidx][0]:self.imageid2raw_label[imageidx][1]] = matches
-                self.label_predict_ious[self.imageid2raw_label[imageidx][0]:self.imageid2raw_label[imageidx][1]] = ious
-        return self.label_predict_pairs, self.label_predict_ious
+                self.predict_label_pairs[self.imageid2raw_predict[imageidx][0]:self.imageid2raw_predict[imageidx][1]] = matches
+                self.predict_label_ious[self.imageid2raw_predict[imageidx][0]:self.imageid2raw_predict[imageidx][1]] = ious
+        return self.predict_label_pairs, self.predict_label_ious
             
     def getConfusionMatrix(self, query = None):
         """filtered confusion matrix
@@ -169,12 +173,12 @@ class DataCtrler(object):
             querys (dict): {label/predict size:[a, b], label/predict aspect_ratio:[a, b], direction: [0,..,8]}
         """        
         # remove fn
-        filtered = self.label_predict_pairs[np.where(self.label_predict_pairs[:,1]>-1)[0]]
-        fn = self.label_predict_pairs[np.where(self.label_predict_pairs[:,1]==-1)[0]]
+        filtered = self.predict_label_pairs[np.where(self.predict_label_pairs[:,1]>-1)[0]]
+        fn = self.predict_label_pairs[np.where(self.predict_label_pairs[:,1]==-1)[0]]
         
         # confusion
-        y_true = np.concatenate((self.raw_labels[filtered[:,0],0].astype(np.int32), self.raw_labels[fn[:,0],0].astype(np.int32)))
-        y_predict = np.concatenate((self.raw_predicts[filtered[:,1],0].astype(np.int32), (len(self.classID2Idx)-1)*np.ones(len(fn), dtype=np.int32)))
+        y_true = np.concatenate((self.raw_labels[filtered[:,1],0].astype(np.int32), (len(self.classID2Idx)-1)*np.ones(len(fn), dtype=np.int32)))
+        y_predict = np.concatenate((self.raw_predicts[filtered[:,0],0].astype(np.int32), self.raw_predicts[fn[:,0],0].astype(np.int32)))
         class_labels = np.zeros(len(self.classID2Idx))
         for id,idx in self.classID2Idx.items():
             class_labels[idx]=id
