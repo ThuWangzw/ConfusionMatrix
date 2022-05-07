@@ -177,7 +177,19 @@ class DataCtrler(object):
         # remove fn
         filtered = self.predict_label_pairs[np.where(self.predict_label_pairs[:,1]>-1)[0]]
         fn = self.predict_label_pairs[np.where(self.predict_label_pairs[:,1]==-1)[0]]
-        
+        if query is not None:
+            # size
+            label_selected = np.logical_and(self.label_size>=query["label_size"][0], self.label_size<=query["label_size"][1])
+            predict_selected = np.logical_and(self.predict_size>=query["predict_size"][0], self.predict_size<=query["predict_size"][1])
+            # aspect ratio
+            label_selected = np.logical_and(label_selected, np.logical_and(self.label_aspect_ratio>=query["label_aspect_ratio"][0], self.label_aspect_ratio<=query["label_aspect_ratio"][1]))
+            predict_selected = np.logical_and(predict_selected, np.logical_and(self.predict_aspect_ratio>=query["predict_aspect_ratio"][0], self.predict_aspect_ratio<=query["predict_aspect_ratio"][1]))
+            
+            label_selected = np.arange(len(self.raw_labels))[label_selected]
+            predict_selected = np.arange(len(self.raw_predicts))[predict_selected]
+            filtered = filtered[np.isin(filtered[:,1], label_selected)]
+            filtered = filtered[np.isin(filtered[:,0], predict_selected)]
+            fn = fn[np.isin(fn[:,0], predict_selected)]
         # confusion
         y_true = np.concatenate((self.raw_labels[filtered[:,1],0].astype(np.int32), (len(self.classID2Idx)-1)*np.ones(len(fn), dtype=np.int32)))
         y_predict = np.concatenate((self.raw_predicts[filtered[:,0],0].astype(np.int32), self.raw_predicts[fn[:,0],0].astype(np.int32)))
@@ -225,5 +237,13 @@ dataCtrler = DataCtrler()
 
 if __name__ == "__main__":
     dataCtrler.process("/data/zhaowei/ConfusionMatrix//datasets/coco/", "/data/zhaowei/ConfusionMatrix/backend/buffer/")
-    matrix = dataCtrler.getConfusionMatrix({})
+    matrix = dataCtrler.getConfusionMatrix({
+        "label_size": [0,1],
+        "predict_size": [0,1],
+        "label_aspect_ratio": [0,1],
+        "predict_aspect_ratio": [0,1],
+        "direction": [0,1,2,3,4,5,6,7,8],
+        "label": np.arange(80),
+        "predict": np.arange(80)
+    })
     print(matrix)
