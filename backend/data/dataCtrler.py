@@ -30,6 +30,8 @@ class DataCtrler(object):
         self.labels_path = os.path.join(self.root_path, "labels")
         self.predicts_path = os.path.join(self.root_path, "predicts")
         self.meta_path = os.path.join(self.root_path, "meta.json")
+        if not os.path.exists(bufferPath):
+            os.makedirs(bufferPath)
         self.raw_data_path = os.path.join(bufferPath, "{}_raw_data.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         self.label_predict_iou_path = os.path.join(bufferPath, "{}_predict_label_iou.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         
