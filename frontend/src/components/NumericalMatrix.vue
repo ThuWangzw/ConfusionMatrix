@@ -3,7 +3,7 @@
         <g id="main-g" transform="translate(0,0)">
             <g id="legend-g" :transform="`translate(5,${leftCornerSize/2-25})`"></g>
             <g id="horizon-text-g" :transform="`translate(${leftCornerSize-maxHorizonTextWidth}, ${leftCornerSize+textMatrixMargin})`"></g>
-            <g id="vertical-text-g" :transform="`translate(${leftCornerSize+textMatrixMargin}, ${leftCornerSize-cellAttrs['font-size']})`"></g>
+            <g id="vertical-text-g" :transform="`translate(${leftCornerSize+textMatrixMargin}, ${leftCornerSize}) rotate(-90)`"></g>
             <g id="matrix-cells-g" :transform="`translate(${leftCornerSize+textMatrixMargin}, ${leftCornerSize+textMatrixMargin})`"></g>
         </g>
     </svg>
@@ -64,7 +64,7 @@ export default {
             return this.leftCornerSize+this.textMatrixMargin+this.matrixWidth;
         },
         colorScale: function() {
-            return d3.scaleSequential([0, this.maxCellValue], ['rgb(255, 255, 255)', 'rgb(8, 48, 107)']).clamp(true);
+            return d3.scaleSequential([0, 57000], ['rgb(255, 255, 255)', 'rgb(8, 48, 107)']).clamp(true);
         },
         horizonTextG: function() {
             return d3.select('g#horizon-text-g');
@@ -82,7 +82,7 @@ export default {
             return d3.select('g#legend-g');
         },
         legendWidth: function() {
-            return Math.max(100, this.maxHorizonTextWidth);
+            return Math.max(200, this.maxHorizonTextWidth);
         },
     },
     data: function() {
@@ -109,7 +109,7 @@ export default {
             verticalTextAttrs: {
                 'gClass': 'vertical-one-line-g',
                 'leftMargin': 30,
-                'text-anchor': 'middle',
+                'text-anchor': 'start',
                 'font-family': 'Comic Sans MS',
                 'font-weight': 'normal',
                 'font-size': 15,
@@ -190,7 +190,7 @@ export default {
                     .append('g')
                     .attr('class', that.verticalTextAttrs['gClass'])
                     .attr('opacity', 0)
-                    .attr('transform', (d, i) => `translate(${i*that.cellAttrs['size']},0)`);
+                    .attr('transform', (d, i) => `translate(0,${i*that.cellAttrs['size']})`);
 
                 verticalTextinG.transition()
                     .duration(that.createDuration)

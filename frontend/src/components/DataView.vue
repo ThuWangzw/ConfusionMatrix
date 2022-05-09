@@ -19,24 +19,38 @@ export default {
     name: 'DataView',
     data() {
         return {
-            matrixType: 'numerical',
+            matrixType: 'numerical', // confusion, numerical
             numericalMatrixType: 'size',
             confusionMatrix: undefined,
-            numericalMatrix: {
-                'partitions': ['N', 0, 0.3, 0.6, 1],
-                'matrix': [[0, 0, 0, 0], [0, 10, 2, 3], [0, 0, 8, 1], [0, 1, 0, 9]],
-            },
+            numericalMatrix: undefined,
         };
     },
     methods: {
+        getMatrix: function() {
+            const store = this.$store;
+            const that = this;
+            if (this.matrixType==='confusion') {
+                axios.post(store.getters.URL_GET_CONFUSION_MATRIX)
+                    .then(function(response) {
+                        that.confusionMatrix = response.data;
+                    });
+            } else if (this.matrixType==='numerical') {
+                if (this.numericalMatrixType==='size') {
+                    axios.post(store.getters.URL_GET_SIZE_MATRIX)
+                        .then(function(response) {
+                            const numericalMatrix = response.data;
+                            for (let i=0; i<numericalMatrix.partitions.length; i++) {
+                                numericalMatrix.partitions[i] = Math.round(numericalMatrix.partitions[i]*100)/100;
+                            }
+                            numericalMatrix.partitions.unshift('N');
+                            that.numericalMatrix = numericalMatrix;
+                        });
+                }
+            }
+        },
     },
     mounted: function() {
-        const store = this.$store;
-        const that = this;
-        axios.post(store.getters.URL_GET_CONFUSION_MATRIX)
-            .then(function(response) {
-                that.confusionMatrix = response.data;
-            });
+        this.getMatrix();
     },
 };
 </script>
