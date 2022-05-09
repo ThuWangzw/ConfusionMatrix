@@ -30,5 +30,6 @@ export default new Vuex.Store({
         hierarchyColors: (state) => state.hierarchyColors,
         URL_GET_METADATA: (state) => state.APIBASE + '/api/metadata',
         URL_GET_CONFUSION_MATRIX: (state) => state.APIBASE + '/api/confusionMatrix',
+        URL_GET_SIZE_MATRIX: (state) => state.APIBASE + '/api/sizeMatrix',
     },
 });

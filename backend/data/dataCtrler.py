@@ -6,6 +6,8 @@ import pickle
 import torch
 from sklearn.metrics import confusion_matrix
 
+from data.fisher import get_size_split_pos
+
 class DataCtrler(object):
 
     def __init__(self):
@@ -234,7 +236,6 @@ class DataCtrler(object):
             querys (dict): {label/predict size:[a, b] (0<=a<=b<=1), label/predict aspect_ratio:[a, b] (0<=a<=b), direction: [0,..,8],
                             label/predict: np.arange(80), split: int}
         """
-        from fisher import get_size_split_pos
         K = 10
         filtered , unmatch_predict, unmatch_label = self.filterSamples(query)
         if query is not None:
@@ -264,7 +265,7 @@ class DataCtrler(object):
             size_matrix[i, K] = len(unmatch_label[np.isin(unmatch_label[:, 1], label_split_rec[i])])
             size_matrix[K, i] = len(unmatch_predict[np.isin(unmatch_predict[:, 0], pred_split_rec[i])])
         return {
-            'partitions': [0] + split_size + [1],
+            'partitions': [0] + split_size.tolist() + [1],
             'matrix': size_matrix.tolist()
         }
         
