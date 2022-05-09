@@ -9062,8 +9062,8 @@ pretty-error@^2.1.1:
 
 priorityqueue@^1.0.0:
   version "1.0.0"
-  resolved "https://registry.nlark.com/priorityqueue/download/priorityqueue-1.0.0.tgz#0585b7a441ff2b11a71bb8cd23a0b6f6504fb30c"
-  integrity sha1-BYW3pEH/KxGnG7jNI6C29lBPsww=
+  resolved "https://registry.npmmirror.com/priorityqueue/-/priorityqueue-1.0.0.tgz#0585b7a441ff2b11a71bb8cd23a0b6f6504fb30c"
+  integrity sha512-ybkWMIQpEJZ9EIF9yvDZrhc+eqsIA8LQVZ9UybLyT7X5nL9vEgNLZ5Dt/e0EtqEnak8mVsmnjEX1B1TO2M1kyQ==
 
 prismjs@^1.15.0, prismjs@^1.17.1, prismjs@^1.23.0:
   version "1.25.0"
