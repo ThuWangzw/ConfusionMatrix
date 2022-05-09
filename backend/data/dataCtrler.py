@@ -166,17 +166,24 @@ class DataCtrler(object):
                 matches[negaWeights,1]=-1
                 self.predict_label_pairs[self.imageid2raw_predict[imageidx][0]:self.imageid2raw_predict[imageidx][1]] = matches
                 self.predict_label_ious[self.imageid2raw_predict[imageidx][0]:self.imageid2raw_predict[imageidx][1]] = ious
+        # for labels that haven't been matched to any predict
+        label_not_match = np.setdiff1d(np.arange(len(self.raw_labels)), self.predict_label_pairs[:, 1])
+        label_extra_pairs = -1 * np.ones((len(label_not_match), 2), dtype=np.int32)
+        label_extra_pairs[:, 1] = label_not_match
+        label_extra_ious = np.zeros(len(label_not_match))
+        self.predict_label_pairs = np.concatenate((self.predict_label_pairs, label_extra_pairs))
+        self.predict_label_ious = np.concatenate((self.predict_label_ious, label_extra_ious))
         return self.predict_label_pairs, self.predict_label_ious
-            
-    def getConfusionMatrix(self, query = None):
-        """filtered confusion matrix
+    
+    def filterSamples(self, query = None):
+        """
+            return filtered, unmatch_predict, unmatch_label
+        """
+        # separate matched pairs from unmatch ones
+        filtered = self.predict_label_pairs[np.logical_and(self.predict_label_pairs[:,1]>-1, self.predict_label_pairs[:,0]>-1)]
+        unmatch_predict = self.predict_label_pairs[np.where(self.predict_label_pairs[:,1]==-1)[0]]
+        unmatch_label = self.predict_label_pairs[np.where(self.predict_label_pairs[:,0]==-1)[0]]
 
-        Args:
-            querys (dict): {label/predict size:[a, b], label/predict aspect_ratio:[a, b], direction: [0,..,8]}
-        """        
-        # remove fn
-        filtered = self.predict_label_pairs[np.where(self.predict_label_pairs[:,1]>-1)[0]]
-        fn = self.predict_label_pairs[np.where(self.predict_label_pairs[:,1]==-1)[0]]
         if query is not None:
             # size
             label_selected = np.logical_and(self.label_size>=query["label_size"][0], self.label_size<=query["label_size"][1])
@@ -184,20 +191,83 @@ class DataCtrler(object):
             # aspect ratio
             label_selected = np.logical_and(label_selected, np.logical_and(self.label_aspect_ratio>=query["label_aspect_ratio"][0], self.label_aspect_ratio<=query["label_aspect_ratio"][1]))
             predict_selected = np.logical_and(predict_selected, np.logical_and(self.predict_aspect_ratio>=query["predict_aspect_ratio"][0], self.predict_aspect_ratio<=query["predict_aspect_ratio"][1]))
-            
+            # label
+            label_selected = np.logical_and(label_selected, np.isin(self.raw_labels[:,0], query["label"]))
+            predict_selected = np.logical_and(predict_selected, np.isin(self.raw_predicts[:,0], query["predict"]))
+
+            # get results after query
             label_selected = np.arange(len(self.raw_labels))[label_selected]
             predict_selected = np.arange(len(self.raw_predicts))[predict_selected]
             filtered = filtered[np.isin(filtered[:,1], label_selected)]
             filtered = filtered[np.isin(filtered[:,0], predict_selected)]
-            fn = fn[np.isin(fn[:,0], predict_selected)]
-        # confusion
-        y_true = np.concatenate((self.raw_labels[filtered[:,1],0].astype(np.int32), (len(self.classID2Idx)-1)*np.ones(len(fn), dtype=np.int32)))
-        y_predict = np.concatenate((self.raw_predicts[filtered[:,0],0].astype(np.int32), self.raw_predicts[fn[:,0],0].astype(np.int32)))
+            unmatch_predict = unmatch_predict[np.isin(unmatch_predict[:,0], predict_selected)]
+            unmatch_label = unmatch_label[np.isin(unmatch_label[:,0], label_selected)]
+        
+        return filtered, unmatch_predict, unmatch_label
+
+    def getConfusionMatrix(self, query = None):
+        """filtered confusion matrix
+
+        Args:
+            querys (dict): {label/predict size:[a, b], label/predict aspect_ratio:[a, b], direction: [0,..,8],
+            label/predict: np.arange(80)}
+        """
+        filtered , unmatch_predict, unmatch_label = self.filterSamples(query)
+        # combine 3 parts together
+        y_true = np.concatenate((self.raw_labels[filtered[:,1],0].astype(np.int32), 
+                                 (len(self.classID2Idx)-1)*np.ones(len(unmatch_predict), dtype=np.int32),
+                                 self.raw_labels[unmatch_label[:,1],0].astype(np.int32)))
+        y_predict = np.concatenate((self.raw_predicts[filtered[:,0],0].astype(np.int32), 
+                                    self.raw_predicts[unmatch_predict[:,0],0].astype(np.int32),
+                                    (len(self.classID2Idx)-1)*np.ones(len(unmatch_label), dtype=np.int32)))
         class_labels = np.zeros(len(self.classID2Idx))
         for id,idx in self.classID2Idx.items():
             class_labels[idx]=id
-        confusion = confusion_matrix(y_true,y_predict,labels = np.arange(len(self.classID2Idx)))
+        confusion = confusion_matrix(y_true,y_predict,labels=np.unique(np.concatenate((y_true, y_predict))))
         return confusion.tolist()
+    
+    def getSizeMatrix(self, query = None):
+        """A size matrix divided by iou with Fisher algorithm. 
+        Samples are sorted by their pred size, and then calculate the split by Fisher algorithm.
+
+        Args:
+            querys (dict): {label/predict size:[a, b] (0<=a<=b<=1), label/predict aspect_ratio:[a, b] (0<=a<=b), direction: [0,..,8],
+                            label/predict: np.arange(80), split: int}
+        """
+        from fisher import get_size_split_pos
+        K = 10
+        filtered , unmatch_predict, unmatch_label = self.filterSamples(query)
+        if query is not None:
+            K = query["split"]
+        size_matrix = np.zeros((K+1,K+1), dtype=np.int32)
+        pred_size_argsort = np.argsort(self.predict_size)
+        split_pos = get_size_split_pos(self.predict_label_ious[pred_size_argsort], K)
+        split_size = self.predict_size[pred_size_argsort][split_pos]
+        # print(split_size)
+        label_split_rec, pred_split_rec = [], []
+
+        for i in range(K):
+            label_split = np.arange(len(self.label_size))
+            pred_split = np.arange(len(self.predict_size))
+            if i > 0:
+                label_split = label_split[self.label_size[label_split] >= split_size[i-1]]
+                pred_split = pred_split[self.predict_size[pred_split] >= split_size[i-1]]
+            if i < K-1:
+                label_split = label_split[self.label_size[label_split] < split_size[i]]
+                pred_split = pred_split[self.predict_size[pred_split] < split_size[i]]
+            label_split_rec.append(label_split)
+            pred_split_rec.append(pred_split)
+        for i in range(K):
+            for j in range(K):
+                size_matrix[i, j] = len(filtered[np.logical_and(np.isin(filtered[:,1], label_split_rec[i]), np.isin(filtered[:,0], pred_split_rec[j]))])
+        for i in range(K):
+            size_matrix[i, K] = len(unmatch_label[np.isin(unmatch_label[:, 1], label_split_rec[i])])
+            size_matrix[K, i] = len(unmatch_predict[np.isin(unmatch_predict[:, 0], pred_split_rec[i])])
+        return {
+            'partitions': [0] + split_size + [1],
+            'matrix': size_matrix.tolist()
+        }
+        
         
         
 def box_area(box):
@@ -237,6 +307,7 @@ dataCtrler = DataCtrler()
 
 if __name__ == "__main__":
     dataCtrler.process("/data/zhaowei/ConfusionMatrix//datasets/coco/", "/data/zhaowei/ConfusionMatrix/backend/buffer/")
+    # print(dataCtrler.getSizeMatrix())
     matrix = dataCtrler.getConfusionMatrix({
         "label_size": [0,1],
         "predict_size": [0,1],

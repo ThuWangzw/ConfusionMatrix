@@ -20,6 +20,10 @@ def metaData():
 def confusionMatrix():
     return jsonify(dataCtrler.getConfusionMatrix())
 
+@app.route('/api/sizeMatrix', methods=["POST"])
+def sizeMatrix():
+    return jsonify(dataCtrler.getSizeMatrix())
+
 def main():
     parser = argparse.ArgumentParser(description='manual to this script')
     parser.add_argument("--rawDataPath", type=str, default='/data/zhaowei/ConfusionMatrix/datasets/coco/')
