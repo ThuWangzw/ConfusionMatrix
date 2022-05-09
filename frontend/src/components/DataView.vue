@@ -1,22 +1,31 @@
 <template>
     <div id="data-content">
         <div id="confusion-matrix-container">
-            <confusion-matrix ref="matrix" id="confusion-matrix" :showColor="true" :confusionMatrix="confusionMatrix">
+            <confusion-matrix v-if="matrixType==='confusion'" ref="matrix" id="confusion-matrix" :showColor="true" :confusionMatrix="confusionMatrix">
             </confusion-matrix>
+            <numerical-matrix v-else-if="matrixType==='numerical'" ref="numerical"
+                :numericalMatrix="numericalMatrix" :numericalMatrixType="numericalMatrixType"></numerical-matrix>
         </div>
     </div>
 </template>
 
 <script>
 import ConfusionMatrix from './ConfusionMatrix.vue';
+import NumericalMatrix from './NumericalMatrix.vue';
 import axios from 'axios';
 
 export default {
-    components: {ConfusionMatrix},
+    components: {ConfusionMatrix, NumericalMatrix},
     name: 'DataView',
     data() {
         return {
+            matrixType: 'numerical',
+            numericalMatrixType: 'size',
             confusionMatrix: undefined,
+            numericalMatrix: {
+                'partitions': ['N', 0, 0.3, 0.6, 1],
+                'matrix': [[0, 0, 0, 0], [0, 10, 2, 3], [0, 0, 8, 1], [0, 1, 0, 9]],
+            },
         };
     },
     methods: {
