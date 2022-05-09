@@ -12,6 +12,7 @@
 <script>
 import Util from './Util.vue';
 import GlobalVar from './GlovalVar.vue';
+import PriorityQueue from 'priorityqueue';
 
 export default {
     mixins: [Util, GlobalVar],
@@ -64,7 +65,7 @@ export default {
             return this.leftCornerSize+this.textMatrixMargin+this.matrixWidth;
         },
         colorScale: function() {
-            return d3.scaleSequential([0, 57000], ['rgb(255, 255, 255)', 'rgb(8, 48, 107)']).clamp(true);
+            return d3.scaleSequential([0, this.submaxCellValue], ['rgb(255, 255, 255)', 'rgb(8, 48, 107)']).clamp(true);
         },
         horizonTextG: function() {
             return d3.select('g#horizon-text-g');
@@ -131,13 +132,18 @@ export default {
                 'font-size': 15,
                 'cursor': 'pointer',
             },
-            maxCellValue: 0,
+            submaxCellValue: 0,
         };
     },
     methods: {
         getDataAndRender: function() {
             this.cells = [];
-            this.maxCellValue=0;
+
+            const pq = new PriorityQueue({
+                comparator: function(a, b) {
+                    return a > b ? 1 : a < b ? -1 : 0;
+                },
+            });
             for (let i=0; i<this.rawMatrix.length; i++) {
                 for (let j=0; j<this.rawMatrix[i].length; j++) {
                     this.cells.push({
@@ -146,9 +152,18 @@ export default {
                         col: j,
                         row: i,
                     });
-                    this.maxCellValue=Math.max(this.maxCellValue, this.rawMatrix[i][j]);
+                    pq.push(this.rawMatrix[i][j]);
                 }
             }
+            for (let i=0; i<2 && pq.length>0; i++) {
+                pq.pop();
+            }
+            if (pq.length>0) {
+                this.submaxCellValue = pq.top();
+            } else {
+                this.submaxCellValue = 0;
+            }
+
             this.render();
         },
         render: async function() {
