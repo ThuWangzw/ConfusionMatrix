@@ -270,10 +270,75 @@ export default {
             });
         },
         update: async function() {
+            const that = this;
+            return new Promise((resolve, reject) => {
+                that.horizonTextinG
+                    .transition()
+                    .duration(that.updateDuration)
+                    .attr('transform', (d, i) => `translate(0, ${i*that.cellAttrs['size']})`)
+                    .on('end', resolve);
 
+                that.horizonTextinG.selectAll('text')
+                    .text((d) => d);
+
+                that.verticalTextinG
+                    .transition()
+                    .duration(that.updateDuration)
+                    .attr('transform', (d, i) => `translate(0, ${i*that.cellAttrs['size']})`)
+                    .on('end', resolve);
+
+                that.verticalTextinG.selectAll('text')
+                    .text((d) => d);
+
+                that.matrixCellsinG
+                    .transition()
+                    .duration(that.updateDuration)
+                    .attr('opacity', 1)
+                    .attr('transform', (d) => `translate(${d.col*that.cellAttrs['size']}, 
+                        ${d.row*that.cellAttrs['size']})`)
+                    .on('end', resolve);
+
+                that.matrixCellsinG.selectAll('rect')
+                    .transition()
+                    .duration(that.updateDuration)
+                    .attr('fill', (d)=>that.colorScale(d.val))
+                    .on('end', resolve);
+
+                if ((that.horizonTextinG.size() === 0) && (that.verticalTextinG.size() === 0) &&
+                    (that.matrixCellsinG.size() === 0)) {
+                    resolve();
+                }
+            });
         },
         remove: async function() {
+            const that = this;
+            return new Promise((resolve, reject) => {
+                that.horizonTextinG.exit()
+                    .transition()
+                    .duration(that.removeDuration)
+                    .attr('opacity', 0)
+                    .remove()
+                    .on('end', resolve);
 
+                that.verticalTextinG.exit()
+                    .transition()
+                    .duration(that.removeDuration)
+                    .attr('opacity', 0)
+                    .remove()
+                    .on('end', resolve);
+
+                that.matrixCellsinG.exit()
+                    .transition()
+                    .duration(that.removeDuration)
+                    .attr('opacity', 0)
+                    .remove()
+                    .on('end', resolve);
+
+                if ((that.horizonTextinG.exit().size() === 0) && (that.verticalTextinG.exit().size() === 0) &&
+                    (that.matrixCellsinG.exit().size() === 0)) {
+                    resolve();
+                }
+            });
         },
         transform: async function() {
             const that = this;
