@@ -438,9 +438,22 @@ export default {
                     .attr('transform', (d) => `translate(${d.column*that.cellAttrs['size']}, 
                         ${d.row*that.cellAttrs['size']})`)
                     .on('click', function(e, d) {
+                        if (d.value === 0) return;
+                        const labelTarget = [];
+                        const predictTarget = [];
+                        for (const name of d.rowNode.leafs) {
+                            let idx = that.name2index[name];
+                            if (idx === that.indexNames.length-1) idx = -1;
+                            labelTarget.push(idx);
+                        }
+                        for (const name of d.colNode.leafs) {
+                            let idx = that.name2index[name];
+                            if (idx === that.indexNames.length-1) idx = -1;
+                            predictTarget.push(idx);
+                        }
                         that.$emit('setMatrix', 'numerical', {
-                            label: [d.row],
-                            predict: [d.column],
+                            label: labelTarget,
+                            predict: predictTarget,
                         }, 'size');
                     }); ;
 
