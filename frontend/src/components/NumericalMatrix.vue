@@ -228,7 +228,13 @@ export default {
                     .attr('opacity', 0)
                     .attr('cursor', that.cellAttrs['cursor'])
                     .attr('transform', (d) => `translate(${d.col*that.cellAttrs['size']}, 
-                        ${d.row*that.cellAttrs['size']})`);
+                        ${d.row*that.cellAttrs['size']})`)
+                    .on('click', function(e, d) {
+                        that.$emit('setMatrix', 'confusion', {
+                            'label_size': [that.partitions[d.row], that.partitions[d.row+1]],
+                            'predict_size': [that.partitions[d.col], that.partitions[d.col+1]],
+                        });
+                    });
 
                 matrixCellsinG.transition()
                     .duration(that.createDuration)

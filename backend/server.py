@@ -18,11 +18,17 @@ def metaData():
 
 @app.route('/api/confusionMatrix', methods=["POST"])
 def confusionMatrix():
-    return jsonify(dataCtrler.getConfusionMatrix())
+    query = None
+    if 'query' in request.json:
+        query = request.json['query']
+    return jsonify(dataCtrler.getConfusionMatrix(query))
 
 @app.route('/api/sizeMatrix', methods=["POST"])
 def sizeMatrix():
-    return jsonify(dataCtrler.getSizeMatrix())
+    query = None
+    if 'query' in request.json:
+        query = request.json['query']
+    return jsonify(dataCtrler.getSizeMatrix(query))
 
 def main():
     parser = argparse.ArgumentParser(description='manual to this script')

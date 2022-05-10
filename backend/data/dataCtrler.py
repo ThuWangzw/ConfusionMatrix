@@ -180,6 +180,18 @@ class DataCtrler(object):
         """
             return filtered, unmatch_predict, unmatch_label: index of pairs in predict_label_pairs
         """
+        default_query = {
+            "label_size": [0,1],
+            "predict_size": [0,1],
+            "label_aspect_ratio": [0,1],
+            "predict_aspect_ratio": [0,1],
+            "direction": [0,1,2,3,4,5,6,7,8],
+            "label": np.arange(len(self.classID2Idx)-1),
+            "predict": np.arange(len(self.classID2Idx)-1),
+            "split": 10
+        }
+        if query is not None:
+            query = {**default_query, **query}
         # separate matched pairs from unmatch ones
         # index of pred_label_pairs
         filtered = np.arange(len(self.predict_label_pairs))[np.logical_and(self.predict_label_pairs[:,1]>-1, self.predict_label_pairs[:,0]>-1)]
@@ -212,7 +224,7 @@ class DataCtrler(object):
             matrix: a 3-d list consists of lists of indexes from predict_label_pairs 
         """
         statistics_mode = 'count'
-        if query is not None:
+        if query is not None and "return" in query:
             statistics_mode = query['return']
         stat_matrix = np.zeros((len(matrix), len(matrix[0])), dtype=np.float64)
         function_map = {
@@ -244,7 +256,7 @@ class DataCtrler(object):
         """
         filtered , unmatch_predict, unmatch_label = self.filterSamples(query)
         label_target, pred_target = np.arange(80), np.arange(80)
-        if query is not None:
+        if query is not None and "label" in query and "predict" in query:
             label_target = query["label"]
             pred_target = query["predict"]
         confusion = [[[] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
@@ -272,7 +284,7 @@ class DataCtrler(object):
         """
         K = 10
         filtered , unmatch_predict, unmatch_label = self.filterSamples(query)
-        if query is not None:
+        if query is not None and 'split' in query:
             K = query["split"]
         size_matrix = [[[] for _ in range(K+1)] for _ in range(K+1)]
         pred_size_argsort = np.argsort(self.predict_size)

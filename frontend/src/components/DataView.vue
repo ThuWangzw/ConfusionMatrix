@@ -1,9 +1,9 @@
 <template>
     <div id="data-content">
         <div id="confusion-matrix-container">
-            <confusion-matrix v-if="matrixType==='confusion'" ref="matrix" id="confusion-matrix" :showColor="true" :confusionMatrix="confusionMatrix">
-            </confusion-matrix>
-            <numerical-matrix v-else-if="matrixType==='numerical'" ref="numerical"
+            <confusion-matrix v-if="matrixType==='confusion'" ref="matrix" id="confusion-matrix" @setMatrix="setMatrix"
+                :showColor="true" :confusionMatrix="confusionMatrix"></confusion-matrix>
+            <numerical-matrix v-else-if="matrixType==='numerical'" ref="numerical" @setMatrix="setMatrix"
                 :numericalMatrix="numericalMatrix" :numericalMatrixType="numericalMatrixType"></numerical-matrix>
         </div>
     </div>
@@ -26,27 +26,34 @@ export default {
         };
     },
     methods: {
-        getMatrix: function() {
+        getMatrix: function(query) {
             const store = this.$store;
             const that = this;
             if (this.matrixType==='confusion') {
-                axios.post(store.getters.URL_GET_CONFUSION_MATRIX)
+                axios.post(store.getters.URL_GET_CONFUSION_MATRIX, query===undefined?{}:{query})
                     .then(function(response) {
                         that.confusionMatrix = response.data;
                     });
             } else if (this.matrixType==='numerical') {
                 if (this.numericalMatrixType==='size') {
-                    axios.post(store.getters.URL_GET_SIZE_MATRIX)
+                    axios.post(store.getters.URL_GET_SIZE_MATRIX, query===undefined?{}:{query})
                         .then(function(response) {
                             const numericalMatrix = response.data;
                             for (let i=0; i<numericalMatrix.partitions.length; i++) {
                                 numericalMatrix.partitions[i] = Math.round(numericalMatrix.partitions[i]*100)/100;
                             }
-                            numericalMatrix.partitions.unshift('N');
+                            numericalMatrix.partitions.push('N');
                             that.numericalMatrix = numericalMatrix;
                         });
                 }
             }
+        },
+        setMatrix: function(matrixType, query, numericalMatrixType) {
+            this.confusionMatrix = undefined;
+            this.numericalMatrix = undefined;
+            this.matrixType = matrixType;
+            this.numericalMatrixType = numericalMatrixType;
+            this.getMatrix(query);
         },
     },
     mounted: function() {

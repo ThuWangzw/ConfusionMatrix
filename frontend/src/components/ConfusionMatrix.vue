@@ -95,7 +95,7 @@ export default {
             return maxwidth;
         },
         legendWidth: function() {
-            return Math.max(100, this.maxHorizonTextWidth);
+            return Math.max(200, this.maxHorizonTextWidth);
         },
         leftCornerSize: function() {
             return this.legendWidth;
@@ -436,7 +436,13 @@ export default {
                     .attr('opacity', 0)
                     .attr('cursor', that.cellAttrs['cursor'])
                     .attr('transform', (d) => `translate(${d.column*that.cellAttrs['size']}, 
-                        ${d.row*that.cellAttrs['size']})`);
+                        ${d.row*that.cellAttrs['size']})`)
+                    .on('click', function(e, d) {
+                        that.$emit('setMatrix', 'numerical', {
+                            label: [d.row],
+                            predict: [d.column],
+                        }, 'size');
+                    }); ;
 
                 matrixCellsinG.transition()
                     .duration(that.createDuration)
