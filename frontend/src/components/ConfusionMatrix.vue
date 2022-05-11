@@ -665,12 +665,21 @@ export default {
         },
         getTwoCellConfusion: function(nodea, nodeb) {
             let cnt = 0;
+            let sum = 0;
             for (const leafa of nodea.leafs) {
                 for (const leafb of nodeb.leafs) {
-                    cnt += this.baseMatrix[this.name2index[leafa]][this.name2index[leafb]];
+                    if (this.baseMatrix.length === 1) {
+                        cnt = 1;
+                        sum += this.baseMatrix[0][this.name2index[leafa]][this.name2index[leafb]];
+                    } else {
+                        cnt += this.baseMatrix[0][this.name2index[leafa]][this.name2index[leafb]];
+                        sum += this.baseMatrix[1][this.name2index[leafa]][this.name2index[leafb]]*
+                               this.baseMatrix[0][this.name2index[leafa]][this.name2index[leafb]];
+                    }
                 }
             }
-            return cnt;
+            if (cnt === 0) return 0;
+            return sum / cnt;
         },
         drawLegend: function() {
             const that = this;

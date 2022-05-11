@@ -243,14 +243,13 @@ class DataCtrler(object):
         
         return filtered, unmatch_predict, unmatch_label
     
-    def getStatisticsMatrix(self, matrix, query):
+    def getStatisticsMatrixes(self, matrix, query):
         """
             matrix: a 3-d list consists of lists of indexes from predict_label_pairs 
         """
-        statistics_mode = 'count'
+        statistics_modes = ['count']
         if query is not None and "return" in query:
-            statistics_mode = query['return']
-        stat_matrix = np.zeros((len(matrix), len(matrix[0])), dtype=np.float64)
+            statistics_modes = query['return']
         function_map = {
             'count': lambda x: len(x),
             'avg_label_size': lambda x: 0 if self.predict_label_pairs[x[0],1]==-1 else self.label_size[self.predict_label_pairs[x, 1]].mean(),
@@ -261,15 +260,19 @@ class DataCtrler(object):
             'avg_label_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],1]==-1 else self.label_aspect_ratio[self.predict_label_pairs[x, 1]].mean(),
             'avg_predict_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],0]==-1 else self.predict_aspect_ratio[self.predict_label_pairs[x, 0]].mean(),
         }
-        if statistics_mode not in function_map:
-            raise NotImplementedError()
-        map_func = function_map[statistics_mode]
-        for i in range(stat_matrix.shape[0]):
-            for j in range(stat_matrix.shape[1]):
-                if len(matrix[i][j]) == 0:
-                    continue
-                stat_matrix[i, j] = map_func(matrix[i][j])
-        return stat_matrix
+        ret_matrixes = []
+        for statistics_mode in statistics_modes:
+            if statistics_mode not in function_map:
+                raise NotImplementedError()
+            map_func = function_map[statistics_mode]
+            stat_matrix = np.zeros((len(matrix), len(matrix[0])), dtype=np.float64)
+            for i in range(stat_matrix.shape[0]):
+                for j in range(stat_matrix.shape[1]):
+                    if len(matrix[i][j]) == 0:
+                        continue
+                    stat_matrix[i, j] = map_func(matrix[i][j])
+            ret_matrixes.append(stat_matrix.tolist())
+        return ret_matrixes
 
     def getConfusionMatrix(self, query = None):
         """filtered confusion matrix
@@ -296,7 +299,7 @@ class DataCtrler(object):
             confusion[i][len(pred_target)] = unmatch_label[self.raw_labels[self.predict_label_pairs[unmatch_label][:, 1], 0]==label_target[i]]
         for j in range(len(pred_target)):
             confusion[len(label_target)][j] = unmatch_predict[self.raw_predicts[self.predict_label_pairs[unmatch_predict][:, 0], 0]==pred_target[j]]
-        return self.getStatisticsMatrix(confusion, query).tolist()
+        return self.getStatisticsMatrixes(confusion, query)
     
     def getSizeMatrix(self, query = None):
         """A size matrix divided by iou with Fisher algorithm. 
@@ -341,7 +344,7 @@ class DataCtrler(object):
             size_matrix[K][i] = unmatch_predict[np.isin(self.predict_label_pairs[unmatch_predict][:, 0], pred_split_rec[i])]
         return {
             'partitions': [0] + split_size.tolist() + [1],
-            'matrix': self.getStatisticsMatrix(size_matrix, query).tolist()
+            'matrix': self.getStatisticsMatrixes(size_matrix, query)
         }
         
         
@@ -392,7 +395,7 @@ if __name__ == "__main__":
             "direction": [0,1,2,3,4,5,6,7,8],
             "label": np.arange(80),
             "predict": np.arange(80),
-            "return": rt_type,
+            "return": [rt_type],
             "split": 10
         })
         print(rt_type, matrix)
