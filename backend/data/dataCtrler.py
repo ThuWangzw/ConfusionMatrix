@@ -35,6 +35,7 @@ class DataCtrler(object):
             os.makedirs(bufferPath)
         self.raw_data_path = os.path.join(bufferPath, "{}_raw_data.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         self.label_predict_iou_path = os.path.join(bufferPath, "{}_predict_label_iou.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
+        self.size_matrix_split_path = os.path.join(bufferPath, "{}_size_matrix_split.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         
         #read raw data
         if os.path.exists(self.raw_data_path):
@@ -119,6 +120,12 @@ class DataCtrler(object):
             with open(self.label_predict_iou_path, 'wb') as f:
                 pickle.dump((self.predict_label_pairs, self.predict_label_ious), f)
         
+        if os.path.exists(self.size_matrix_split_path):
+            with open(self.size_matrix_split_path, 'rb') as f:
+                self.size_matrix_split_map = pickle.load(f)
+        else:
+            self.size_matrix_split_map = {}
+        
         ## init size
         self.label_size = self.raw_labels[:,3]*self.raw_labels[:,4]
         self.predict_size = self.raw_predicts[:,4]*self.raw_predicts[:,5]
@@ -180,6 +187,18 @@ class DataCtrler(object):
         """
             return filtered, unmatch_predict, unmatch_label: index of pairs in predict_label_pairs
         """
+        default_query = {
+            "label_size": [0,1],
+            "predict_size": [0,1],
+            "label_aspect_ratio": [0,1],
+            "predict_aspect_ratio": [0,1],
+            "direction": [0,1,2,3,4,5,6,7,8],
+            "label": np.arange(len(self.classID2Idx)-1),
+            "predict": np.arange(len(self.classID2Idx)-1),
+            "split": 10
+        }
+        if query is not None:
+            query = {**default_query, **query}
         # separate matched pairs from unmatch ones
         # index of pred_label_pairs
         filtered = np.arange(len(self.predict_label_pairs))[np.logical_and(self.predict_label_pairs[:,1]>-1, self.predict_label_pairs[:,0]>-1)]
@@ -187,12 +206,18 @@ class DataCtrler(object):
         unmatch_label = np.arange(len(self.predict_label_pairs))[self.predict_label_pairs[:,0]==-1]
 
         if query is not None:
+            label_selected = np.array([True for _ in range(len(self.label_size))])
+            predict_selected = np.array([True for _ in range(len(self.predict_size))])
             # size
-            label_selected = np.logical_and(self.label_size>=query["label_size"][0], self.label_size<=query["label_size"][1])
-            predict_selected = np.logical_and(self.predict_size>=query["predict_size"][0], self.predict_size<=query["predict_size"][1])
+            if not isinstance(query["label_size"][0], str) and not isinstance(query["label_size"][1], str):
+                label_selected = np.logical_and(label_selected, np.logical_and(self.label_size>=query["label_size"][0], self.label_size<=query["label_size"][1]))
+            if not isinstance(query["predict_size"][0], str) and not isinstance(query["predict_size"][1], str):
+                predict_selected = np.logical_and(predict_selected, np.logical_and(self.predict_size>=query["predict_size"][0], self.predict_size<=query["predict_size"][1]))
             # aspect ratio
-            label_selected = np.logical_and(label_selected, np.logical_and(self.label_aspect_ratio>=query["label_aspect_ratio"][0], self.label_aspect_ratio<=query["label_aspect_ratio"][1]))
-            predict_selected = np.logical_and(predict_selected, np.logical_and(self.predict_aspect_ratio>=query["predict_aspect_ratio"][0], self.predict_aspect_ratio<=query["predict_aspect_ratio"][1]))
+            if not isinstance(query["label_aspect_ratio"][0], str) and not isinstance(query["label_aspect_ratio"][1], str):
+                label_selected = np.logical_and(label_selected, np.logical_and(self.label_aspect_ratio>=query["label_aspect_ratio"][0], self.label_aspect_ratio<=query["label_aspect_ratio"][1]))
+            if not isinstance(query["predict_aspect_ratio"][0], str) and not isinstance(query["predict_aspect_ratio"][1], str):
+                predict_selected = np.logical_and(predict_selected, np.logical_and(self.predict_aspect_ratio>=query["predict_aspect_ratio"][0], self.predict_aspect_ratio<=query["predict_aspect_ratio"][1]))
             # label
             label_selected = np.logical_and(label_selected, np.isin(self.raw_labels[:,0], query["label"]))
             predict_selected = np.logical_and(predict_selected, np.isin(self.raw_predicts[:,0], query["predict"]))
@@ -204,17 +229,27 @@ class DataCtrler(object):
             filtered = filtered[np.isin(self.predict_label_pairs[filtered][:,0], predict_selected)]
             unmatch_predict = unmatch_predict[np.isin(self.predict_label_pairs[unmatch_predict][:,0], predict_selected)]
             unmatch_label = unmatch_label[np.isin(self.predict_label_pairs[unmatch_label][:,1], label_selected)]
+
+            # only for unmatch_label
+            if isinstance(query["predict_size"][0], str) or isinstance(query["predict_size"][1], str) or \
+               isinstance(query["predict_aspect_ratio"][0], str) or isinstance(query["predict_aspect_ratio"][1], str) or \
+               -1 in query["predict"]:
+               return np.array([], dtype=np.int32), np.array([], dtype=np.int32), unmatch_label
+            # only for unmatch_predict
+            if isinstance(query["label_size"][0], str) or isinstance(query["label_size"][1], str) or \
+               isinstance(query["label_aspect_ratio"][0], str) or isinstance(query["label_aspect_ratio"][1], str) or \
+               -1 in query["label"]:
+               return np.array([], dtype=np.int32), unmatch_predict, np.array([], dtype=np.int32)
         
         return filtered, unmatch_predict, unmatch_label
     
-    def getStatisticsMatrix(self, matrix, query):
+    def getStatisticsMatrixes(self, matrix, query):
         """
             matrix: a 3-d list consists of lists of indexes from predict_label_pairs 
         """
-        statistics_mode = 'count'
-        if query is not None:
-            statistics_mode = query['return']
-        stat_matrix = np.zeros((len(matrix), len(matrix[0])), dtype=np.float64)
+        statistics_modes = ['count']
+        if query is not None and "return" in query:
+            statistics_modes = query['return']
         function_map = {
             'count': lambda x: len(x),
             'avg_label_size': lambda x: 0 if self.predict_label_pairs[x[0],1]==-1 else self.label_size[self.predict_label_pairs[x, 1]].mean(),
@@ -225,15 +260,19 @@ class DataCtrler(object):
             'avg_label_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],1]==-1 else self.label_aspect_ratio[self.predict_label_pairs[x, 1]].mean(),
             'avg_predict_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],0]==-1 else self.predict_aspect_ratio[self.predict_label_pairs[x, 0]].mean(),
         }
-        if statistics_mode not in function_map:
-            raise NotImplementedError()
-        map_func = function_map[statistics_mode]
-        for i in range(stat_matrix.shape[0]):
-            for j in range(stat_matrix.shape[1]):
-                if len(matrix[i][j]) == 0:
-                    continue
-                stat_matrix[i, j] = map_func(matrix[i][j])
-        return stat_matrix
+        ret_matrixes = []
+        for statistics_mode in statistics_modes:
+            if statistics_mode not in function_map:
+                raise NotImplementedError()
+            map_func = function_map[statistics_mode]
+            stat_matrix = np.zeros((len(matrix), len(matrix[0])), dtype=np.float64)
+            for i in range(stat_matrix.shape[0]):
+                for j in range(stat_matrix.shape[1]):
+                    if len(matrix[i][j]) == 0:
+                        continue
+                    stat_matrix[i, j] = map_func(matrix[i][j])
+            ret_matrixes.append(stat_matrix.tolist())
+        return ret_matrixes
 
     def getConfusionMatrix(self, query = None):
         """filtered confusion matrix
@@ -244,7 +283,7 @@ class DataCtrler(object):
         """
         filtered , unmatch_predict, unmatch_label = self.filterSamples(query)
         label_target, pred_target = np.arange(80), np.arange(80)
-        if query is not None:
+        if query is not None and "label" in query and "predict" in query:
             label_target = query["label"]
             pred_target = query["predict"]
         confusion = [[[] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
@@ -260,7 +299,7 @@ class DataCtrler(object):
             confusion[i][len(pred_target)] = unmatch_label[self.raw_labels[self.predict_label_pairs[unmatch_label][:, 1], 0]==label_target[i]]
         for j in range(len(pred_target)):
             confusion[len(label_target)][j] = unmatch_predict[self.raw_predicts[self.predict_label_pairs[unmatch_predict][:, 0], 0]==pred_target[j]]
-        return self.getStatisticsMatrix(confusion, query).tolist()
+        return self.getStatisticsMatrixes(confusion, query)
     
     def getSizeMatrix(self, query = None):
         """A size matrix divided by iou with Fisher algorithm. 
@@ -272,11 +311,15 @@ class DataCtrler(object):
         """
         K = 10
         filtered , unmatch_predict, unmatch_label = self.filterSamples(query)
-        if query is not None:
+        if query is not None and 'split' in query:
             K = query["split"]
         size_matrix = [[[] for _ in range(K+1)] for _ in range(K+1)]
         pred_size_argsort = np.argsort(self.predict_size)
-        split_pos = get_size_split_pos(self.predict_label_ious[pred_size_argsort], K)
+        if K not in self.size_matrix_split_map:
+            self.size_matrix_split_map[K] = get_size_split_pos(self.predict_label_ious[pred_size_argsort], K)
+            with open(self.size_matrix_split_path, 'wb') as f:
+                pickle.dump(self.size_matrix_split_map, f)
+        split_pos = self.size_matrix_split_map[K]
         split_size = self.predict_size[pred_size_argsort][split_pos]
         # print(split_size)
         label_split_rec, pred_split_rec = [], []
@@ -301,7 +344,7 @@ class DataCtrler(object):
             size_matrix[K][i] = unmatch_predict[np.isin(self.predict_label_pairs[unmatch_predict][:, 0], pred_split_rec[i])]
         return {
             'partitions': [0] + split_size.tolist() + [1],
-            'matrix': self.getStatisticsMatrix(size_matrix, query).tolist()
+            'matrix': self.getStatisticsMatrixes(size_matrix, query)
         }
         
         
@@ -352,7 +395,7 @@ if __name__ == "__main__":
             "direction": [0,1,2,3,4,5,6,7,8],
             "label": np.arange(80),
             "predict": np.arange(80),
-            "return": rt_type,
+            "return": [rt_type],
             "split": 10
         })
         print(rt_type, matrix)

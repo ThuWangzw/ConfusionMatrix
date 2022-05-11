@@ -29,6 +29,10 @@ export default {
             type: Array,
             default: undefined,
         },
+        returnMode: {
+            type: String,
+            default: 'count',
+        },
     },
     computed: {
         ...mapGetters([
@@ -95,13 +99,19 @@ export default {
             return maxwidth;
         },
         legendWidth: function() {
-            return Math.max(100, this.maxHorizonTextWidth);
+            return Math.max(250, this.maxHorizonTextWidth);
         },
         leftCornerSize: function() {
             return this.legendWidth;
         },
         colorScale: function() {
-            return d3.scaleSequential([0, this.maxCellValue], ['rgb(255, 255, 255)', 'rgb(8, 48, 107)']).clamp(true);
+            if (this.returnMode==='count') {
+                return d3.scaleSequential([0, this.maxCellValue], ['rgb(255, 255, 255)', 'rgb(8, 48, 107)']).clamp(true);
+            } else if (this.returnMode==='avg_iou' || this.returnMode==='avg_acc') {
+                return d3.scaleSequential([1, 0], ['rgb(255, 255, 255)', 'rgb(8, 48, 107)']).clamp(true);
+            } else {
+                return d3.scaleSequential([0, 1], ['rgb(255, 255, 255)', 'rgb(8, 48, 107)']).clamp(true);
+            }
         },
     },
     mounted: function() {
@@ -243,8 +253,8 @@ export default {
                         colNode: nodeb,
                     };
                     this.cells.push(cell);
-                    if (!this.isHideCell(cell) && i!=j) {
-                        this.maxCellValue = Math.max(this.maxCellValue, cell.value*2);
+                    if (!this.isHideCell(cell) && (i!=j || this.returnMode!=='count') && i!==this.showNodes.length-1 && j!==this.showNodes.length-1) {
+                        this.maxCellValue = Math.max(this.maxCellValue, cell.value[cell.value.length-1]);
                     }
                 }
             }
@@ -436,7 +446,26 @@ export default {
                     .attr('opacity', 0)
                     .attr('cursor', that.cellAttrs['cursor'])
                     .attr('transform', (d) => `translate(${d.column*that.cellAttrs['size']}, 
-                        ${d.row*that.cellAttrs['size']})`);
+                        ${d.row*that.cellAttrs['size']})`)
+                    .on('click', function(e, d) {
+                        if (d.value[0] === 0) return;
+                        const labelTarget = [];
+                        const predictTarget = [];
+                        for (const name of d.rowNode.leafs) {
+                            let idx = that.name2index[name];
+                            if (idx === that.indexNames.length-1) idx = -1;
+                            labelTarget.push(idx);
+                        }
+                        for (const name of d.colNode.leafs) {
+                            let idx = that.name2index[name];
+                            if (idx === that.indexNames.length-1) idx = -1;
+                            predictTarget.push(idx);
+                        }
+                        that.$emit('changeMatrix', 'size', {
+                            label: labelTarget,
+                            predict: predictTarget,
+                        });
+                    }); ;
 
                 matrixCellsinG.transition()
                     .duration(that.createDuration)
@@ -450,15 +479,15 @@ export default {
                     .attr('height', that.cellAttrs['size'])
                     .attr('stroke', that.cellAttrs['stroke'])
                     .attr('stroke-width', that.cellAttrs['stroke-width'])
-                    .attr('fill', (d)=>that.colorScale(d.value));
+                    .attr('fill', (d)=>d.value[0]===0?'rgb(255,255,255)':that.colorScale(d.value[d.value.length-1]));
 
-                matrixCellsinG.filter((d) => d.value===0)
+                matrixCellsinG.filter((d) => d.value[0]===0)
                     .append('path')
                     .attr('d', `M ${that.cellAttrs['size']*0.25} ${that.cellAttrs['size']*0.25} 
                         L ${that.cellAttrs['size']*0.75} ${that.cellAttrs['size']*0.75}`)
                     .attr('stroke', that.cellAttrs['slash-text-stroke']);
 
-                matrixCellsinG.filter((d) => d.value>0)
+                matrixCellsinG.filter((d) => d.value[d.value.length-1]>0)
                     .append('text')
                     .attr('x', that.cellAttrs['size']/2)
                     .attr('y', (that.cellAttrs['size']+that.cellAttrs['font-size'])/2)
@@ -468,7 +497,7 @@ export default {
                     .attr('font-family', that.cellAttrs['font-family'])
                     .attr('opacity', 0)
                     .attr('fill', that.cellAttrs['text-fill'])
-                    .text((d) => d.value);
+                    .text((d) => d.value[d.value.length-1]);
 
 
                 if ((that.horizonTextinG.enter().size() === 0) && (that.verticalTextinG.enter().size() === 0) &&
@@ -579,11 +608,14 @@ export default {
                         ${d.row*that.cellAttrs['size']})`)
                     .on('end', resolve);
 
-                that.matrixCellsinG.selectAll('rect')
-                    .transition()
-                    .duration(that.updateDuration)
-                    .attr('fill', (d)=>that.colorScale(d.value))
-                    .on('end', resolve);
+                that.matrixCellsinG.each(function(d) {
+                    // eslint-disable-next-line no-invalid-this
+                    d3.select(this).select('rect')
+                        .transition()
+                        .duration(that.updateDuration)
+                        .attr('fill', (d)=>d.value[0]===0?'rgb(255,255,255)':that.colorScale(d.value[d.value.length-1]))
+                        .on('end', resolve);
+                });
 
                 if ((that.horizonTextinG.size() === 0) && (that.verticalTextinG.size() === 0) &&
                     (that.matrixCellsinG.size() === 0)) {
@@ -645,13 +677,32 @@ export default {
             });
         },
         getTwoCellConfusion: function(nodea, nodeb) {
-            let cnt = 0;
-            for (const leafa of nodea.leafs) {
-                for (const leafb of nodeb.leafs) {
-                    cnt += this.baseMatrix[this.name2index[leafa]][this.name2index[leafb]];
+            const cnt = [];
+            const sum = [];
+            for (let i=0; i<this.baseMatrix.length; i++) {
+                cnt.push(0);
+                sum.push(0);
+                for (const leafa of nodea.leafs) {
+                    for (const leafb of nodeb.leafs) {
+                        if (i===0) {
+                            cnt[i] = 1;
+                            sum[i] += this.baseMatrix[0][this.name2index[leafa]][this.name2index[leafb]];
+                        } else {
+                            cnt[i] += this.baseMatrix[0][this.name2index[leafa]][this.name2index[leafb]];
+                            sum[i] += this.baseMatrix[1][this.name2index[leafa]][this.name2index[leafb]]*
+                                this.baseMatrix[0][this.name2index[leafa]][this.name2index[leafb]];
+                        }
+                    }
                 }
             }
-            return cnt;
+            for (let i=0; i<this.baseMatrix.length; i++) {
+                if (cnt[i]===0) {
+                    sum[i]=0;
+                } else {
+                    sum[i] /= cnt[i];
+                }
+            }
+            return sum;
         },
         drawLegend: function() {
             const that = this;
@@ -735,7 +786,7 @@ export default {
             drawLegend(
                 {
                     color: this.colorScale,
-                    title: 'Counts',
+                    title: this.returnMode,
                     width: this.legendWidth,
                     ticks: 5,
                 },
