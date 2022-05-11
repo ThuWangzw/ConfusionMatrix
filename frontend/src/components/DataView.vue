@@ -1,6 +1,14 @@
 <template>
     <div id="data-content">
         <div id="mode-select">
+            <el-select v-model="matrixType" @change="changeMatrixType">
+                <el-option
+                    v-for="item in matrixModes"
+                    :key="item.value"
+                    :label="item.value"
+                    :value="item.value">
+                </el-option>
+            </el-select>
             <el-select v-model="return_mode" @change="changeMode">
                 <el-option
                     v-for="item in data_mode"
@@ -11,10 +19,10 @@
             </el-select>
         </div>
         <div id="confusion-matrix-container">
-            <confusion-matrix v-if="matrixType==='confusion'" ref="matrix" id="confusion-matrix" @setMatrix="setMatrix"
-                :showColor="true" :confusionMatrix="confusionMatrix"></confusion-matrix>
-            <numerical-matrix v-else-if="matrixType==='numerical'" ref="numerical" @setMatrix="setMatrix"
-                :numericalMatrix="numericalMatrix" :numericalMatrixType="numericalMatrixType"></numerical-matrix>
+            <confusion-matrix v-if="matrixType==='confusion'" ref="matrix" id="confusion-matrix" @changeMatrix="changeMatrix"
+                :showColor="true" :confusionMatrix="confusionMatrix" :returnMode="return_mode"></confusion-matrix>
+            <numerical-matrix v-else-if="matrixType!=='confusion'" ref="numerical" @changeMatrix="changeMatrix"
+                :numericalMatrix="numericalMatrix" :numericalMatrixType="matrixType" :returnMode="return_mode"></numerical-matrix>
         </div>
     </div>
 </template>
@@ -34,8 +42,7 @@ export default {
     name: 'DataView',
     data() {
         return {
-            matrixType: 'numerical', // confusion, numerical
-            numericalMatrixType: 'size',
+            matrixType: 'confusion', // confusion, size
             confusionMatrix: undefined,
             numericalMatrix: undefined,
             return_mode: 'count',
@@ -61,25 +68,41 @@ export default {
                 value: 'avg_predict_aspect_ratio',
                 label: '预测物体框纵横比均值',
             }],
+            matrixModes: [{
+                value: 'confusion',
+                label: '混淆矩阵',
+            }, {
+                value: 'size',
+                label: '物体框大小矩阵',
+            }],
             query: {},
         };
     },
     methods: {
-        getMatrix: function(query) {
+        setMatrix: function(query) {
+            this.confusionMatrix = undefined;
+            this.numericalMatrix = undefined;
+            // query['return'] = ['count', this.return_mode];
+            if (this.return_mode!=='count') {
+                query['return'] = ['count', this.return_mode];
+            } else {
+                query['return'] = ['count'];
+            }
+            this.query = query;
             const store = this.$store;
             const that = this;
             if (this.matrixType==='confusion') {
-                axios.post(store.getters.URL_GET_CONFUSION_MATRIX, query===undefined?{}:{query})
+                axios.post(store.getters.URL_GET_CONFUSION_MATRIX, that.query===undefined?{}:{query: that.query})
                     .then(function(response) {
-                        if (that.return_mode==='count') that.confusionMatrix = [response.data[0]];
-                        else that.confusionMatrix = response.data;
+                        that.confusionMatrix = response.data;
                     });
-            } else if (this.matrixType==='numerical') {
-                if (this.numericalMatrixType==='size') {
-                    axios.post(store.getters.URL_GET_SIZE_MATRIX, query===undefined?{}:{query})
+            } else {
+                if (this.matrixType==='size') {
+                    axios.post(store.getters.URL_GET_SIZE_MATRIX, that.query===undefined?{}:{query: that.query})
                         .then(function(response) {
                             const numericalMatrix = response.data;
-                            numericalMatrix.matrix = numericalMatrix.matrix[1];
+                            numericalMatrix.counts = numericalMatrix.matrix[0];
+                            numericalMatrix.matrix = numericalMatrix.matrix[numericalMatrix.matrix.length-1];
                             for (let i=0; i<numericalMatrix.partitions.length; i++) {
                                 numericalMatrix.partitions[i] = Math.round(numericalMatrix.partitions[i]*100)/100;
                             }
@@ -89,21 +112,20 @@ export default {
                 }
             }
         },
-        setMatrix: function(matrixType, query, numericalMatrixType) {
-            this.confusionMatrix = undefined;
-            this.numericalMatrix = undefined;
-            this.matrixType = matrixType;
-            this.numericalMatrixType = numericalMatrixType;
-            query['return'] = ['count', this.return_mode];
+        changeMatrix: function(matrixType, query) {
             this.query = query;
-            this.getMatrix(query);
+            this.matrixType = matrixType;
+            this.setMatrix(this.query);
         },
-        changeMode: function(val) {
-            this.setMatrix(this.matrixType, this.query, this.numericalMatrixType);
+        changeMatrixType: function() {
+            this.setMatrix({});
+        },
+        changeMode: function() {
+            this.setMatrix(this.query);
         },
     },
     mounted: function() {
-        this.setMatrix(this.matrixType, this.query, this.numericalMatrixType);
+        this.setMatrix(this.query);
     },
 };
 </script>

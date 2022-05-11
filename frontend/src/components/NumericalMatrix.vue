@@ -25,6 +25,10 @@ export default {
             type: String,
             default: 'size',
         },
+        returnMode: {
+            type: String,
+            default: 'count',
+        },
     },
     watch: {
         numericalMatrix: function() {
@@ -46,6 +50,13 @@ export default {
                 return this.numericalMatrix.matrix;
             }
         },
+        countMatrix: function() {
+            if (this.numericalMatrix===undefined || this.numericalMatrix.counts===undefined) {
+                return [];
+            } else {
+                return this.numericalMatrix.counts;
+            }
+        },
         leftCornerSize: function() {
             return this.legendWidth;
         },
@@ -65,7 +76,13 @@ export default {
             return this.leftCornerSize+this.textMatrixMargin+this.matrixWidth;
         },
         colorScale: function() {
-            return d3.scaleSequential([0, this.submaxCellValue], ['rgb(255, 255, 255)', 'rgb(8, 48, 107)']).clamp(true);
+            if (this.returnMode==='count') {
+                return d3.scaleSequential([0, this.submaxCellValue], ['rgb(255, 255, 255)', 'rgb(8, 48, 107)']).clamp(true);
+            } else if (this.returnMode==='avg_iou' || this.returnMode==='avg_acc') {
+                return d3.scaleSequential([1, 0], ['rgb(255, 255, 255)', 'rgb(8, 48, 107)']).clamp(true);
+            } else {
+                return d3.scaleSequential([0, 1], ['rgb(255, 255, 255)', 'rgb(8, 48, 107)']).clamp(true);
+            }
         },
         horizonTextG: function() {
             return d3.select('g#horizon-text-g');
@@ -83,7 +100,7 @@ export default {
             return d3.select('g#legend-g');
         },
         legendWidth: function() {
-            return Math.max(200, this.maxHorizonTextWidth);
+            return Math.max(250, this.maxHorizonTextWidth);
         },
     },
     data: function() {
@@ -149,6 +166,7 @@ export default {
                     this.cells.push({
                         key: this.partitions[i]+','+this.partitions[j],
                         val: this.rawMatrix[i][j],
+                        count: this.countMatrix[i][j],
                         col: j,
                         row: i,
                     });
@@ -230,7 +248,7 @@ export default {
                     .attr('transform', (d) => `translate(${d.col*that.cellAttrs['size']}, 
                         ${d.row*that.cellAttrs['size']})`)
                     .on('click', function(e, d) {
-                        that.$emit('setMatrix', 'confusion', {
+                        that.$emit('changeMatrix', 'confusion', {
                             'label_size': [that.partitions[d.row], that.partitions[d.row+1]],
                             'predict_size': [that.partitions[d.col], that.partitions[d.col+1]],
                         });
@@ -248,15 +266,15 @@ export default {
                     .attr('height', that.cellAttrs['size'])
                     .attr('stroke', that.cellAttrs['stroke'])
                     .attr('stroke-width', that.cellAttrs['stroke-width'])
-                    .attr('fill', (d)=>that.colorScale(d.val));
+                    .attr('fill', (d)=>d.count===0?'rgb(255,255,255)':that.colorScale(d.val));
 
-                matrixCellsinG.filter((d) => d.val===0)
+                matrixCellsinG.filter((d) => d.count===0)
                     .append('path')
                     .attr('d', `M ${that.cellAttrs['size']*0.25} ${that.cellAttrs['size']*0.25} 
                         L ${that.cellAttrs['size']*0.75} ${that.cellAttrs['size']*0.75}`)
                     .attr('stroke', that.cellAttrs['slash-text-stroke']);
 
-                matrixCellsinG.filter((d) => d.val>0)
+                matrixCellsinG.filter((d) => d.count>0)
                     .append('text')
                     .attr('x', that.cellAttrs['size']/2)
                     .attr('y', (that.cellAttrs['size']+that.cellAttrs['font-size'])/2)
@@ -304,11 +322,14 @@ export default {
                         ${d.row*that.cellAttrs['size']})`)
                     .on('end', resolve);
 
-                that.matrixCellsinG.selectAll('rect')
-                    .transition()
-                    .duration(that.updateDuration)
-                    .attr('fill', (d)=>that.colorScale(d.val))
-                    .on('end', resolve);
+                that.matrixCellsinG.each(function(d) {
+                    // eslint-disable-next-line no-invalid-this
+                    d3.select(this).select('rect')
+                        .transition()
+                        .duration(that.updateDuration)
+                        .attr('fill', (d)=>d.count===0?'rgb(255,255,255)':that.colorScale(d.val))
+                        .on('end', resolve);
+                });
 
                 if ((that.horizonTextinG.size() === 0) && (that.verticalTextinG.size() === 0) &&
                     (that.matrixCellsinG.size() === 0)) {
@@ -451,7 +472,7 @@ export default {
             drawLegend(
                 {
                     color: this.colorScale,
-                    title: 'Counts',
+                    title: this.returnMode,
                     width: this.legendWidth,
                     ticks: 5,
                 },
