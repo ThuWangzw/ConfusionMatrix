@@ -2,8 +2,14 @@
     <svg id="confusion-svg" width="100%" height="100%" ref="svg">
         <g id="main-g" transform="translate(0,0)">
             <g id="legend-g" :transform="`translate(5,${leftCornerSize/2-25})`"></g>
-            <g id="horizon-text-g" :transform="`translate(${leftCornerSize-maxHorizonTextWidth}, ${leftCornerSize+textMatrixMargin})`"></g>
-            <g id="vertical-text-g" :transform="`translate(${leftCornerSize+textMatrixMargin}, ${leftCornerSize}) rotate(-90)`"></g>
+            <g id="horizon-text-g" :transform="`translate(${leftCornerSize-maxHorizonTextWidth}, ${leftCornerSize+textMatrixMargin})`">
+                <text id="horizon-legend" transform="translate(0,0) scale(270)" text-anchor="middle" font-size="15" opacity="0"
+                    font-family="Comic Sans MS" font-weight="normal">Ground Truth</text>
+            </g>
+            <g id="vertical-text-g" :transform="`translate(${leftCornerSize+textMatrixMargin}, ${leftCornerSize}) rotate(-90)`">
+                <text id="vertical-legend" transform="translate(0,0) scale(90)" opacity="0"
+                    text-anchor="middle" font-size="15" font-family="Comic Sans MS" font-weight="normal">Prediction</text>
+            </g>
             <g id="matrix-cells-g" :transform="`translate(${leftCornerSize+textMatrixMargin}, ${leftCornerSize+textMatrixMargin})`"></g>
         </g>
     </svg>
@@ -87,6 +93,12 @@ export default {
         mainG: function() {
             return d3.selectAll('g#main-g');
         },
+        horizonLegend: function() {
+            return d3.select('text#horizon-legend');
+        },
+        verticalLegend: function() {
+            return d3.select('text#vertical-legend');
+        },
         maxHorizonTextWidth: function() {
             let maxwidth = 0;
             for (const node of this.showNodes) {
@@ -115,6 +127,9 @@ export default {
         },
     },
     mounted: function() {
+        // init legend
+        this.horizonLegend.attr('opacity', 0);
+        this.verticalLegend.attr('opacity', 0);
         this.hierarchy = this.getHierarchy(this.rawHierarchy);
         this.getDataAndRender();
     },
@@ -499,6 +514,20 @@ export default {
                     .attr('fill', that.cellAttrs['text-fill'])
                     .text((d) => d.value[d.value.length-1]);
 
+                // show matrix legend text
+                if (that.horizonLegend.attr('opacity')==0) {
+                    that.horizonLegend
+                        .transition()
+                        .duration(that.createDuration)
+                        .attr('opacity', 1)
+                        .on('end', resolve);
+                    that.verticalLegend
+                        .transition()
+                        .duration(that.createDuration)
+                        .attr('opacity', 1)
+                        .on('end', resolve);
+                }
+
 
                 if ((that.horizonTextinG.enter().size() === 0) && (that.verticalTextinG.enter().size() === 0) &&
                     (that.matrixCellsinG.enter().size() === 0)) {
@@ -548,11 +577,23 @@ export default {
                         return `M ${x} ${that.cellAttrs['size']} L ${x} ${that.cellAttrs['size']+linelen}`;
                     });
 
+                that.horizonLegend
+                    .transition()
+                    .duration(that.updateDuration)
+                    .attr('transform', `translate(-10,${that.matrixWidth/2}) rotate(270)`)
+                    .on('end', resolve);
+
                 that.verticalTextinG
                     .transition()
                     .duration(that.updateDuration)
                     .attr('transform', (d, i) => `translate(${d.depth*that.verticalTextAttrs['leftMargin']}, 
                         ${i*that.cellAttrs['size']})`)
+                    .on('end', resolve);
+
+                that.verticalLegend
+                    .transition()
+                    .duration(that.updateDuration)
+                    .attr('transform', `translate(${that.maxHorizonTextWidth},${that.matrixWidth/2}) rotate(90)`)
                     .on('end', resolve);
 
                 that.verticalTextinG.filter((d) => d.children.length>0)
