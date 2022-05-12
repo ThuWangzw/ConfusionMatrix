@@ -829,7 +829,7 @@ export default {
                     color: this.colorScale,
                     title: this.returnMode,
                     width: this.legendWidth,
-                    ticks: 5,
+                    ticks: 6,
                 },
             );
         },
