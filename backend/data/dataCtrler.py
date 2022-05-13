@@ -36,6 +36,7 @@ class DataCtrler(object):
         self.raw_data_path = os.path.join(bufferPath, "{}_raw_data.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         self.label_predict_iou_path = os.path.join(bufferPath, "{}_predict_label_iou.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         self.size_matrix_split_path = os.path.join(bufferPath, "{}_size_matrix_split.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
+        self.box_size_dist_path = os.path.join(bufferPath, "{}_box_size_dist.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         
         #read raw data
         if os.path.exists(self.raw_data_path):
@@ -129,6 +130,37 @@ class DataCtrler(object):
         ## init size
         self.label_size = self.raw_labels[:,3]*self.raw_labels[:,4]
         self.predict_size = self.raw_predicts[:,4]*self.raw_predicts[:,5]
+
+        # get box size distribution in [0,1]
+        if os.path.exists(self.box_size_dist_path):
+            with open(self.box_size_dist_path, 'rb') as f:
+                self.box_size_dist_map = pickle.load(f)
+        else:
+            label_box_size_dist, predict_box_size_dist = [0 for _ in range(10)], [0 for _ in range(10)]
+            for i in self.label_size:
+                label_box_size_dist[min(9, int(i//0.1))]+=1
+            for i in self.predict_size:
+                predict_box_size_dist[min(9, int(i//0.1))]+=1
+            label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
+            label_box_size_confusion = [[[0 for _ in range(10)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
+            predict_box_size_confusion = [[[0 for _ in range(10)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
+            for (pr, gt) in self.predict_label_pairs:
+                if pr == -1:
+                    label_box_size_confusion[int(self.raw_labels[gt, 0])][len(pred_target)][min(9, int(self.label_size[gt]//0.1))]+=1
+                elif gt == -1:
+                    predict_box_size_confusion[len(label_target)][int(self.raw_predicts[pr, 0])][min(9, int(self.predict_size[pr]//0.1))]+=1
+                else:
+                    label_box_size_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][min(9, int(self.label_size[gt]//0.1))]+=1
+                    predict_box_size_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][min(9, int(self.predict_size[pr]//0.1))]+=1
+            self.box_size_dist_map = {
+                'labelSizeAll': label_box_size_dist,
+                'predictSizeAll': predict_box_size_dist,
+                'labelSizeConfusion': label_box_size_confusion,
+                'predictSizeConfusion': predict_box_size_confusion
+            }
+            with open(self.box_size_dist_path, 'wb') as f:
+                pickle.dump(self.box_size_dist_map, f)
+
         ## init aspect ratio
         self.label_aspect_ratio = self.raw_labels[:,3]/self.raw_labels[:,4]
         self.predict_aspect_ratio = self.raw_predicts[:,4]/self.raw_predicts[:,5]
@@ -190,8 +222,8 @@ class DataCtrler(object):
         default_query = {
             "label_size": [0,1],
             "predict_size": [0,1],
-            "label_aspect_ratio": [0,1],
-            "predict_aspect_ratio": [0,1],
+            "label_aspect_ratio": [0,100],
+            "predict_aspect_ratio": [0,100],
             "direction": [0,1,2,3,4,5,6,7,8],
             "label": np.arange(len(self.classID2Idx)-1),
             "predict": np.arange(len(self.classID2Idx)-1),
@@ -346,7 +378,46 @@ class DataCtrler(object):
             'partitions': [0] + split_size.tolist() + [1],
             'matrix': self.getStatisticsMatrixes(size_matrix, query)
         }
-        
+    
+    def getBoxSizeDistribution(self):
+        """
+            return label_size, pred_size distribution
+        """
+        return self.box_size_dist_map
+    
+    def getBoxSizeInfo(self):
+        """
+            return confusion matrix with all information about box size and all box size
+        """
+        filtered , unmatch_predict, unmatch_label = self.filterSamples()
+        label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
+        labelSizeConfusion = [[[] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
+        predictSizeConfusion = [[[] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
+        label_rec, pred_rec = [], []
+        for i in range(len(label_target)):
+            label_rec.append(self.raw_labels[self.predict_label_pairs[filtered, 1], 0]==label_target[i])
+        for j in range(len(pred_target)):
+            pred_rec.append(self.raw_predicts[self.predict_label_pairs[filtered, 0], 0]==pred_target[j])
+        for i in range(len(label_target)):
+            for j in range(len(pred_target)):
+                tmp = filtered[np.logical_and(label_rec[i], pred_rec[j])]
+                labelSizeConfusion[i][j] = self.label_size[self.predict_label_pairs[tmp, 1]].tolist()
+                predictSizeConfusion[i][j] = self.predict_size[self.predict_label_pairs[tmp, 0]].tolist()
+        for i in range(len(label_target)):
+            tmp = unmatch_label[self.raw_labels[self.predict_label_pairs[unmatch_label, 1], 0]==label_target[i]]
+            labelSizeConfusion[i][len(pred_target)] = self.label_size[self.predict_label_pairs[tmp, 1]].tolist()
+            # predictSizeConfusion[i][len(pred_target)] = self.predict_size[self.predict_label_pairs[tmp, 0]].tolist()
+        for j in range(len(pred_target)):
+            tmp = unmatch_predict[self.raw_predicts[self.predict_label_pairs[unmatch_predict, 0], 0]==pred_target[j]]
+            # labelSizeConfusion[len(label_target)][j] = self.label_size[self.predict_label_pairs[tmp, 1]].tolist()
+            predictSizeConfusion[len(label_target)][j] = self.predict_size[self.predict_label_pairs[tmp, 0]].tolist()
+        return {
+            'labelSizeAll': self.label_size.tolist(),
+            'predictSizeAll': self.predict_size.tolist(),
+            'labelSizeConfusion': labelSizeConfusion,
+            'predictSizeConfusion': predictSizeConfusion
+        }
+
         
         
 def box_area(box):

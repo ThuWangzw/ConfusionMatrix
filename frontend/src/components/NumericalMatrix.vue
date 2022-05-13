@@ -1,10 +1,10 @@
 <template>
     <svg id="numerical-svg" width="100%" height="100%" ref="svg">
-        <g id="main-g" transform="translate(0,0)">
-            <g id="legend-g" :transform="`translate(5,${leftCornerSize/2-25})`"></g>
-            <g id="horizon-text-g" :transform="`translate(${leftCornerSize-maxHorizonTextWidth}, ${leftCornerSize+textMatrixMargin})`"></g>
-            <g id="vertical-text-g" :transform="`translate(${leftCornerSize+textMatrixMargin}, ${leftCornerSize}) rotate(-90)`"></g>
-            <g id="matrix-cells-g" :transform="`translate(${leftCornerSize+textMatrixMargin}, ${leftCornerSize+textMatrixMargin})`"></g>
+        <g id="main-g1" transform="translate(0,0)">
+            <g id="legend-g1" :transform="`translate(5,${leftCornerSize/2-25})`"></g>
+            <g id="horizon-text-g1" :transform="`translate(${leftCornerSize-maxHorizonTextWidth}, ${leftCornerSize+textMatrixMargin})`"></g>
+            <g id="vertical-text-g1" :transform="`translate(${leftCornerSize+textMatrixMargin}, ${leftCornerSize}) rotate(-90)`"></g>
+            <g id="matrix-cells-g1" :transform="`translate(${leftCornerSize+textMatrixMargin}, ${leftCornerSize+textMatrixMargin})`"></g>
         </g>
     </svg>
 </template>
@@ -20,10 +20,6 @@ export default {
         numericalMatrix: {
             type: Object,
             default: undefined,
-        },
-        numericalMatrixType: {
-            type: String,
-            default: 'size',
         },
         returnMode: {
             type: String,
@@ -85,19 +81,19 @@ export default {
             }
         },
         horizonTextG: function() {
-            return d3.select('g#horizon-text-g');
+            return d3.select('g#horizon-text-g1');
         },
         verticalTextG: function() {
-            return d3.select('g#vertical-text-g');
+            return d3.select('g#vertical-text-g1');
         },
         matrixCellsG: function() {
-            return d3.select('g#matrix-cells-g');
+            return d3.select('g#matrix-cells-g1');
         },
         mainG: function() {
-            return d3.selectAll('g#main-g');
+            return d3.selectAll('g#main-g1');
         },
         legendG: function() {
-            return d3.select('g#legend-g');
+            return d3.select('g#legend-g1');
         },
         legendWidth: function() {
             return Math.max(250, this.maxHorizonTextWidth);
@@ -147,7 +143,7 @@ export default {
                 'font-family': 'Comic Sans MS',
                 'font-weight': 'normal',
                 'font-size': 15,
-                'cursor': 'pointer',
+                // 'cursor': 'pointer',
             },
             submaxCellValue: 0,
         };
@@ -188,8 +184,7 @@ export default {
             this.horizonTextinG = this.horizonTextG.selectAll('g.'+this.horizonTextAttrs['gClass']).data(this.partitions, (d)=>d);
             this.verticalTextinG = this.verticalTextG.selectAll('g.'+this.verticalTextAttrs['gClass']).data(this.partitions, (d)=>d);
             this.matrixCellsinG = this.matrixCellsG.selectAll('g.'+this.cellAttrs['gClass']).data(this.cells, (d)=>d.key);
-
-            this.drawLegend();
+            if (this.numericalMatrix!==undefined) this.drawLegend();
             await this.remove();
             await this.update();
             await this.transform();
@@ -248,10 +243,11 @@ export default {
                     .attr('transform', (d) => `translate(${d.col*that.cellAttrs['size']}, 
                         ${d.row*that.cellAttrs['size']})`)
                     .on('click', function(e, d) {
-                        that.$emit('changeMatrix', 'confusion', {
-                            'label_size': [that.partitions[d.row], that.partitions[d.row+1]],
-                            'predict_size': [that.partitions[d.col], that.partitions[d.col+1]],
-                        });
+                        return;
+                        // that.$emit('changeMatrix', 'confusion', {
+                        //     'label_size': [that.partitions[d.row], that.partitions[d.row+1]],
+                        //     'predict_size': [that.partitions[d.col], that.partitions[d.col+1]],
+                        // });
                     });
 
                 matrixCellsinG.transition()
@@ -378,7 +374,7 @@ export default {
                 let shifty = 0;
                 let scale = 1;
                 if (that.svgWidth > realSize) {
-                    scale = realSize/that.svgWidth;
+                    scale = realSize/that.svgWidth/1.1;
                 } else {
                     scale = 1;
                 }

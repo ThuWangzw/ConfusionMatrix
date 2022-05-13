@@ -30,6 +30,15 @@ def sizeMatrix():
         query = request.json['query']
     return jsonify(dataCtrler.getSizeMatrix(query))
 
+@app.route('/api/boxSizeDist', methods=["POST"])
+def boxSizeDist():
+    return jsonify(dataCtrler.getBoxSizeDistribution())
+
+@app.route('/api/boxSizeInfo', methods=["POST"])
+def boxSizeInfo():
+    return jsonify(dataCtrler.getBoxSizeInfo())
+
+
 def main():
     parser = argparse.ArgumentParser(description='manual to this script')
     parser.add_argument("--rawDataPath", type=str, default='/data/zhaowei/ConfusionMatrix/datasets/coco/')

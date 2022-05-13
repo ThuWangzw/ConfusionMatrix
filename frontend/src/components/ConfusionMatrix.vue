@@ -476,11 +476,26 @@ export default {
                             if (idx === that.indexNames.length-1) idx = -1;
                             predictTarget.push(idx);
                         }
-                        that.$emit('changeMatrix', 'size', {
+                        that.$emit('changeMatrix', {
                             label: labelTarget,
                             predict: predictTarget,
                         });
-                    }); ;
+                    })
+                    .on('mouseover', function(e, d) {
+                        if (d.value[0] === 0) return;
+                        const labelTarget = [];
+                        const predictTarget = [];
+                        for (const name of d.rowNode.leafs) {
+                            labelTarget.push(that.name2index[name]);
+                        }
+                        for (const name of d.colNode.leafs) {
+                            predictTarget.push(that.name2index[name]);
+                        }
+                        that.$emit('hoverConfusion', labelTarget, predictTarget);
+                    })
+                    .on('mouseout', function(e, d) {
+                        that.$emit('hoverConfusion', undefined, undefined);
+                    });
 
                 matrixCellsinG.transition()
                     .duration(that.createDuration)
@@ -705,7 +720,7 @@ export default {
                 let shifty = 0;
                 let scale = 1;
                 if (that.svgWidth > realSize) {
-                    scale = realSize/that.svgWidth;
+                    scale = realSize/that.svgWidth/1.1;
                 } else {
                     scale = 1;
                 }
