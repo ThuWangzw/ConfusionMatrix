@@ -12,7 +12,7 @@ export default {
     name: 'ScentedBarchart',
     mixins: [Util, GlobalVar],
     props: {
-        allSize: {
+        allData: {
             type: Array,
             default: undefined,
         },
@@ -20,7 +20,7 @@ export default {
             type: String,
             default: '',
         },
-        selectSize: {
+        selectData: {
             type: Array,
             default: undefined,
         },
@@ -29,9 +29,6 @@ export default {
         widgetId: function() {
             return 'scented-barchart-svg-'+this.title;
         },
-        // allSizeRectG: function() {
-        //     return d3.selectAll('.allSizeRect');
-        // },
         mainSvg: function() {
             return d3.select('#'+this.widgetId);
         },
@@ -40,10 +37,10 @@ export default {
 
     },
     watch: {
-        allSize: function() {
-            this.drawBarchart();
+        allData: function() {
+            this.render();
         },
-        selectSize: function() {
+        selectData: function() {
             this.render();
         },
     },
@@ -61,115 +58,71 @@ export default {
                 'xType': d3.scaleLinear, // type of x-scale
                 'yType': d3.scaleLinear, // type of y-scale
             },
-            selectSizeRectG: null,
+            selectDataRectG: null,
+            allDataRectG: null,
+            drawAxis: false,
+            xScale: undefined,
+            yScale: undefined,
         };
     },
     methods: {
-        drawBarchart: function() {
-            const that = this;
-            // Copyright 2021 Observable, Inc.
-            // Released under the ISC license.
-            // https://observablehq.com/@d3/histogram
-            const drawBarchart = function Histogram(data, {
-                label, // convenience alias for xLabel
-                normalize, // whether to normalize values to a total of 100%
-                yLabel = 'log count', // a label for the y-axis
-                yFormat = normalize ? '%' : undefined, // a format specifier string for the y-axis
-                color = 'currentColor', // bar fill color
-            } = {}) {
-                // Compute values.
-                // const X = d3.map(data, x);
-                // const Y0 = d3.map(data, y);
-                // const I = d3.range(X.length);
-
-                // Compute bins.
-                // const bins = d3.bin().thresholds(thresholds).value((i) => X[i])(I);
-                // const Y = Array.from(bins, (I) => d3.sum(I, (i) => Y0[i]));
-                const yRange = [that.globalAttrs['height'] - that.globalAttrs['marginBottom'], that.globalAttrs['marginTop']]; // [bottom, top]
-                const xRange = [that.globalAttrs['marginLeft'], that.globalAttrs['width'] - that.globalAttrs['marginRight']]; // [left, right]
-                const Y = data;
-                if (normalize) {
-                    const total = d3.sum(Y);
-                    for (let i = 0; i < Y.length; ++i) Y[i] /= total;
-                }
-                const bins = [];
-                for (let i = 0; i < Y.length; ++i) {
-                    bins.push({
-                        'val': Y[i],
-                        'x0': i*0.1,
-                        'x1': (i+1)*0.1,
-                    });
-                }
-
-                // Compute default domains.
-                const xDomain = [0, 1];
-                const yDomain = [0, Math.log10(d3.max(Y))+1];
-
-                // Construct scales and axes.
-                const xScale = that.globalAttrs['xType'](xDomain, xRange);
-                const yScale = that.globalAttrs['yType'](yDomain, yRange);
+        render: async function() {
+            const xRange = [this.globalAttrs['marginLeft'], this.globalAttrs['width'] - this.globalAttrs['marginRight']]; // [left, right]
+            const yRange = [this.globalAttrs['height'] - this.globalAttrs['marginBottom'], this.globalAttrs['marginTop']]; // [bottom, top]
+            const xDomain = [0, 1];
+            const yDomain = [0, Math.log10(d3.max(this.allData))+1];
+            this.xScale = this.globalAttrs['xType'](xDomain, xRange);
+            this.yScale = this.globalAttrs['yType'](yDomain, yRange);
+            if (this.drawAxis === false) {
+                this.drawAxis = true;
                 const xFormat = undefined;
-                const xAxis = d3.axisBottom(xScale).ticks(that.globalAttrs['width'] / 80, xFormat).tickSizeOuter(0);
-                const yAxis = d3.axisLeft(yScale).ticks(that.globalAttrs['height'] / 40, yFormat);
-                yFormat = yScale.tickFormat(100, yFormat);
+                let yFormat = undefined;
+                const xAxis = d3.axisBottom(this.xScale).ticks(this.globalAttrs['width'] / 80, xFormat).tickSizeOuter(0);
+                const yAxis = d3.axisLeft(this.yScale).ticks(this.globalAttrs['height'] / 40, yFormat);
+                yFormat = this.yScale.tickFormat(100, yFormat);
 
-                const svg = that.mainSvg;
-
-                svg.append('g')
-                    .attr('transform', `translate(${that.globalAttrs['marginLeft']},0)`)
+                this.mainSvg
+                    .append('g')
+                    .attr('transform', `translate(${this.globalAttrs['marginLeft']},0)`)
                     .call(yAxis)
                     .call((g) => g.select('.domain').remove())
                     .call((g) => g.selectAll('.tick line').clone()
-                        .attr('x2', that.globalAttrs['width'] - that.globalAttrs['marginLeft'] - that.globalAttrs['marginRight'])
+                        .attr('x2', this.globalAttrs['width'] - this.globalAttrs['marginLeft'] - this.globalAttrs['marginRight'])
                         .attr('stroke-opacity', 0.1))
                     .call((g) => g.append('text')
-                        .attr('x', -that.globalAttrs['marginLeft'])
+                        .attr('x', -this.globalAttrs['marginLeft'])
                         .attr('y', 10)
                         .attr('fill', 'currentColor')
                         .attr('text-anchor', 'start')
-                        .text(yLabel));
+                        .text('log count'));
 
-                svg.append('g')
-                    .attr('fill', color)
-                    .selectAll('rect')
-                    .data(bins)
-                    .join('rect')
-                    .attr('x', (d) => xScale(d.x0) + that.globalAttrs['insetLeft'])
-                    .attr('width', (d) => Math.max(0, xScale(d.x1) - xScale(d.x0) - that.globalAttrs['insetLeft'] - that.globalAttrs['insetRight']))
-                    .attr('y', (d, i) => yScale(Math.log10(Y[i])))
-                    .attr('height', (d, i) => yScale(0) - yScale(Math.log10(Y[i])))
-                    .attr('class', 'allSizeRect')
-                    .append('title')
-                    .text((d, i) => [`${d.x0.toFixed(1)} ≤ x < ${d.x1.toFixed(1)}`, yFormat(Math.round(Y[i]))].join('\n'));
-
-                svg.append('g')
-                    .attr('transform', `translate(0,${that.globalAttrs['height'] - that.globalAttrs['marginBottom']})`)
+                this.mainSvg
+                    .append('g')
+                    .attr('transform', `translate(0,${this.globalAttrs['height'] - this.globalAttrs['marginBottom']})`)
                     .call(xAxis)
                     .call((g) => g.append('text')
-                        .attr('x', that.globalAttrs['width'] - that.globalAttrs['marginRight'])
+                        .attr('x', this.globalAttrs['width'] - this.globalAttrs['marginRight'])
                         .attr('y', 27)
                         .attr('fill', 'currentColor')
                         .attr('text-anchor', 'end')
-                        .text(label));
-
-                return svg.node();
-            };
-            drawBarchart(this.allSize, {
-                label: this.title,
-                color: 'steelblue',
-            });
-        },
-        render: async function() {
-            const Y = this.selectSize;
-            const bins = [];
-            for (let i = 0; i < Y.length; ++i) {
-                bins.push({
-                    'val': Y[i],
+                        .text(this.title));
+            }
+            const selectDataBins = [];
+            const allDataBins = [];
+            for (let i = 0; i < this.allData.length; ++i) {
+                selectDataBins.push({
+                    'val': this.selectData[i],
+                    'x0': i*0.1,
+                    'x1': (i+1)*0.1,
+                });
+                allDataBins.push({
+                    'val': this.allData[i],
                     'x0': i*0.1,
                     'x1': (i+1)*0.1,
                 });
             }
-            this.selectSizeRectG = this.mainSvg.selectAll('g.selectSizeRect').data(bins);
+            this.allDataRectG = this.mainSvg.selectAll('g.allDataRect').data(allDataBins);
+            this.selectDataRectG = this.mainSvg.selectAll('g.selectDataRect').data(selectDataBins);
             await this.remove();
             await this.update();
             await this.transform();
@@ -178,31 +131,43 @@ export default {
         create: async function() {
             const that = this;
             return new Promise((resolve, reject) => {
-                const yRange = [that.globalAttrs['height'] - that.globalAttrs['marginBottom'], that.globalAttrs['marginTop']]; // [bottom, top]
-                const yDomain = [0, Math.log10(d3.max(that.allSize))+1];
-                const xDomain = [0, 1];
-                const xRange = [that.globalAttrs['marginLeft'], that.globalAttrs['width'] - that.globalAttrs['marginRight']]; // [left, right]
-
-                const xScale = that.globalAttrs['xType'](xDomain, xRange);
-                const yScale = that.globalAttrs['yType'](yDomain, yRange);
-
-                const selectSizeRectG = that.selectSizeRectG.enter()
+                const allDataRectG = that.allDataRectG.enter()
                     .append('g')
-                    .attr('class', 'selectSizeRect');
+                    .attr('class', 'allDataRect');
 
-                selectSizeRectG.transition()
+                allDataRectG.transition()
                     .duration(that.createDuration)
                     .attr('opacity', 1)
                     .on('end', resolve);
 
-                selectSizeRectG.append('rect')
-                    .attr('x', (d) => xScale(d.x0) + that.globalAttrs['insetLeft'])
-                    .attr('width', (d) => Math.max(0, xScale(d.x1) - xScale(d.x0) - that.globalAttrs['insetLeft'] - that.globalAttrs['insetRight']))
-                    .attr('y', (d, i) => yScale(Math.log10(Math.max(1, d.val))))
-                    .attr('height', (d, i) => yScale(0) - yScale(Math.log10(Math.max(1, d.val))))
-                    .attr('fill', 'orange');
+                allDataRectG.append('rect')
+                    .attr('x', (d) => that.xScale(d.x0) + that.globalAttrs['insetLeft'])
+                    .attr('width', (d) => Math.max(0, that.xScale(d.x1) - that.xScale(d.x0) -
+                                                      that.globalAttrs['insetLeft'] - that.globalAttrs['insetRight']))
+                    .attr('y', (d, i) => that.yScale(Math.log10(Math.max(1, d.val))))
+                    .attr('height', (d, i) => that.yScale(0) - that.yScale(Math.log10(Math.max(1, d.val))))
+                    .attr('fill', 'grey')
+                    .append('title')
+                    .text((d, i) => [`${d.x0.toFixed(1)} ≤ x < ${d.x1.toFixed(1)}`, `quantity: ${d.val}`].join('\n'));
 
-                if ((that.selectSizeRectG.enter().size() === 0)) {
+                const selectDataRectG = that.selectDataRectG.enter()
+                    .append('g')
+                    .attr('class', 'selectDataRect');
+
+                selectDataRectG.transition()
+                    .duration(that.createDuration)
+                    .attr('opacity', 1)
+                    .on('end', resolve);
+
+                selectDataRectG.append('rect')
+                    .attr('x', (d) => that.xScale(d.x0) + that.globalAttrs['insetLeft'])
+                    .attr('width', (d) => Math.max(0, that.xScale(d.x1) - that.xScale(d.x0) -
+                                                      that.globalAttrs['insetLeft'] - that.globalAttrs['insetRight']))
+                    .attr('y', (d, i) => that.yScale(Math.log10(Math.max(1, d.val))))
+                    .attr('height', (d, i) => that.yScale(0) - that.yScale(Math.log10(Math.max(1, d.val))))
+                    .attr('fill', 'steelblue');
+
+                if ((that.selectDataRectG.enter().size() === 0) && (that.allDataRectG.enter().size() === 0)) {
                     resolve();
                 }
             });
@@ -210,20 +175,25 @@ export default {
         update: async function() {
             const that = this;
             return new Promise((resolve, reject) => {
-                const yRange = [that.globalAttrs['height'] - that.globalAttrs['marginBottom'], that.globalAttrs['marginTop']]; // [bottom, top]
-                const yDomain = [0, Math.log10(d3.max(that.allSize))+1];
-                const yScale = that.globalAttrs['yType'](yDomain, yRange);
-                that.selectSizeRectG.each(function(d, i) {
+                that.allDataRectG.each(function(d, i) {
                     // eslint-disable-next-line no-invalid-this
                     d3.select(this).select('rect')
                         .transition()
                         .duration(that.updateDuration)
-                        .attr('y', yScale(Math.log10(Math.max(1, d.val))))
-                        .attr('height', yScale(0) - yScale(Math.log10(Math.max(1, d.val))))
+                        .attr('height', that.yScale(0) - that.yScale(Math.log10(Math.max(1, d.val))))
+                        .on('end', resolve);
+                });
+                that.selectDataRectG.each(function(d, i) {
+                    // eslint-disable-next-line no-invalid-this
+                    d3.select(this).select('rect')
+                        .transition()
+                        .duration(that.updateDuration)
+                        .attr('y', that.yScale(Math.log10(Math.max(1, d.val))))
+                        .attr('height', that.yScale(0) - that.yScale(Math.log10(Math.max(1, d.val))))
                         .on('end', resolve);
                 });
 
-                if ((that.selectSizeRectG.size() === 0)) {
+                if ((that.selectDataRectG.size() === 0) && (that.allDataRectG.size() === 0)) {
                     resolve();
                 }
             });
@@ -231,14 +201,20 @@ export default {
         remove: async function() {
             const that = this;
             return new Promise((resolve, reject) => {
-                that.selectSizeRectG.exit()
+                that.allDataRectG.exit()
+                    .transition()
+                    .duration(that.removeDuration)
+                    .attr('opacity', 0)
+                    .remove()
+                    .on('end', resolve);
+                that.selectDataRectG.exit()
                     .transition()
                     .duration(that.removeDuration)
                     .attr('opacity', 0)
                     .remove()
                     .on('end', resolve);
 
-                if ((that.selectSizeRectG.exit().size() === 0)) {
+                if ((that.selectDataRectG.exit().size() === 0) && (that.allDataRectG.exit().size() === 0)) {
                     resolve();
                 }
             });
