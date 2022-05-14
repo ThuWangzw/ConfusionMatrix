@@ -32,7 +32,10 @@ def sizeMatrix():
 
 @app.route('/api/boxSizeDist', methods=["POST"])
 def boxSizeDist():
-    return jsonify(dataCtrler.getBoxSizeDistribution())
+    query = None
+    if 'query' in request.json:
+        query = request.json['query']
+    return jsonify(dataCtrler.getBoxSizeDistribution(query))
 
 @app.route('/api/boxSizeInfo', methods=["POST"])
 def boxSizeInfo():

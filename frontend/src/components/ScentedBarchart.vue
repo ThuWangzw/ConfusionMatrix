@@ -1,5 +1,8 @@
 <template>
-    <svg :id="widgetId" width="100%" height="100%" ref="svg"></svg>
+    <svg :id="widgetId" width="100%" height="100%" ref="svg">
+        <g id="all-data-g"></g>
+        <g id="select-data-g"></g>
+    </svg>
 </template>
 
 <script>
@@ -7,6 +10,7 @@ import * as d3 from 'd3';
 window.d3 = d3;
 import Util from './Util.vue';
 import GlobalVar from './GlovalVar.vue';
+import {brushX} from 'd3-brush';
 
 export default {
     name: 'ScentedBarchart',
@@ -24,6 +28,10 @@ export default {
             type: Array,
             default: undefined,
         },
+        queryKey: {
+            type: String,
+            default: '',
+        },
     },
     computed: {
         widgetId: function() {
@@ -31,6 +39,12 @@ export default {
         },
         mainSvg: function() {
             return d3.select('#'+this.widgetId);
+        },
+        alldataG: function() {
+            return this.mainSvg.select('#all-data-g');
+        },
+        selectDataG: function() {
+            return this.mainSvg.select('#select-data-g');
         },
     },
     mounted: function() {
@@ -48,7 +62,7 @@ export default {
         return {
             globalAttrs: {
                 'marginTop': 20, // top margin, in pixels
-                'marginRight': 30, // right margin, in pixels
+                'marginRight': 10, // right margin, in pixels
                 'marginBottom': 30, // bottom margin, in pixels
                 'marginLeft': 30, // left margin, in pixels
                 'width': 300, // outer width of chart, in pixels
@@ -57,12 +71,19 @@ export default {
                 'insetRight': 0.5, // inset right edge of bar:
                 'xType': d3.scaleLinear, // type of x-scale
                 'yType': d3.scaleLinear, // type of y-scale
+                'unselectFill': 'rgb(237,237,237)',
+            },
+            textAttrs: {
+                'font-family': 'Comic Sans MS',
+                'font-weight': 'bold',
+                'font-size': 12,
             },
             selectDataRectG: null,
             allDataRectG: null,
             drawAxis: false,
             xScale: undefined,
             yScale: undefined,
+            brush: brushX(),
         };
     },
     methods: {
@@ -73,12 +94,13 @@ export default {
             const yDomain = [0, Math.log10(d3.max(this.allData))+1];
             this.xScale = this.globalAttrs['xType'](xDomain, xRange);
             this.yScale = this.globalAttrs['yType'](yDomain, yRange);
+            const that = this;
             if (this.drawAxis === false) {
                 this.drawAxis = true;
                 const xFormat = undefined;
                 let yFormat = undefined;
                 const xAxis = d3.axisBottom(this.xScale).ticks(this.globalAttrs['width'] / 80, xFormat).tickSizeOuter(0);
-                const yAxis = d3.axisLeft(this.yScale).ticks(this.globalAttrs['height'] / 40, yFormat);
+                const yAxis = d3.axisLeft(this.yScale).ticks(Math.floor(this.globalAttrs['height'] / 40), yFormat);
                 yFormat = this.yScale.tickFormat(100, yFormat);
 
                 this.mainSvg
@@ -94,6 +116,9 @@ export default {
                         .attr('y', 10)
                         .attr('fill', 'currentColor')
                         .attr('text-anchor', 'start')
+                        .attr('font-family', that.textAttrs['font-family'])
+                        .attr('font-weight', that.textAttrs['font-weight'])
+                        .attr('font-size', that.textAttrs['font-size'])
                         .text('log count'));
 
                 this.mainSvg
@@ -105,7 +130,41 @@ export default {
                         .attr('y', 27)
                         .attr('fill', 'currentColor')
                         .attr('text-anchor', 'end')
+                        .attr('font-family', that.textAttrs['font-family'])
+                        .attr('font-weight', that.textAttrs['font-weight'])
+                        .attr('font-size', that.textAttrs['font-size'])
                         .text(this.title));
+
+                this.mainSvg
+                    .append('text')
+                    .attr('x', this.globalAttrs['width'] - this.globalAttrs['marginRight'])
+                    .attr('y', 10)
+                    .attr('fill', 'currentColor')
+                    .attr('text-anchor', 'end')
+                    .attr('cursor', 'pointer')
+                    .attr('font-family', that.textAttrs['font-family'])
+                    .attr('font-weight', that.textAttrs['font-weight'])
+                    .attr('font-size', that.textAttrs['font-size'])
+                    .text('reset brush')
+                    .on('click', ()=> {
+                        that.selectDataG.call(that.brush.move, null);
+                    });
+
+                this.selectDataG
+                    .call(this.brush.extent([[this.globalAttrs['marginLeft'], this.globalAttrs['marginTop']],
+                        [this.globalAttrs['width'] - this.globalAttrs['marginRight'], this.globalAttrs['height'] - this.globalAttrs['marginBottom']]])
+                        .on('end', function({selection}) {
+                            const len = that.globalAttrs['width'] - that.globalAttrs['marginRight']-that.globalAttrs['marginLeft'];
+                            let x1 = 0;
+                            let x2 = 1;
+                            if (selection!==null) {
+                                x1 = Math.floor((selection[0] - that.globalAttrs['marginLeft'])/len*10)/10;
+                                x2 = Math.ceil((selection[1] - that.globalAttrs['marginLeft'])/len*10)/10-(1e-5);
+                            }
+                            const query = {};
+                            query[that.queryKey] = [x1, x2];
+                            that.$emit('hoverBarchart', query);
+                        }));
             }
             const selectDataBins = [];
             const allDataBins = [];
@@ -121,8 +180,8 @@ export default {
                     'x1': (i+1)*0.1,
                 });
             }
-            this.allDataRectG = this.mainSvg.selectAll('g.allDataRect').data(allDataBins);
-            this.selectDataRectG = this.mainSvg.selectAll('g.selectDataRect').data(selectDataBins);
+            this.allDataRectG = this.alldataG.selectAll('g.allDataRect').data(allDataBins);
+            this.selectDataRectG = this.selectDataG.selectAll('g.selectDataRect').data(selectDataBins);
             await this.remove();
             await this.update();
             await this.transform();
@@ -146,7 +205,7 @@ export default {
                                                       that.globalAttrs['insetLeft'] - that.globalAttrs['insetRight']))
                     .attr('y', (d, i) => that.yScale(Math.log10(Math.max(1, d.val))))
                     .attr('height', (d, i) => that.yScale(0) - that.yScale(Math.log10(Math.max(1, d.val))))
-                    .attr('fill', 'grey')
+                    .attr('fill', that.globalAttrs['unselectFill'])
                     .append('title')
                     .text((d, i) => [`${d.x0.toFixed(1)} ≤ x < ${d.x1.toFixed(1)}`, `quantity: ${d.val}`].join('\n'));
 
@@ -221,6 +280,10 @@ export default {
         },
         transform: async function() {
         },
+    },
+    mounted: function() {
+        this.globalAttrs['width'] = this.$refs.svg.clientWidth;
+        this.globalAttrs['height'] = this.$refs.svg.clientHeight;
     },
 };
 </script>

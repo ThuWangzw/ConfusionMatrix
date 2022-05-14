@@ -136,28 +136,8 @@ class DataCtrler(object):
             with open(self.box_size_dist_path, 'rb') as f:
                 self.box_size_dist_map = pickle.load(f)
         else:
-            label_box_size_dist, predict_box_size_dist = [0 for _ in range(10)], [0 for _ in range(10)]
-            for i in self.label_size:
-                label_box_size_dist[min(9, int(i//0.1))]+=1
-            for i in self.predict_size:
-                predict_box_size_dist[min(9, int(i//0.1))]+=1
-            label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
-            label_box_size_confusion = [[[0 for _ in range(10)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
-            predict_box_size_confusion = [[[0 for _ in range(10)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
-            for (pr, gt) in self.predict_label_pairs:
-                if pr == -1:
-                    label_box_size_confusion[int(self.raw_labels[gt, 0])][len(pred_target)][min(9, int(self.label_size[gt]//0.1))]+=1
-                elif gt == -1:
-                    predict_box_size_confusion[len(label_target)][int(self.raw_predicts[pr, 0])][min(9, int(self.predict_size[pr]//0.1))]+=1
-                else:
-                    label_box_size_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][min(9, int(self.label_size[gt]//0.1))]+=1
-                    predict_box_size_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][min(9, int(self.predict_size[pr]//0.1))]+=1
-            self.box_size_dist_map = {
-                'labelSizeAll': label_box_size_dist,
-                'predictSizeAll': predict_box_size_dist,
-                'labelSizeConfusion': label_box_size_confusion,
-                'predictSizeConfusion': predict_box_size_confusion
-            }
+            self.box_size_dist_map = None
+            self.box_size_dist_map = self.getBoxSizeDistribution()
             with open(self.box_size_dist_path, 'wb') as f:
                 pickle.dump(self.box_size_dist_map, f)
 
@@ -332,58 +312,44 @@ class DataCtrler(object):
         for j in range(len(pred_target)):
             confusion[len(label_target)][j] = unmatch_predict[self.raw_predicts[self.predict_label_pairs[unmatch_predict][:, 0], 0]==pred_target[j]]
         return self.getStatisticsMatrixes(confusion, query)
-    
-    def getSizeMatrix(self, query = None):
-        """A size matrix divided by iou with Fisher algorithm. 
-        Samples are sorted by their pred size, and then calculate the split by Fisher algorithm.
-
-        Args:
-            querys (dict): {label/predict size:[a, b] (0<=a<=b<=1), label/predict aspect_ratio:[a, b] (0<=a<=b), direction: [0,..,8],
-                            label/predict: np.arange(80), split: int}
-        """
-        K = 10
-        filtered , unmatch_predict, unmatch_label = self.filterSamples(query)
-        if query is not None and 'split' in query:
-            K = query["split"]
-        size_matrix = [[[] for _ in range(K+1)] for _ in range(K+1)]
-        pred_size_argsort = np.argsort(self.predict_size)
-        if K not in self.size_matrix_split_map:
-            self.size_matrix_split_map[K] = get_size_split_pos(self.predict_label_ious[pred_size_argsort], K)
-            with open(self.size_matrix_split_path, 'wb') as f:
-                pickle.dump(self.size_matrix_split_map, f)
-        split_pos = self.size_matrix_split_map[K]
-        split_size = self.predict_size[pred_size_argsort][split_pos]
-        # print(split_size)
-        label_split_rec, pred_split_rec = [], []
-
-        for i in range(K):
-            label_split = np.arange(len(self.label_size))
-            pred_split = np.arange(len(self.predict_size))
-            if i > 0:
-                label_split = label_split[self.label_size[label_split] >= split_size[i-1]]
-                pred_split = pred_split[self.predict_size[pred_split] >= split_size[i-1]]
-            if i < K-1:
-                label_split = label_split[self.label_size[label_split] < split_size[i]]
-                pred_split = pred_split[self.predict_size[pred_split] < split_size[i]]
-            label_split_rec.append(label_split)
-            pred_split_rec.append(pred_split)
-        for i in range(K):
-            for j in range(K):
-                size_matrix[i][j] = filtered[np.logical_and(np.isin(self.predict_label_pairs[filtered][:,1], label_split_rec[i]), 
-                                                            np.isin(self.predict_label_pairs[filtered][:,0], pred_split_rec[j]))]
-        for i in range(K):
-            size_matrix[i][K] = unmatch_label[np.isin(self.predict_label_pairs[unmatch_label][:, 1], label_split_rec[i])]
-            size_matrix[K][i] = unmatch_predict[np.isin(self.predict_label_pairs[unmatch_predict][:, 0], pred_split_rec[i])]
-        return {
-            'partitions': [0] + split_size.tolist() + [1],
-            'matrix': self.getStatisticsMatrixes(size_matrix, query)
-        }
-    
-    def getBoxSizeDistribution(self):
+   
+    def getBoxSizeDistribution(self, query = None):
         """
             return label_size, pred_size distribution
         """
-        return self.box_size_dist_map
+        if query is None and self.box_size_dist_map is not None:
+            return self.box_size_dist_map
+        filtered, unmatch_predict, unmatch_label = self.filterSamples(query)
+        filtered_label_size = self.label_size[self.predict_label_pairs[filtered][:,1]]
+        filtered_predict_size = self.predict_size[self.predict_label_pairs[filtered][:,0]]
+        unmatched_label_size = self.label_size[self.predict_label_pairs[unmatch_label][:,1]]
+        unmatched_predict_size = self.predict_size[self.predict_label_pairs[unmatch_predict][:,0]]
+        
+        label_box_size_dist, predict_box_size_dist = [0 for _ in range(10)], [0 for _ in range(10)]
+        for i in filtered_label_size:
+            label_box_size_dist[min(9, int(i//0.1))]+=1
+        for i in unmatched_label_size:
+            label_box_size_dist[min(9, int(i//0.1))]+=1
+        for i in filtered_predict_size:
+            predict_box_size_dist[min(9, int(i//0.1))]+=1
+        for i in unmatched_predict_size:
+            predict_box_size_dist[min(9, int(i//0.1))]+=1
+        label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
+        label_box_size_confusion = [[[0 for _ in range(10)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
+        predict_box_size_confusion = [[[0 for _ in range(10)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
+        for (pr, gt) in self.predict_label_pairs[filtered]:
+            label_box_size_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][min(9, int(self.label_size[gt]//0.1))]+=1
+            predict_box_size_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][min(9, int(self.predict_size[pr]//0.1))]+=1
+        for (pr, gt) in self.predict_label_pairs[unmatch_label]:
+            label_box_size_confusion[int(self.raw_labels[gt, 0])][len(pred_target)][min(9, int(self.label_size[gt]//0.1))]+=1
+        for (pr, gt) in self.predict_label_pairs[unmatch_predict]:
+            predict_box_size_confusion[len(label_target)][int(self.raw_predicts[pr, 0])][min(9, int(self.predict_size[pr]//0.1))]+=1
+        return {
+                'labelSizeAll': label_box_size_dist,
+                'predictSizeAll': predict_box_size_dist,
+                'labelSizeConfusion': label_box_size_confusion,
+                'predictSizeConfusion': predict_box_size_confusion
+            }
     
     def getBoxSizeInfo(self):
         """

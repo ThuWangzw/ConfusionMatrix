@@ -1,19 +1,28 @@
 <template>
     <div id="data-content">
         <div id="left-widgets">
-            <el-select v-model="returnMode" @change="changeMode">
-                <el-option
-                    v-for="item in dataMode"
-                    :key="item.value"
-                    :label="item.value"
-                    :value="item.value">
-                </el-option>
-            </el-select>
+            <div class="toolbox">
+                <div id="encoding-select">
+                    <span class="select-label">Matrix Encoding</span>
+                    <el-select v-model="returnMode" @change="changeMode" size="mini">
+                        <el-option
+                            v-for="item in dataMode"
+                            :key="item.value"
+                            :label="item.value"
+                            :value="item.value">
+                        </el-option>
+                    </el-select>
+                </div>
+                <i v-if="gettingMatrix&&gettingBarchart" class="el-icon-loading"></i>
+            </div>
+
             <div id="scented-barcharts">
                 <scented-barchart ref="label-hist"
-                    :allData="labelSizeAll" :title="'gt_box_size'" :selectData="labelSizeSelect"></scented-barchart>
+                    :allData="labelSizeAll" :title="'gt_box_size'" queryKey="label_size" :selectData="labelSizeSelect"
+                    @hoverBarchart="hoverBarchart"></scented-barchart>
                 <scented-barchart ref="predict-hist"
-                    :allData="predictSizeAll" :title="'pred_box_size'" :selectData="predictSizeSelect"></scented-barchart>
+                    :allData="predictSizeAll" :title="'pred_box_size'" queryKey="predict_size" :selectData="predictSizeSelect"
+                    @hoverBarchart="hoverBarchart"></scented-barchart>
             </div>
         </div>
         <div id="matrices-container">
@@ -30,10 +39,11 @@ import Vue from 'vue';
 import ConfusionMatrix from './ConfusionMatrix.vue';
 import ScentedBarchart from './ScentedBarchart.vue';
 import axios from 'axios';
-import {Select, Option} from 'element-ui';
+import {Select, Option, Icon} from 'element-ui';
 
 Vue.use(Select);
 Vue.use(Option);
+Vue.use(Icon);
 
 export default {
     components: {ConfusionMatrix, ScentedBarchart},
@@ -71,11 +81,18 @@ export default {
             predictSizeConfusion: undefined,
             labelSizeSelect: [],
             predictSizeSelect: [],
+            labelSizeSelectBuffer: [],
+            predictSizeSelectBuffer: [],
+            gettingMatrix: false,
+            gettingBarchart: false,
         };
     },
     methods: {
         setConfusionMatrix: function(query) {
             // this.confusionMatrix = undefined;
+            if (query===undefined) {
+                query = {};
+            }
             if (this.returnMode!=='count') {
                 query['return'] = ['count', this.returnMode];
             } else {
@@ -87,15 +104,18 @@ export default {
             axios.post(store.getters.URL_GET_CONFUSION_MATRIX, query===undefined?{}:{query: query})
                 .then(function(response) {
                     that.confusionMatrix = response.data;
+                    that.gettingMatrix = false;
                 });
         },
-        setBoxSizeInfo: function() {
+        setBoxSizeInfo: function(query) {
             const store = this.$store;
             const that = this;
-            axios.post(store.getters.URL_GET_BOX_SIZE_DIST, {})
+            axios.post(store.getters.URL_GET_BOX_SIZE_DIST, query===undefined?{}:{query: query})
                 .then(function(response) {
                     that.labelSizeAll = response.data.labelSizeAll;
                     that.predictSizeAll = response.data.predictSizeAll;
+                    that.labelSizeSelectBuffer = that.labelSizeAll;
+                    that.predictSizeSelectBuffer = that.predictSizeAll;
                     that.labelSizeConfusion = response.data.labelSizeConfusion;
                     that.predictSizeConfusion = response.data.predictSizeConfusion;
                     that.labelSizeSelect = response.data.labelSizeAll;
@@ -107,8 +127,8 @@ export default {
         },
         hoverConfusion: function(labelClasses, predictClasses) {
             if (labelClasses === undefined) {
-                this.labelSizeSelect = this.labelSizeAll;
-                this.predictSizeSelect = this.predictSizeAll;
+                this.labelSizeSelect = this.labelSizeSelectBuffer;
+                this.predictSizeSelect = this.predictSizeSelectBuffer;
                 return;
             }
             const tmp1 = [];
@@ -128,6 +148,27 @@ export default {
             this.labelSizeSelect = tmp1;
             this.predictSizeSelect = tmp2;
         },
+        hoverBarchart: function(query) {
+            if (query===undefined) {
+                query = {};
+            }
+            this.gettingBarchart = true;
+            this.gettingMatrix = true;
+            this.query = {...this.query, ...query};
+            this.setConfusionMatrix(this.query);
+            const store = this.$store;
+            const that = this;
+            axios.post(store.getters.URL_GET_BOX_SIZE_DIST, query===undefined?{}:{query: this.query})
+                .then(function(response) {
+                    that.labelSizeSelect = response.data.labelSizeAll;
+                    that.predictSizeSelect = response.data.predictSizeAll;
+                    that.labelSizeConfusion = response.data.labelSizeConfusion;
+                    that.predictSizeConfusion = response.data.predictSizeConfusion;
+                    that.labelSizeSelectBuffer = response.data.labelSizeAll;
+                    that.predictSizeSelectBuffer = response.data.predictSizeAll;
+                    that.gettingBarchart = false;
+                });
+        },
     },
     mounted: function() {
         this.setBoxSizeInfo();
@@ -137,6 +178,23 @@ export default {
 </script>
 
 <style scoped>
+.select-label {
+    font-family: Comic Sans MS;
+    font-weight: normal;
+    font-size: 15px;
+    margin-right: 15px;
+}
+
+#encoding-select>.el-select {
+    width: 100px;
+}
+.toolbox {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
 #data-content {
     width: 100%;
     height: 100%;
