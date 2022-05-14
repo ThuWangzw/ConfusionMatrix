@@ -48,7 +48,7 @@ export default {
         return {
             globalAttrs: {
                 'marginTop': 20, // top margin, in pixels
-                'marginRight': 30, // right margin, in pixels
+                'marginRight': 10, // right margin, in pixels
                 'marginBottom': 30, // bottom margin, in pixels
                 'marginLeft': 30, // left margin, in pixels
                 'width': 300, // outer width of chart, in pixels
@@ -57,6 +57,12 @@ export default {
                 'insetRight': 0.5, // inset right edge of bar:
                 'xType': d3.scaleLinear, // type of x-scale
                 'yType': d3.scaleLinear, // type of y-scale
+                'unselectFill': 'rgb(237,237,237)',
+            },
+            textAttrs: {
+                'font-family': 'sans-serif',
+                'font-weight': 'bold',
+                'font-size': 12,
             },
             selectDataRectG: null,
             allDataRectG: null,
@@ -73,6 +79,7 @@ export default {
             const yDomain = [0, Math.log10(d3.max(this.allData))+1];
             this.xScale = this.globalAttrs['xType'](xDomain, xRange);
             this.yScale = this.globalAttrs['yType'](yDomain, yRange);
+            const that = this;
             if (this.drawAxis === false) {
                 this.drawAxis = true;
                 const xFormat = undefined;
@@ -94,6 +101,9 @@ export default {
                         .attr('y', 10)
                         .attr('fill', 'currentColor')
                         .attr('text-anchor', 'start')
+                        .attr('font-family', that.textAttrs['font-family'])
+                        .attr('font-weight', that.textAttrs['font-weight'])
+                        .attr('font-size', that.textAttrs['font-size'])
                         .text('log count'));
 
                 this.mainSvg
@@ -105,6 +115,9 @@ export default {
                         .attr('y', 27)
                         .attr('fill', 'currentColor')
                         .attr('text-anchor', 'end')
+                        .attr('font-family', that.textAttrs['font-family'])
+                        .attr('font-weight', that.textAttrs['font-weight'])
+                        .attr('font-size', that.textAttrs['font-size'])
                         .text(this.title));
             }
             const selectDataBins = [];
@@ -146,7 +159,7 @@ export default {
                                                       that.globalAttrs['insetLeft'] - that.globalAttrs['insetRight']))
                     .attr('y', (d, i) => that.yScale(Math.log10(Math.max(1, d.val))))
                     .attr('height', (d, i) => that.yScale(0) - that.yScale(Math.log10(Math.max(1, d.val))))
-                    .attr('fill', 'grey')
+                    .attr('fill', that.globalAttrs['unselectFill'])
                     .append('title')
                     .text((d, i) => [`${d.x0.toFixed(1)} ≤ x < ${d.x1.toFixed(1)}`, `quantity: ${d.val}`].join('\n'));
 
@@ -221,6 +234,10 @@ export default {
         },
         transform: async function() {
         },
+    },
+    mounted: function() {
+        this.globalAttrs['width'] = this.$refs.svg.clientWidth;
+        this.globalAttrs['height'] = this.$refs.svg.clientHeight;
     },
 };
 </script>
