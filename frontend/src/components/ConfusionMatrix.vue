@@ -463,24 +463,36 @@ export default {
                     .attr('transform', (d) => `translate(${d.column*that.cellAttrs['size']}, 
                         ${d.row*that.cellAttrs['size']})`)
                     .on('click', function(e, d) {
+                        return;
+                        // if (d.value[0] === 0) return;
+                        // const labelTarget = [];
+                        // const predictTarget = [];
+                        // for (const name of d.rowNode.leafs) {
+                        //     let idx = that.name2index[name];
+                        //     if (idx === that.indexNames.length-1) idx = -1;
+                        //     labelTarget.push(idx);
+                        // }
+                        // for (const name of d.colNode.leafs) {
+                        //     let idx = that.name2index[name];
+                        //     if (idx === that.indexNames.length-1) idx = -1;
+                        //     predictTarget.push(idx);
+                        // }
+                    })
+                    .on('mouseover', function(e, d) {
                         if (d.value[0] === 0) return;
                         const labelTarget = [];
                         const predictTarget = [];
                         for (const name of d.rowNode.leafs) {
-                            let idx = that.name2index[name];
-                            if (idx === that.indexNames.length-1) idx = -1;
-                            labelTarget.push(idx);
+                            labelTarget.push(that.name2index[name]);
                         }
                         for (const name of d.colNode.leafs) {
-                            let idx = that.name2index[name];
-                            if (idx === that.indexNames.length-1) idx = -1;
-                            predictTarget.push(idx);
+                            predictTarget.push(that.name2index[name]);
                         }
-                        that.$emit('changeMatrix', 'size', {
-                            label: labelTarget,
-                            predict: predictTarget,
-                        });
-                    }); ;
+                        that.$emit('hoverConfusion', labelTarget, predictTarget);
+                    })
+                    .on('mouseout', function(e, d) {
+                        that.$emit('hoverConfusion', undefined, undefined);
+                    });
 
                 matrixCellsinG.transition()
                     .duration(that.createDuration)
@@ -705,7 +717,7 @@ export default {
                 let shifty = 0;
                 let scale = 1;
                 if (that.svgWidth > realSize) {
-                    scale = realSize/that.svgWidth;
+                    scale = realSize/that.svgWidth/1.1;
                 } else {
                     scale = 1;
                 }

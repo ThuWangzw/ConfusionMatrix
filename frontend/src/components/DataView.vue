@@ -1,28 +1,26 @@
 <template>
     <div id="data-content">
-        <div id="mode-select">
-            <el-select v-model="matrixType" @change="changeMatrixType">
+        <div id="left-widgets">
+            <el-select v-model="returnMode" @change="changeMode">
                 <el-option
-                    v-for="item in matrixModes"
+                    v-for="item in dataMode"
                     :key="item.value"
                     :label="item.value"
                     :value="item.value">
                 </el-option>
             </el-select>
-            <el-select v-model="return_mode" @change="changeMode">
-                <el-option
-                    v-for="item in data_mode"
-                    :key="item.value"
-                    :label="item.value"
-                    :value="item.value">
-                </el-option>
-            </el-select>
+            <div id="scented-barcharts">
+                <scented-barchart ref="label-hist"
+                    :allData="labelSizeAll" :title="'gt_box_size'" :selectData="labelSizeSelect"></scented-barchart>
+                <scented-barchart ref="predict-hist"
+                    :allData="predictSizeAll" :title="'pred_box_size'" :selectData="predictSizeSelect"></scented-barchart>
+            </div>
         </div>
-        <div id="confusion-matrix-container">
-            <confusion-matrix v-if="matrixType==='confusion'" ref="matrix" id="confusion-matrix" @changeMatrix="changeMatrix"
-                :showColor="true" :confusionMatrix="confusionMatrix" :returnMode="return_mode"></confusion-matrix>
-            <numerical-matrix v-else-if="matrixType!=='confusion'" ref="numerical" @changeMatrix="changeMatrix"
-                :numericalMatrix="numericalMatrix" :numericalMatrixType="matrixType" :returnMode="return_mode"></numerical-matrix>
+        <div id="matrices-container">
+            <div id="confusion-matrix-container">
+                <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion"
+                    :showColor="true" :confusionMatrix="confusionMatrix" :returnMode="returnMode"></confusion-matrix>
+            </div>
         </div>
     </div>
 </template>
@@ -30,7 +28,7 @@
 <script>
 import Vue from 'vue';
 import ConfusionMatrix from './ConfusionMatrix.vue';
-import NumericalMatrix from './NumericalMatrix.vue';
+import ScentedBarchart from './ScentedBarchart.vue';
 import axios from 'axios';
 import {Select, Option} from 'element-ui';
 
@@ -38,15 +36,13 @@ Vue.use(Select);
 Vue.use(Option);
 
 export default {
-    components: {ConfusionMatrix, NumericalMatrix},
+    components: {ConfusionMatrix, ScentedBarchart},
     name: 'DataView',
     data() {
         return {
-            matrixType: 'confusion', // confusion, size
             confusionMatrix: undefined,
-            numericalMatrix: undefined,
-            return_mode: 'count',
-            data_mode: [{
+            returnMode: 'count',
+            dataMode: [{
                 value: 'count',
                 label: '数量',
             }, {
@@ -68,64 +64,74 @@ export default {
                 value: 'avg_predict_aspect_ratio',
                 label: '预测物体框纵横比均值',
             }],
-            matrixModes: [{
-                value: 'confusion',
-                label: '混淆矩阵',
-            }, {
-                value: 'size',
-                label: '物体框大小矩阵',
-            }],
             query: {},
+            labelSizeAll: [],
+            predictSizeAll: [],
+            labelSizeConfusion: undefined,
+            predictSizeConfusion: undefined,
+            labelSizeSelect: [],
+            predictSizeSelect: [],
         };
     },
     methods: {
-        setMatrix: function(query) {
-            this.confusionMatrix = undefined;
-            this.numericalMatrix = undefined;
-            // query['return'] = ['count', this.return_mode];
-            if (this.return_mode!=='count') {
-                query['return'] = ['count', this.return_mode];
+        setConfusionMatrix: function(query) {
+            // this.confusionMatrix = undefined;
+            if (this.returnMode!=='count') {
+                query['return'] = ['count', this.returnMode];
             } else {
                 query['return'] = ['count'];
             }
-            this.query = query;
+            // this.query = query;
             const store = this.$store;
             const that = this;
-            if (this.matrixType==='confusion') {
-                axios.post(store.getters.URL_GET_CONFUSION_MATRIX, that.query===undefined?{}:{query: that.query})
-                    .then(function(response) {
-                        that.confusionMatrix = response.data;
-                    });
-            } else {
-                if (this.matrixType==='size') {
-                    axios.post(store.getters.URL_GET_SIZE_MATRIX, that.query===undefined?{}:{query: that.query})
-                        .then(function(response) {
-                            const numericalMatrix = response.data;
-                            numericalMatrix.counts = numericalMatrix.matrix[0];
-                            numericalMatrix.matrix = numericalMatrix.matrix[numericalMatrix.matrix.length-1];
-                            for (let i=0; i<numericalMatrix.partitions.length; i++) {
-                                numericalMatrix.partitions[i] = Math.round(numericalMatrix.partitions[i]*100)/100;
-                            }
-                            numericalMatrix.partitions.push('N');
-                            that.numericalMatrix = numericalMatrix;
-                        });
-                }
-            }
+            axios.post(store.getters.URL_GET_CONFUSION_MATRIX, query===undefined?{}:{query: query})
+                .then(function(response) {
+                    that.confusionMatrix = response.data;
+                });
         },
-        changeMatrix: function(matrixType, query) {
-            this.query = query;
-            this.matrixType = matrixType;
-            this.setMatrix(this.query);
-        },
-        changeMatrixType: function() {
-            this.setMatrix({});
+        setBoxSizeInfo: function() {
+            const store = this.$store;
+            const that = this;
+            axios.post(store.getters.URL_GET_BOX_SIZE_DIST, {})
+                .then(function(response) {
+                    that.labelSizeAll = response.data.labelSizeAll;
+                    that.predictSizeAll = response.data.predictSizeAll;
+                    that.labelSizeConfusion = response.data.labelSizeConfusion;
+                    that.predictSizeConfusion = response.data.predictSizeConfusion;
+                    that.labelSizeSelect = response.data.labelSizeAll;
+                    that.predictSizeSelect = response.data.predictSizeAll;
+                });
         },
         changeMode: function() {
-            this.setMatrix(this.query);
+            this.setConfusionMatrix({});
+        },
+        hoverConfusion: function(labelClasses, predictClasses) {
+            if (labelClasses === undefined) {
+                this.labelSizeSelect = this.labelSizeAll;
+                this.predictSizeSelect = this.predictSizeAll;
+                return;
+            }
+            const tmp1 = [];
+            const tmp2 = [];
+            for (let i = 0; i < 10; ++i) {
+                tmp1.push(0);
+                tmp2.push(0);
+            }
+            for (const i of labelClasses) {
+                for (const j of predictClasses) {
+                    for (let k = 0; k < 10; ++k) {
+                        tmp1[k] += this.labelSizeConfusion[i][j][k];
+                        tmp2[k] += this.predictSizeConfusion[i][j][k];
+                    }
+                }
+            }
+            this.labelSizeSelect = tmp1;
+            this.predictSizeSelect = tmp2;
         },
     },
     mounted: function() {
-        this.setMatrix(this.query);
+        this.setBoxSizeInfo();
+        this.setConfusionMatrix({});
     },
 };
 </script>
@@ -135,18 +141,36 @@ export default {
     width: 100%;
     height: 100%;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
 }
 
-#confusion-matrix-container {
-  width: 100%;
+#matrices-container {
+  width: 80%;
   height: 100%;
   display: flex;
   margin: 10px 10px 10px 10px;
 }
 
-#mode-select {
-    margin: auto;
-    padding: 10px;
+#confusion-matrix-container {
+    width: 100%;
+    height: 80%;
 }
+
+
+#left-widgets {
+    margin: 0;
+    padding: 10px;
+    width: 20%;
+}
+
+#scented-barcharts {
+    width: 100%;
+    height: 20%;
+    margin: auto;
+}
+
+svg {
+    margin: 10px;
+}
+
 </style>
