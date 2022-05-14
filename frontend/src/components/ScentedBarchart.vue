@@ -24,6 +24,10 @@ export default {
             type: Array,
             default: undefined,
         },
+        queryKey: {
+            type: String,
+            default: '',
+        },
     },
     computed: {
         widgetId: function() {
@@ -165,7 +169,15 @@ export default {
 
                 const selectDataRectG = that.selectDataRectG.enter()
                     .append('g')
-                    .attr('class', 'selectDataRect');
+                    .attr('class', 'selectDataRect')
+                    .on('mouseenter', function(e, d) {
+                        const query = {};
+                        query[that.queryKey]=[d.x0, d.x1];
+                        that.$emit('hoverBarchart', query);
+                    })
+                    .on('mouseleave', function(e, d) {
+                        that.$emit('hoverBarchart');
+                    });
 
                 selectDataRectG.transition()
                     .duration(that.createDuration)

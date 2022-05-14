@@ -15,9 +15,11 @@
 
             <div id="scented-barcharts">
                 <scented-barchart ref="label-hist"
-                    :allData="labelSizeAll" :title="'gt_box_size'" :selectData="labelSizeSelect"></scented-barchart>
+                    :allData="labelSizeAll" :title="'gt_box_size'" queryKey="label_size" :selectData="labelSizeSelect"
+                    @hoverBarchart="hoverBarchart"></scented-barchart>
                 <scented-barchart ref="predict-hist"
-                    :allData="predictSizeAll" :title="'pred_box_size'" :selectData="predictSizeSelect"></scented-barchart>
+                    :allData="predictSizeAll" :title="'pred_box_size'" queryKey="predict_size" :selectData="predictSizeSelect"
+                    @hoverBarchart="hoverBarchart"></scented-barchart>
             </div>
         </div>
         <div id="matrices-container">
@@ -68,7 +70,6 @@ export default {
                 value: 'avg_predict_aspect_ratio',
                 label: '预测物体框纵横比均值',
             }],
-            query: {},
             labelSizeAll: [],
             predictSizeAll: [],
             labelSizeConfusion: undefined,
@@ -80,6 +81,9 @@ export default {
     methods: {
         setConfusionMatrix: function(query) {
             // this.confusionMatrix = undefined;
+            if (query===undefined) {
+                query = {};
+            }
             if (this.returnMode!=='count') {
                 query['return'] = ['count', this.returnMode];
             } else {
@@ -93,10 +97,10 @@ export default {
                     that.confusionMatrix = response.data;
                 });
         },
-        setBoxSizeInfo: function() {
+        setBoxSizeInfo: function(query) {
             const store = this.$store;
             const that = this;
-            axios.post(store.getters.URL_GET_BOX_SIZE_DIST, {})
+            axios.post(store.getters.URL_GET_BOX_SIZE_DIST, query===undefined?{}:{query: query})
                 .then(function(response) {
                     that.labelSizeAll = response.data.labelSizeAll;
                     that.predictSizeAll = response.data.predictSizeAll;
@@ -131,6 +135,18 @@ export default {
             }
             this.labelSizeSelect = tmp1;
             this.predictSizeSelect = tmp2;
+        },
+        hoverBarchart: function(query) {
+            this.setConfusionMatrix(query);
+            const store = this.$store;
+            const that = this;
+            axios.post(store.getters.URL_GET_BOX_SIZE_DIST, query===undefined?{}:{query: query})
+                .then(function(response) {
+                    that.labelSizeSelect = response.data.labelSizeAll;
+                    that.predictSizeSelect = response.data.predictSizeAll;
+                    that.labelSizeConfusion = response.data.labelSizeConfusion;
+                    that.predictSizeConfusion = response.data.predictSizeConfusion;
+                });
         },
     },
     mounted: function() {
