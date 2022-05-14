@@ -1,14 +1,18 @@
 <template>
     <div id="data-content">
         <div id="left-widgets">
-            <el-select v-model="returnMode" @change="changeMode">
-                <el-option
-                    v-for="item in dataMode"
-                    :key="item.value"
-                    :label="item.value"
-                    :value="item.value">
-                </el-option>
-            </el-select>
+            <div id="encoding-select">
+                <span class="select-label">Matrix Encoding</span>
+                <el-select v-model="returnMode" @change="changeMode" size="mini">
+                    <el-option
+                        v-for="item in dataMode"
+                        :key="item.value"
+                        :label="item.value"
+                        :value="item.value">
+                    </el-option>
+                </el-select>
+            </div>
+
             <div id="scented-barcharts">
                 <scented-barchart ref="label-hist"
                     :allData="labelSizeAll" :title="'gt_box_size'" :selectData="labelSizeSelect"></scented-barchart>
@@ -137,6 +141,21 @@ export default {
 </script>
 
 <style scoped>
+.select-label {
+    font-family: Comic Sans MS;
+    font-weight: normal;
+    font-size: 15px;
+    margin-right: 15px;
+}
+
+#encoding-select>.el-select {
+    width: 100px;
+}
+
+#encoding-select {
+    width: 100%;
+}
+
 #data-content {
     width: 100%;
     height: 100%;

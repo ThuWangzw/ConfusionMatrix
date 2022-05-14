@@ -60,7 +60,7 @@ export default {
                 'unselectFill': 'rgb(237,237,237)',
             },
             textAttrs: {
-                'font-family': 'sans-serif',
+                'font-family': 'Comic Sans MS',
                 'font-weight': 'bold',
                 'font-size': 12,
             },
@@ -85,7 +85,7 @@ export default {
                 const xFormat = undefined;
                 let yFormat = undefined;
                 const xAxis = d3.axisBottom(this.xScale).ticks(this.globalAttrs['width'] / 80, xFormat).tickSizeOuter(0);
-                const yAxis = d3.axisLeft(this.yScale).ticks(this.globalAttrs['height'] / 40, yFormat);
+                const yAxis = d3.axisLeft(this.yScale).ticks(Math.floor(this.globalAttrs['height'] / 40), yFormat);
                 yFormat = this.yScale.tickFormat(100, yFormat);
 
                 this.mainSvg
