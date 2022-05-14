@@ -1,16 +1,19 @@
 <template>
     <div id="data-content">
         <div id="left-widgets">
-            <div id="encoding-select">
-                <span class="select-label">Matrix Encoding</span>
-                <el-select v-model="returnMode" @change="changeMode" size="mini">
-                    <el-option
-                        v-for="item in dataMode"
-                        :key="item.value"
-                        :label="item.value"
-                        :value="item.value">
-                    </el-option>
-                </el-select>
+            <div class="toolbox">
+                <div id="encoding-select">
+                    <span class="select-label">Matrix Encoding</span>
+                    <el-select v-model="returnMode" @change="changeMode" size="mini">
+                        <el-option
+                            v-for="item in dataMode"
+                            :key="item.value"
+                            :label="item.value"
+                            :value="item.value">
+                        </el-option>
+                    </el-select>
+                </div>
+                <i v-if="gettingMatrix&&gettingBarchart" class="el-icon-loading"></i>
             </div>
 
             <div id="scented-barcharts">
@@ -36,10 +39,11 @@ import Vue from 'vue';
 import ConfusionMatrix from './ConfusionMatrix.vue';
 import ScentedBarchart from './ScentedBarchart.vue';
 import axios from 'axios';
-import {Select, Option} from 'element-ui';
+import {Select, Option, Icon} from 'element-ui';
 
 Vue.use(Select);
 Vue.use(Option);
+Vue.use(Icon);
 
 export default {
     components: {ConfusionMatrix, ScentedBarchart},
@@ -70,12 +74,17 @@ export default {
                 value: 'avg_predict_aspect_ratio',
                 label: '预测物体框纵横比均值',
             }],
+            query: {},
             labelSizeAll: [],
             predictSizeAll: [],
             labelSizeConfusion: undefined,
             predictSizeConfusion: undefined,
             labelSizeSelect: [],
             predictSizeSelect: [],
+            labelSizeSelectBuffer: [],
+            predictSizeSelectBuffer: [],
+            gettingMatrix: false,
+            gettingBarchart: false,
         };
     },
     methods: {
@@ -95,6 +104,7 @@ export default {
             axios.post(store.getters.URL_GET_CONFUSION_MATRIX, query===undefined?{}:{query: query})
                 .then(function(response) {
                     that.confusionMatrix = response.data;
+                    that.gettingMatrix = false;
                 });
         },
         setBoxSizeInfo: function(query) {
@@ -104,6 +114,8 @@ export default {
                 .then(function(response) {
                     that.labelSizeAll = response.data.labelSizeAll;
                     that.predictSizeAll = response.data.predictSizeAll;
+                    that.labelSizeSelectBuffer = that.labelSizeAll;
+                    that.predictSizeSelectBuffer = that.predictSizeAll;
                     that.labelSizeConfusion = response.data.labelSizeConfusion;
                     that.predictSizeConfusion = response.data.predictSizeConfusion;
                     that.labelSizeSelect = response.data.labelSizeAll;
@@ -115,8 +127,8 @@ export default {
         },
         hoverConfusion: function(labelClasses, predictClasses) {
             if (labelClasses === undefined) {
-                this.labelSizeSelect = this.labelSizeAll;
-                this.predictSizeSelect = this.predictSizeAll;
+                this.labelSizeSelect = this.labelSizeSelectBuffer;
+                this.predictSizeSelect = this.predictSizeSelectBuffer;
                 return;
             }
             const tmp1 = [];
@@ -137,15 +149,24 @@ export default {
             this.predictSizeSelect = tmp2;
         },
         hoverBarchart: function(query) {
-            this.setConfusionMatrix(query);
+            if (query===undefined) {
+                query = {};
+            }
+            this.gettingBarchart = true;
+            this.gettingMatrix = true;
+            this.query = {...this.query, ...query};
+            this.setConfusionMatrix(this.query);
             const store = this.$store;
             const that = this;
-            axios.post(store.getters.URL_GET_BOX_SIZE_DIST, query===undefined?{}:{query: query})
+            axios.post(store.getters.URL_GET_BOX_SIZE_DIST, query===undefined?{}:{query: this.query})
                 .then(function(response) {
                     that.labelSizeSelect = response.data.labelSizeAll;
                     that.predictSizeSelect = response.data.predictSizeAll;
                     that.labelSizeConfusion = response.data.labelSizeConfusion;
                     that.predictSizeConfusion = response.data.predictSizeConfusion;
+                    that.labelSizeSelectBuffer = response.data.labelSizeAll;
+                    that.predictSizeSelectBuffer = response.data.predictSizeAll;
+                    that.gettingBarchart = false;
                 });
         },
     },
@@ -167,9 +188,11 @@ export default {
 #encoding-select>.el-select {
     width: 100px;
 }
-
-#encoding-select {
+.toolbox {
     width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 #data-content {

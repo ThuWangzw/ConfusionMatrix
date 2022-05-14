@@ -1,5 +1,8 @@
 <template>
-    <svg :id="widgetId" width="100%" height="100%" ref="svg"></svg>
+    <svg :id="widgetId" width="100%" height="100%" ref="svg">
+        <g id="all-data-g"></g>
+        <g id="select-data-g"></g>
+    </svg>
 </template>
 
 <script>
@@ -7,6 +10,7 @@ import * as d3 from 'd3';
 window.d3 = d3;
 import Util from './Util.vue';
 import GlobalVar from './GlovalVar.vue';
+import {brushX} from 'd3-brush';
 
 export default {
     name: 'ScentedBarchart',
@@ -35,6 +39,12 @@ export default {
         },
         mainSvg: function() {
             return d3.select('#'+this.widgetId);
+        },
+        alldataG: function() {
+            return this.mainSvg.select('#all-data-g');
+        },
+        selectDataG: function() {
+            return this.mainSvg.select('#select-data-g');
         },
     },
     mounted: function() {
@@ -73,6 +83,7 @@ export default {
             drawAxis: false,
             xScale: undefined,
             yScale: undefined,
+            brush: brushX(),
         };
     },
     methods: {
@@ -123,6 +134,37 @@ export default {
                         .attr('font-weight', that.textAttrs['font-weight'])
                         .attr('font-size', that.textAttrs['font-size'])
                         .text(this.title));
+
+                this.mainSvg
+                    .append('text')
+                    .attr('x', this.globalAttrs['width'] - this.globalAttrs['marginRight'])
+                    .attr('y', 10)
+                    .attr('fill', 'currentColor')
+                    .attr('text-anchor', 'end')
+                    .attr('cursor', 'pointer')
+                    .attr('font-family', that.textAttrs['font-family'])
+                    .attr('font-weight', that.textAttrs['font-weight'])
+                    .attr('font-size', that.textAttrs['font-size'])
+                    .text('reset brush')
+                    .on('click', ()=> {
+                        that.selectDataG.call(that.brush.move, null);
+                    });
+
+                this.selectDataG
+                    .call(this.brush.extent([[this.globalAttrs['marginLeft'], this.globalAttrs['marginTop']],
+                        [this.globalAttrs['width'] - this.globalAttrs['marginRight'], this.globalAttrs['height'] - this.globalAttrs['marginBottom']]])
+                        .on('end', function({selection}) {
+                            const len = that.globalAttrs['width'] - that.globalAttrs['marginRight']-that.globalAttrs['marginLeft'];
+                            let x1 = 0;
+                            let x2 = 1;
+                            if (selection!==null) {
+                                x1 = Math.floor((selection[0] - that.globalAttrs['marginLeft'])/len*10)/10;
+                                x2 = Math.ceil((selection[1] - that.globalAttrs['marginLeft'])/len*10)/10-(1e-5);
+                            }
+                            const query = {};
+                            query[that.queryKey] = [x1, x2];
+                            that.$emit('hoverBarchart', query);
+                        }));
             }
             const selectDataBins = [];
             const allDataBins = [];
@@ -138,8 +180,8 @@ export default {
                     'x1': (i+1)*0.1,
                 });
             }
-            this.allDataRectG = this.mainSvg.selectAll('g.allDataRect').data(allDataBins);
-            this.selectDataRectG = this.mainSvg.selectAll('g.selectDataRect').data(selectDataBins);
+            this.allDataRectG = this.alldataG.selectAll('g.allDataRect').data(allDataBins);
+            this.selectDataRectG = this.selectDataG.selectAll('g.selectDataRect').data(selectDataBins);
             await this.remove();
             await this.update();
             await this.transform();
@@ -169,15 +211,7 @@ export default {
 
                 const selectDataRectG = that.selectDataRectG.enter()
                     .append('g')
-                    .attr('class', 'selectDataRect')
-                    .on('mouseenter', function(e, d) {
-                        const query = {};
-                        query[that.queryKey]=[d.x0, d.x1];
-                        that.$emit('hoverBarchart', query);
-                    })
-                    .on('mouseleave', function(e, d) {
-                        that.$emit('hoverBarchart');
-                    });
+                    .attr('class', 'selectDataRect');
 
                 selectDataRectG.transition()
                     .duration(that.createDuration)
