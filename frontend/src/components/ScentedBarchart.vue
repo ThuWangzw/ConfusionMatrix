@@ -32,6 +32,10 @@ export default {
             type: String,
             default: '',
         },
+        xSplit: {
+            type: Array,
+            default: undefined,
+        },
     },
     computed: {
         widgetId: function() {
@@ -91,15 +95,16 @@ export default {
             const xRange = [this.globalAttrs['marginLeft'], this.globalAttrs['width'] - this.globalAttrs['marginRight']]; // [left, right]
             const yRange = [this.globalAttrs['height'] - this.globalAttrs['marginBottom'], this.globalAttrs['marginTop']]; // [bottom, top]
             const xDomain = [0, 1];
-            const yDomain = [0, Math.log10(d3.max(this.allData))+1];
+            const yDomain = [0, this.log10(d3.max(this.allData))+1];
             this.xScale = this.globalAttrs['xType'](xDomain, xRange);
             this.yScale = this.globalAttrs['yType'](yDomain, yRange);
             const that = this;
             if (this.drawAxis === false) {
                 this.drawAxis = true;
-                const xFormat = undefined;
                 let yFormat = undefined;
-                const xAxis = d3.axisBottom(this.xScale).ticks(this.globalAttrs['width'] / 80, xFormat).tickSizeOuter(0);
+                const xAxis = d3.axisBottom(this.xScale).ticks(this.xSplit.length, undefined).tickSizeOuter(0).tickFormat(function(d, i) {
+                    return Math.round(that.xSplit[i]*100)/100;
+                });
                 const yAxis = d3.axisLeft(this.yScale).ticks(Math.floor(this.globalAttrs['height'] / 40), yFormat);
                 yFormat = this.yScale.tickFormat(100, yFormat);
 
@@ -147,10 +152,10 @@ export default {
                     .attr('font-size', that.textAttrs['font-size'])
                     .text('reset brush')
                     .on('click', ()=> {
-                        that.selectDataG.call(that.brush.move, null);
+                        that.mainSvg.call(that.brush.move, null);
                     });
 
-                this.selectDataG
+                this.mainSvg
                     .call(this.brush.extent([[this.globalAttrs['marginLeft'], this.globalAttrs['marginTop']],
                         [this.globalAttrs['width'] - this.globalAttrs['marginRight'], this.globalAttrs['height'] - this.globalAttrs['marginBottom']]])
                         .on('end', function({selection}) {
@@ -158,8 +163,8 @@ export default {
                             let x1 = 0;
                             let x2 = 1;
                             if (selection!==null) {
-                                x1 = Math.floor((selection[0] - that.globalAttrs['marginLeft'])/len*10)/10;
-                                x2 = Math.ceil((selection[1] - that.globalAttrs['marginLeft'])/len*10)/10-(1e-5);
+                                x1 = that.xSplit[Math.floor((selection[0] - that.globalAttrs['marginLeft'])/len*10)]+(1e-5);
+                                x2 = that.xSplit[Math.ceil((selection[1] - that.globalAttrs['marginLeft'])/len*10)];
                             }
                             const query = {};
                             query[that.queryKey] = [x1, x2];
@@ -203,8 +208,8 @@ export default {
                     .attr('x', (d) => that.xScale(d.x0) + that.globalAttrs['insetLeft'])
                     .attr('width', (d) => Math.max(0, that.xScale(d.x1) - that.xScale(d.x0) -
                                                       that.globalAttrs['insetLeft'] - that.globalAttrs['insetRight']))
-                    .attr('y', (d, i) => that.yScale(Math.log10(Math.max(1, d.val))))
-                    .attr('height', (d, i) => that.yScale(0) - that.yScale(Math.log10(Math.max(1, d.val))))
+                    .attr('y', (d, i) => that.yScale(that.log10(Math.max(1, d.val))))
+                    .attr('height', (d, i) => that.yScale(0) - that.yScale(that.log10(Math.max(1, d.val))))
                     .attr('fill', that.globalAttrs['unselectFill'])
                     .append('title')
                     .text((d, i) => [`${d.x0.toFixed(1)} ≤ x < ${d.x1.toFixed(1)}`, `quantity: ${d.val}`].join('\n'));
@@ -222,8 +227,8 @@ export default {
                     .attr('x', (d) => that.xScale(d.x0) + that.globalAttrs['insetLeft'])
                     .attr('width', (d) => Math.max(0, that.xScale(d.x1) - that.xScale(d.x0) -
                                                       that.globalAttrs['insetLeft'] - that.globalAttrs['insetRight']))
-                    .attr('y', (d, i) => that.yScale(Math.log10(Math.max(1, d.val))))
-                    .attr('height', (d, i) => that.yScale(0) - that.yScale(Math.log10(Math.max(1, d.val))))
+                    .attr('y', (d, i) => that.yScale(that.log10(Math.max(1, d.val))))
+                    .attr('height', (d, i) => that.yScale(0) - that.yScale(that.log10(Math.max(1, d.val))))
                     .attr('fill', 'steelblue');
 
                 if ((that.selectDataRectG.enter().size() === 0) && (that.allDataRectG.enter().size() === 0)) {
@@ -239,7 +244,7 @@ export default {
                     d3.select(this).select('rect')
                         .transition()
                         .duration(that.updateDuration)
-                        .attr('height', that.yScale(0) - that.yScale(Math.log10(Math.max(1, d.val))))
+                        .attr('height', that.yScale(0) - that.yScale(that.log10(Math.max(1, d.val))))
                         .on('end', resolve);
                 });
                 that.selectDataRectG.each(function(d, i) {
@@ -247,8 +252,8 @@ export default {
                     d3.select(this).select('rect')
                         .transition()
                         .duration(that.updateDuration)
-                        .attr('y', that.yScale(Math.log10(Math.max(1, d.val))))
-                        .attr('height', that.yScale(0) - that.yScale(Math.log10(Math.max(1, d.val))))
+                        .attr('y', that.yScale(that.log10(Math.max(1, d.val))))
+                        .attr('height', that.yScale(0) - that.yScale(that.log10(Math.max(1, d.val))))
                         .on('end', resolve);
                 });
 
@@ -279,6 +284,9 @@ export default {
             });
         },
         transform: async function() {
+        },
+        log10: function(d) {
+            return Math.log10(d);
         },
     },
     mounted: function() {

@@ -1,5 +1,6 @@
 import os
 import json
+import bisect
 import numpy as np
 # import data.reorder as reorder
 import pickle
@@ -325,30 +326,42 @@ class DataCtrler(object):
         unmatched_label_size = self.label_size[self.predict_label_pairs[unmatch_label][:,1]]
         unmatched_predict_size = self.predict_size[self.predict_label_pairs[unmatch_predict][:,0]]
         
-        label_box_size_dist, predict_box_size_dist = [0 for _ in range(10)], [0 for _ in range(10)]
-        for i in filtered_label_size:
-            label_box_size_dist[min(9, int(i//0.1))]+=1
-        for i in unmatched_label_size:
-            label_box_size_dist[min(9, int(i//0.1))]+=1
-        for i in filtered_predict_size:
-            predict_box_size_dist[min(9, int(i//0.1))]+=1
-        for i in unmatched_predict_size:
-            predict_box_size_dist[min(9, int(i//0.1))]+=1
+        # partition
+        K = 10
+        pred_size_argsort = np.argsort(self.predict_size)
+        if K not in self.size_matrix_split_map:
+            self.size_matrix_split_map[K] = get_size_split_pos(self.predict_label_ious[pred_size_argsort], K)
+            with open(self.size_matrix_split_path, 'wb') as f:
+                pickle.dump(self.size_matrix_split_map, f)
+        split_pos = self.size_matrix_split_map[K]
+        split_size = self.predict_size[pred_size_argsort][split_pos]
+        
+        label_box_size_dist, predict_box_size_dist = [0 for _ in range(K)], [0 for _ in range(K)]
+        for i in range(K):
+            last = 0 if i==0 else split_size[i-1]
+            cur = 1 if i==K-1 else split_size[i]
+            label_box_size_dist[i] = np.count_nonzero(np.logical_and(filtered_label_size>last, filtered_label_size<=cur)) 
+            + np.count_nonzero(np.logical_and(unmatched_label_size>last, unmatched_label_size<=cur))
+            predict_box_size_dist[i] = np.count_nonzero(np.logical_and(filtered_predict_size>last, filtered_predict_size<=cur)) 
+            + np.count_nonzero(np.logical_and(unmatched_predict_size>last, unmatched_predict_size<=cur))
+            
         label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
-        label_box_size_confusion = [[[0 for _ in range(10)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
-        predict_box_size_confusion = [[[0 for _ in range(10)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
+        label_box_size_confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
+        predict_box_size_confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
         for (pr, gt) in self.predict_label_pairs[filtered]:
-            label_box_size_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][min(9, int(self.label_size[gt]//0.1))]+=1
-            predict_box_size_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][min(9, int(self.predict_size[pr]//0.1))]+=1
+            label_box_size_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_size, self.label_size[gt])]+=1
+            predict_box_size_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_size, self.predict_size[pr])]+=1
         for (pr, gt) in self.predict_label_pairs[unmatch_label]:
-            label_box_size_confusion[int(self.raw_labels[gt, 0])][len(pred_target)][min(9, int(self.label_size[gt]//0.1))]+=1
+            label_box_size_confusion[int(self.raw_labels[gt, 0])][len(pred_target)][bisect.bisect_left(split_size, self.label_size[gt])]+=1
         for (pr, gt) in self.predict_label_pairs[unmatch_predict]:
-            predict_box_size_confusion[len(label_target)][int(self.raw_predicts[pr, 0])][min(9, int(self.predict_size[pr]//0.1))]+=1
+            predict_box_size_confusion[len(label_target)][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_size, self.predict_size[pr])]+=1
+                
         return {
                 'labelSizeAll': label_box_size_dist,
                 'predictSizeAll': predict_box_size_dist,
                 'labelSizeConfusion': label_box_size_confusion,
-                'predictSizeConfusion': predict_box_size_confusion
+                'predictSizeConfusion': predict_box_size_confusion,
+                'sizeSplit': split_size.tolist()
             }
     
     def getBoxSizeInfo(self):
@@ -424,7 +437,7 @@ dataCtrler = DataCtrler()
 if __name__ == "__main__":
     dataCtrler.process("/data/zhaowei/ConfusionMatrix//datasets/coco/", "/data/zhaowei/ConfusionMatrix/backend/buffer/")
     for rt_type in ['count','avg_label_size','avg_predict_size','avg_iou','avg_acc','avg_label_aspect_ratio','avg_predict_aspect_ratio']:
-        matrix = dataCtrler.getSizeMatrix({
+        matrix = dataCtrler.getBoxSizeDistribution({
             "label_size": [0,1],
             "predict_size": [0,1],
             "label_aspect_ratio": [0,1],
