@@ -196,6 +196,7 @@ export default {
                 'font-size': 15,
                 'cursor': 'pointer',
             },
+            legendExist: false,
             // buffer
             maxCellValue: 0,
         };
@@ -296,8 +297,11 @@ export default {
             this.horizonTextinG = this.horizonTextG.selectAll('g.'+this.horizonTextAttrs['gClass']).data(this.showNodes, (d)=>d.name);
             this.verticalTextinG = this.verticalTextG.selectAll('g.'+this.verticalTextAttrs['gClass']).data(this.showNodes, (d)=>d.name);
             this.matrixCellsinG = this.matrixCellsG.selectAll('g.'+this.cellAttrs['gClass']).data(this.cells, (d)=>d.key);
+            if (!this.legendExist) {
+                this.drawLegend();
+                this.legendExist = true;
+            }
 
-            this.drawLegend();
             await this.remove();
             await this.update();
             await this.transform();
