@@ -13,15 +13,15 @@
                         </el-option>
                     </el-select>
                 </div>
-                <i v-if="gettingMatrix&&gettingBarchart" class="el-icon-loading"></i>
+                <i v-if="gettingMatrix||gettingBarchart" class="el-icon-loading"></i>
             </div>
 
             <div id="scented-barcharts">
                 <scented-barchart ref="label-hist"
-                    :allData="labelSizeAll" :title="'gt_box_size'" queryKey="label_size" :selectData="labelSizeSelect"
+                    :allData="labelSizeAll" :title="'gt_box_size'" queryKey="label_size" :selectData="labelSizeSelect" :xSplit="sizeSplit"
                     @hoverBarchart="hoverBarchart"></scented-barchart>
                 <scented-barchart ref="predict-hist"
-                    :allData="predictSizeAll" :title="'pred_box_size'" queryKey="predict_size" :selectData="predictSizeSelect"
+                    :allData="predictSizeAll" :title="'pred_box_size'" queryKey="predict_size" :selectData="predictSizeSelect" :xSplit="sizeSplit"
                     @hoverBarchart="hoverBarchart"></scented-barchart>
             </div>
         </div>
@@ -75,6 +75,7 @@ export default {
                 label: '预测物体框纵横比均值',
             }],
             query: {},
+            sizeSplit: [],
             labelSizeAll: [],
             predictSizeAll: [],
             labelSizeConfusion: undefined,
@@ -120,6 +121,9 @@ export default {
                     that.predictSizeConfusion = response.data.predictSizeConfusion;
                     that.labelSizeSelect = response.data.labelSizeAll;
                     that.predictSizeSelect = response.data.predictSizeAll;
+                    that.sizeSplit = response.data.sizeSplit;
+                    that.sizeSplit.unshift(0);
+                    that.sizeSplit.push(1);
                 });
         },
         changeMode: function() {
