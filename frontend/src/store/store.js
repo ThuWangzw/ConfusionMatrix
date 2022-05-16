@@ -31,7 +31,7 @@ export default new Vuex.Store({
         URL_GET_METADATA: (state) => state.APIBASE + '/api/metadata',
         URL_GET_CONFUSION_MATRIX: (state) => state.APIBASE + '/api/confusionMatrix',
         URL_GET_SIZE_MATRIX: (state) => state.APIBASE + '/api/sizeMatrix',
-        URL_GET_BOX_SIZE_INFO: (state) => state.APIBASE + '/api/boxSizeInfo',
+        URL_GET_BOX_ASPECT_RATIO_DIST: (state) => state.APIBASE + '/api/boxAspectRatioDist',
         URL_GET_BOX_SIZE_DIST: (state) => state.APIBASE + '/api/boxSizeDist',
     },
 });

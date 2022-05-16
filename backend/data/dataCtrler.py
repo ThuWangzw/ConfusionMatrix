@@ -6,7 +6,7 @@ import numpy as np
 import pickle
 import torch
 
-from data.fisher import get_size_split_pos
+from data.fisher import get_split_pos
 
 class DataCtrler(object):
 
@@ -36,9 +36,11 @@ class DataCtrler(object):
             os.makedirs(bufferPath)
         self.raw_data_path = os.path.join(bufferPath, "{}_raw_data.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         self.label_predict_iou_path = os.path.join(bufferPath, "{}_predict_label_iou.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
-        self.size_matrix_split_path = os.path.join(bufferPath, "{}_size_matrix_split.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
+        self.box_size_split_path = os.path.join(bufferPath, "{}_box_size_split.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         self.box_size_dist_path = os.path.join(bufferPath, "{}_box_size_dist.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
-        
+        self.box_aspect_ratio_split_path = os.path.join(bufferPath, "{}_box_aspect_ratio_split.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
+        self.box_aspect_ratio_dist_path = os.path.join(bufferPath, "{}_box_aspect_ratio_dist.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
+
         #read raw data
         if os.path.exists(self.raw_data_path):
             with open(self.raw_data_path, 'rb') as f:
@@ -122,11 +124,17 @@ class DataCtrler(object):
             with open(self.label_predict_iou_path, 'wb') as f:
                 pickle.dump((self.predict_label_pairs, self.predict_label_ious), f)
         
-        if os.path.exists(self.size_matrix_split_path):
-            with open(self.size_matrix_split_path, 'rb') as f:
-                self.size_matrix_split_map = pickle.load(f)
+        if os.path.exists(self.box_size_split_path):
+            with open(self.box_size_split_path, 'rb') as f:
+                self.box_size_split_map = pickle.load(f)
         else:
-            self.size_matrix_split_map = {}
+            self.box_size_split_map = {}
+        
+        if os.path.exists(self.box_aspect_ratio_split_path):
+            with open(self.box_aspect_ratio_split_path, 'rb') as f:
+                self.box_aspect_ratio_split_map = pickle.load(f)
+        else:
+            self.box_aspect_ratio_split_map = {}
         
         ## init size
         self.label_size = self.raw_labels[:,3]*self.raw_labels[:,4]
@@ -145,6 +153,16 @@ class DataCtrler(object):
         ## init aspect ratio
         self.label_aspect_ratio = self.raw_labels[:,3]/self.raw_labels[:,4]
         self.predict_aspect_ratio = self.raw_predicts[:,4]/self.raw_predicts[:,5]
+
+        # get box aspect ratio distribution in [0,1]
+        if os.path.exists(self.box_aspect_ratio_dist_path):
+            with open(self.box_aspect_ratio_dist_path, 'rb') as f:
+                self.box_aspect_ratio_dist_map = pickle.load(f)
+        else:
+            self.box_aspect_ratio_dist_map = None
+            self.box_aspect_ratio_dist_map = self.getBoxAspectRatioDistribution()
+            with open(self.box_aspect_ratio_dist_path, 'wb') as f:
+                pickle.dump(self.box_aspect_ratio_dist_map, f)
         ## TODO init direction
         
     def getMetaData(self):
@@ -203,8 +221,8 @@ class DataCtrler(object):
         default_query = {
             "label_size": [0,1],
             "predict_size": [0,1],
-            "label_aspect_ratio": [0,100],
-            "predict_aspect_ratio": [0,100],
+            "label_aspect_ratio": [0,110],
+            "predict_aspect_ratio": [0,110],
             "direction": [0,1,2,3,4,5,6,7,8],
             "label": np.arange(len(self.classID2Idx)-1),
             "predict": np.arange(len(self.classID2Idx)-1),
@@ -329,11 +347,11 @@ class DataCtrler(object):
         # partition
         K = 10
         pred_size_argsort = np.argsort(self.predict_size)
-        if K not in self.size_matrix_split_map:
-            self.size_matrix_split_map[K] = get_size_split_pos(self.predict_label_ious[pred_size_argsort], K)
-            with open(self.size_matrix_split_path, 'wb') as f:
-                pickle.dump(self.size_matrix_split_map, f)
-        split_pos = self.size_matrix_split_map[K]
+        if K not in self.box_size_split_map:
+            self.box_size_split_map[K] = get_split_pos(self.predict_label_ious[pred_size_argsort], K)
+            with open(self.box_size_split_path, 'wb') as f:
+                pickle.dump(self.box_size_split_map, f)
+        split_pos = self.box_size_split_map[K]
         split_size = self.predict_size[pred_size_argsort][split_pos]
         
         label_box_size_dist, predict_box_size_dist = [0 for _ in range(K)], [0 for _ in range(K)]
@@ -357,44 +375,61 @@ class DataCtrler(object):
             predict_box_size_confusion[len(label_target)][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_size, self.predict_size[pr])]+=1
                 
         return {
-                'labelSizeAll': label_box_size_dist,
-                'predictSizeAll': predict_box_size_dist,
-                'labelSizeConfusion': label_box_size_confusion,
-                'predictSizeConfusion': predict_box_size_confusion,
-                'sizeSplit': split_size.tolist()
-            }
+            'labelSizeAll': label_box_size_dist,
+            'predictSizeAll': predict_box_size_dist,
+            'labelSizeConfusion': label_box_size_confusion,
+            'predictSizeConfusion': predict_box_size_confusion,
+            'sizeSplit': [0] + split_size.tolist() + [1]
+        }
     
-    def getBoxSizeInfo(self):
+    def getBoxAspectRatioDistribution(self, query = None):
         """
-            return confusion matrix with all information about box size and all box size
+            return label_aspect_ratio, predict_aspect_ratio distribution
         """
-        filtered , unmatch_predict, unmatch_label = self.filterSamples()
+        if query is None and self.box_aspect_ratio_dist_map is not None:
+            return self.box_aspect_ratio_dist_map
+        filtered, unmatch_predict, unmatch_label = self.filterSamples(query)
+        filtered_label_aspect_ratio = self.label_aspect_ratio[self.predict_label_pairs[filtered,1]]
+        filtered_predict_aspect_ratio = self.predict_aspect_ratio[self.predict_label_pairs[filtered,0]]
+        unmatched_label_aspect_ratio = self.label_aspect_ratio[self.predict_label_pairs[unmatch_label,1]]
+        unmatched_predict_aspect_ratio = self.predict_aspect_ratio[self.predict_label_pairs[unmatch_predict,0]]
+        
+        # partition
+        K = 10
+        pred_aspect_ratio_argsort = np.argsort(self.predict_aspect_ratio)
+        if K not in self.box_aspect_ratio_split_map:
+            self.box_aspect_ratio_split_map[K] = get_split_pos(self.predict_label_ious[pred_aspect_ratio_argsort], K)
+            with open(self.box_aspect_ratio_split_path, 'wb') as f:
+                pickle.dump(self.box_aspect_ratio_split_map, f)
+        split_pos = self.box_aspect_ratio_split_map[K]
+        split_aspect_ratio = self.predict_aspect_ratio[pred_aspect_ratio_argsort][split_pos]
+        
+        label_box_aspect_ratio_dist, predict_box_aspect_ratio_dist = [0 for _ in range(K)], [0 for _ in range(K)]
+        for i in range(K):
+            last = 0 if i==0 else split_aspect_ratio[i-1]
+            cur = np.max(np.concatenate((self.label_aspect_ratio, self.predict_aspect_ratio))) if i==K-1 else split_aspect_ratio[i]
+            label_box_aspect_ratio_dist[i] = np.count_nonzero(np.logical_and(filtered_label_aspect_ratio>last, filtered_label_aspect_ratio<=cur)) 
+            + np.count_nonzero(np.logical_and(unmatched_label_aspect_ratio>last, unmatched_label_aspect_ratio<=cur))
+            predict_box_aspect_ratio_dist[i] = np.count_nonzero(np.logical_and(filtered_predict_aspect_ratio>last, filtered_predict_aspect_ratio<=cur)) 
+            + np.count_nonzero(np.logical_and(unmatched_predict_aspect_ratio>last, unmatched_predict_aspect_ratio<=cur))
+            
         label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
-        labelSizeConfusion = [[[] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
-        predictSizeConfusion = [[[] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
-        label_rec, pred_rec = [], []
-        for i in range(len(label_target)):
-            label_rec.append(self.raw_labels[self.predict_label_pairs[filtered, 1], 0]==label_target[i])
-        for j in range(len(pred_target)):
-            pred_rec.append(self.raw_predicts[self.predict_label_pairs[filtered, 0], 0]==pred_target[j])
-        for i in range(len(label_target)):
-            for j in range(len(pred_target)):
-                tmp = filtered[np.logical_and(label_rec[i], pred_rec[j])]
-                labelSizeConfusion[i][j] = self.label_size[self.predict_label_pairs[tmp, 1]].tolist()
-                predictSizeConfusion[i][j] = self.predict_size[self.predict_label_pairs[tmp, 0]].tolist()
-        for i in range(len(label_target)):
-            tmp = unmatch_label[self.raw_labels[self.predict_label_pairs[unmatch_label, 1], 0]==label_target[i]]
-            labelSizeConfusion[i][len(pred_target)] = self.label_size[self.predict_label_pairs[tmp, 1]].tolist()
-            # predictSizeConfusion[i][len(pred_target)] = self.predict_size[self.predict_label_pairs[tmp, 0]].tolist()
-        for j in range(len(pred_target)):
-            tmp = unmatch_predict[self.raw_predicts[self.predict_label_pairs[unmatch_predict, 0], 0]==pred_target[j]]
-            # labelSizeConfusion[len(label_target)][j] = self.label_size[self.predict_label_pairs[tmp, 1]].tolist()
-            predictSizeConfusion[len(label_target)][j] = self.predict_size[self.predict_label_pairs[tmp, 0]].tolist()
+        label_box_aspect_ratio_confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
+        predict_box_aspect_ratio_confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
+        for (pr, gt) in self.predict_label_pairs[filtered]:
+            label_box_aspect_ratio_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_aspect_ratio, self.label_aspect_ratio[gt])]+=1
+            predict_box_aspect_ratio_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_aspect_ratio, self.predict_aspect_ratio[pr])]+=1
+        for (pr, gt) in self.predict_label_pairs[unmatch_label]:
+            label_box_aspect_ratio_confusion[int(self.raw_labels[gt, 0])][len(pred_target)][bisect.bisect_left(split_aspect_ratio, self.label_aspect_ratio[gt])]+=1
+        for (pr, gt) in self.predict_label_pairs[unmatch_predict]:
+            predict_box_aspect_ratio_confusion[len(label_target)][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_aspect_ratio, self.predict_aspect_ratio[pr])]+=1
+                
         return {
-            'labelSizeAll': self.label_size.tolist(),
-            'predictSizeAll': self.predict_size.tolist(),
-            'labelSizeConfusion': labelSizeConfusion,
-            'predictSizeConfusion': predictSizeConfusion
+            'labelAspectRatioAll': label_box_aspect_ratio_dist,
+            'predictAspectRatioAll': predict_box_aspect_ratio_dist,
+            'labelAspectRatioConfusion': label_box_aspect_ratio_confusion,
+            'predictAspectRatioConfusion': predict_box_aspect_ratio_confusion,
+            'aspectRatioSplit': [0] + split_aspect_ratio.tolist() + [int(np.max(np.concatenate((self.label_aspect_ratio, self.predict_aspect_ratio))))]
         }
 
         
