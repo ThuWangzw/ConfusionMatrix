@@ -24,7 +24,7 @@ def B(Lp):
     return Bl
 
 
-def get_size_split_pos(X, K=10):
+def get_split_pos(X, K=10):
     """
         return the positions to split by Fisher algorithm
     """

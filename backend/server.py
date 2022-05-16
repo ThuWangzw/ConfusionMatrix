@@ -37,9 +37,12 @@ def boxSizeDist():
         query = request.json['query']
     return jsonify(dataCtrler.getBoxSizeDistribution(query))
 
-@app.route('/api/boxSizeInfo', methods=["POST"])
-def boxSizeInfo():
-    return jsonify(dataCtrler.getBoxSizeInfo())
+@app.route('/api/boxAspectRatioDist', methods=["POST"])
+def boxAspectRatioDist():
+    query = None
+    if 'query' in request.json:
+        query = request.json['query']
+    return jsonify(dataCtrler.getBoxAspectRatioDistribution(query))
 
 
 def main():

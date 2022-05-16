@@ -1,8 +1,5 @@
 <template>
-    <svg :id="widgetId" width="100%" height="100%" ref="svg">
-        <g id="all-data-g"></g>
-        <g id="select-data-g"></g>
-    </svg>
+    <svg :id="widgetId" width="100%" height="100%" ref="svg"></svg>
 </template>
 
 <script>
@@ -141,6 +138,14 @@ export default {
                         .text(this.title));
 
                 this.mainSvg
+                    .append('g')
+                    .attr('id', 'all-data-g');
+
+                this.mainSvg
+                    .append('g')
+                    .attr('id', 'select-data-g');
+
+                this.mainSvg
                     .append('text')
                     .attr('x', this.globalAttrs['width'] - this.globalAttrs['marginRight'])
                     .attr('y', 10)
@@ -160,8 +165,8 @@ export default {
                         [this.globalAttrs['width'] - this.globalAttrs['marginRight'], this.globalAttrs['height'] - this.globalAttrs['marginBottom']]])
                         .on('end', function({selection}) {
                             const len = that.globalAttrs['width'] - that.globalAttrs['marginRight']-that.globalAttrs['marginLeft'];
-                            let x1 = 0;
-                            let x2 = 1;
+                            let x1 = that.xSplit[0];
+                            let x2 = that.xSplit[that.xSplit.length-1];
                             if (selection!==null) {
                                 x1 = that.xSplit[Math.floor((selection[0] - that.globalAttrs['marginLeft'])/len*10)]+(1e-5);
                                 x2 = that.xSplit[Math.ceil((selection[1] - that.globalAttrs['marginLeft'])/len*10)];
@@ -173,16 +178,17 @@ export default {
             }
             const selectDataBins = [];
             const allDataBins = [];
+            const rectWidth = 0.1;
             for (let i = 0; i < this.allData.length; ++i) {
                 selectDataBins.push({
                     'val': this.selectData[i],
-                    'x0': i*0.1,
-                    'x1': (i+1)*0.1,
+                    'x0': i * rectWidth,
+                    'x1': (i+1) * rectWidth,
                 });
                 allDataBins.push({
                     'val': this.allData[i],
-                    'x0': i*0.1,
-                    'x1': (i+1)*0.1,
+                    'x0': i * rectWidth,
+                    'x1': (i+1) * rectWidth,
                 });
             }
             this.allDataRectG = this.alldataG.selectAll('g.allDataRect').data(allDataBins);

@@ -483,7 +483,7 @@ export default {
                         // }
                     })
                     .on('mouseover', function(e, d) {
-                        if (d.value[0] === 0) return;
+                        // if (d.value[0] === 0) return;
                         const labelTarget = [];
                         const predictTarget = [];
                         for (const name of d.rowNode.leafs) {
