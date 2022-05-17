@@ -5,6 +5,7 @@ import numpy as np
 # import data.reorder as reorder
 import pickle
 import torch
+import math
 
 from data.fisher import get_split_pos
 
@@ -163,7 +164,21 @@ class DataCtrler(object):
             self.box_aspect_ratio_dist_map = self.getBoxAspectRatioDistribution()
             with open(self.box_aspect_ratio_dist_path, 'wb') as f:
                 pickle.dump(self.box_aspect_ratio_dist_map, f)
-        ## TODO init direction
+        ## direction
+        directionIdxes = np.where(np.logical_and(self.predict_label_pairs[:,0]>-1, self.predict_label_pairs[:,1]>-1))
+        directionVectors = self.raw_predicts[self.predict_label_pairs[directionIdxes][:,0]][:,[2,3]] - self.raw_labels[self.predict_label_pairs[directionIdxes][:,1]][:,[1,2]]
+        directionNorm = np.sqrt(np.power(directionVectors[:,0], 2)+ np.power(directionVectors[:,1], 2))
+        directionCos = directionVectors[:,0]/directionNorm
+        directions = np.zeros(directionCos.shape[0], dtype=np.int32)
+        directionSplits = np.array([math.cos(angle/180*math.pi) for angle in [180, 157.5, 112.5, 67.5, 22.5, 0]])
+        for i in range(2,len(directionSplits)):
+            directions[np.logical_and(directionCos>directionSplits[i-1], directionCos<=directionSplits[i])] = i-1
+        negaYs = np.logical_and(directionVectors[:,1]<0, directions!=0)
+        directions[negaYs] = 8-directions[negaYs]
+        directions[directionNorm<0.05] = 8
+        self.directions = -1*np.ones(self.predict_label_pairs.shape[0], dtype=np.int32)
+        self.directions[directionIdxes] = directions
+        
         
     def getMetaData(self):
         return {
