@@ -33,6 +33,14 @@ export default {
             type: Array,
             default: undefined,
         },
+        displayMode: {
+            type: String,
+            default: 'log',
+        },
+        barNum: {
+            type: Number,
+            default: 10,
+        },
     },
     computed: {
         widgetId: function() {
@@ -58,18 +66,21 @@ export default {
         selectData: function() {
             this.render();
         },
+        displayMode: function() {
+            this.render();
+        },
     },
     data: function() {
         return {
             globalAttrs: {
-                'marginTop': 20, // top margin, in pixels
-                'marginRight': 10, // right margin, in pixels
-                'marginBottom': 30, // bottom margin, in pixels
-                'marginLeft': 30, // left margin, in pixels
+                'marginTop': 10, // top margin, in pixels
+                'marginRight': 0, // right margin, in pixels
+                'marginBottom': 0, // bottom margin, in pixels
+                'marginLeft': 60, // left margin, in pixels
                 'width': 300, // outer width of chart, in pixels
                 'height': 100, // outer height of chart, in pixels
-                'insetLeft': 0.5, // inset left edge of bar
-                'insetRight': 0.5, // inset right edge of bar:
+                'insetLeft': 0.3, // inset left edge of bar
+                'insetRight': 0.3, // inset right edge of bar:
                 'xType': d3.scaleLinear, // type of x-scale
                 'yType': d3.scaleLinear, // type of y-scale
                 'unselectFill': 'rgb(237,237,237)',
@@ -77,7 +88,7 @@ export default {
             textAttrs: {
                 'font-family': 'Comic Sans MS',
                 'font-weight': 'bold',
-                'font-size': 12,
+                'font-size': 10,
             },
             selectDataRectG: null,
             allDataRectG: null,
@@ -88,54 +99,42 @@ export default {
         };
     },
     methods: {
+        createResetBrush: function() {
+            const that = this;
+            this.mainSvg
+                .append('text')
+                .attr('id', 'remove-brush-button')
+                .attr('x', this.globalAttrs['width'] - this.globalAttrs['marginRight'])
+                .attr('y', 10)
+                .attr('fill', 'currentColor')
+                .attr('text-anchor', 'end')
+                .attr('cursor', 'pointer')
+                .attr('font-family', that.textAttrs['font-family'])
+                .attr('font-weight', that.textAttrs['font-weight'])
+                .attr('font-size', that.textAttrs['font-size'])
+                .text('reset brush')
+                .on('click', ()=> {
+                    that.mainSvg.call(that.brush.move, null);
+                    that.mainSvg.selectAll('#remove-brush-button').remove();
+                });
+        },
         render: async function() {
             const xRange = [this.globalAttrs['marginLeft'], this.globalAttrs['width'] - this.globalAttrs['marginRight']]; // [left, right]
             const yRange = [this.globalAttrs['height'] - this.globalAttrs['marginBottom'], this.globalAttrs['marginTop']]; // [bottom, top]
-            const xDomain = [0, 1];
-            const yDomain = [0, this.log10(d3.max(this.allData))+1];
+            const xDomain = [-0.05, 1.05];
+            const yDomain = [0, this.cal(d3.max(this.allData))];
             this.xScale = this.globalAttrs['xType'](xDomain, xRange);
             this.yScale = this.globalAttrs['yType'](yDomain, yRange);
             const that = this;
             if (this.drawAxis === false) {
                 this.drawAxis = true;
-                let yFormat = undefined;
-                const xAxis = d3.axisBottom(this.xScale).ticks(this.xSplit.length, undefined).tickSizeOuter(0).tickFormat(function(d, i) {
-                    return Math.round(that.xSplit[i]*100)/100;
-                });
-                const yAxis = d3.axisLeft(this.yScale).ticks(Math.floor(this.globalAttrs['height'] / 40), yFormat);
-                yFormat = this.yScale.tickFormat(100, yFormat);
 
                 this.mainSvg
-                    .append('g')
-                    .attr('transform', `translate(${this.globalAttrs['marginLeft']},0)`)
-                    .call(yAxis)
-                    .call((g) => g.select('.domain').remove())
-                    .call((g) => g.selectAll('.tick line').clone()
-                        .attr('x2', this.globalAttrs['width'] - this.globalAttrs['marginLeft'] - this.globalAttrs['marginRight'])
-                        .attr('stroke-opacity', 0.1))
-                    .call((g) => g.append('text')
-                        .attr('x', -this.globalAttrs['marginLeft'])
-                        .attr('y', 10)
-                        .attr('fill', 'currentColor')
-                        .attr('text-anchor', 'start')
-                        .attr('font-family', that.textAttrs['font-family'])
-                        .attr('font-weight', that.textAttrs['font-weight'])
-                        .attr('font-size', that.textAttrs['font-size'])
-                        .text('log count'));
-
-                this.mainSvg
-                    .append('g')
-                    .attr('transform', `translate(0,${this.globalAttrs['height'] - this.globalAttrs['marginBottom']})`)
-                    .call(xAxis)
-                    .call((g) => g.append('text')
-                        .attr('x', this.globalAttrs['width'] - this.globalAttrs['marginRight'])
-                        .attr('y', 27)
-                        .attr('fill', 'currentColor')
-                        .attr('text-anchor', 'end')
-                        .attr('font-family', that.textAttrs['font-family'])
-                        .attr('font-weight', that.textAttrs['font-weight'])
-                        .attr('font-size', that.textAttrs['font-size'])
-                        .text(this.title));
+                    .append('line')
+                    .attr('transform', `translate(${this.globalAttrs['marginLeft']},${this.yScale(0)})`)
+                    .attr('stroke-opacity', 0.2)
+                    .attr('stroke', 'currentColor')
+                    .attr('x2', this.globalAttrs['width'] - this.globalAttrs['marginLeft'] - this.globalAttrs['marginRight']);
 
                 this.mainSvg
                     .append('g')
@@ -146,39 +145,42 @@ export default {
                     .attr('id', 'select-data-g');
 
                 this.mainSvg
-                    .append('text')
-                    .attr('x', this.globalAttrs['width'] - this.globalAttrs['marginRight'])
-                    .attr('y', 10)
-                    .attr('fill', 'currentColor')
-                    .attr('text-anchor', 'end')
-                    .attr('cursor', 'pointer')
-                    .attr('font-family', that.textAttrs['font-family'])
-                    .attr('font-weight', that.textAttrs['font-weight'])
-                    .attr('font-size', that.textAttrs['font-size'])
-                    .text('reset brush')
-                    .on('click', ()=> {
-                        that.mainSvg.call(that.brush.move, null);
-                    });
-
-                this.mainSvg
-                    .call(this.brush.extent([[this.globalAttrs['marginLeft'], this.globalAttrs['marginTop']],
-                        [this.globalAttrs['width'] - this.globalAttrs['marginRight'], this.globalAttrs['height'] - this.globalAttrs['marginBottom']]])
+                    .call(this.brush.extent([[this.xScale(0), this.globalAttrs['marginTop']],
+                        [this.xScale(1), this.globalAttrs['height'] - this.globalAttrs['marginBottom']]])
                         .on('end', function({selection}) {
-                            const len = that.globalAttrs['width'] - that.globalAttrs['marginRight']-that.globalAttrs['marginLeft'];
+                            that.createResetBrush();
+                            const len = that.xScale(1) - that.xScale(0);
                             let x1 = that.xSplit[0];
                             let x2 = that.xSplit[that.xSplit.length-1];
                             if (selection!==null) {
-                                x1 = that.xSplit[Math.floor((selection[0] - that.globalAttrs['marginLeft'])/len*10)]+(1e-5);
-                                x2 = that.xSplit[Math.ceil((selection[1] - that.globalAttrs['marginLeft'])/len*10)];
+                                x1 = that.xSplit[Math.floor((selection[0] - that.xScale(0))/len*that.barNum)]+(1e-5);
+                                x2 = that.xSplit[Math.ceil((selection[1] - that.xScale(0))/len*that.barNum)];
                             }
                             const query = {};
                             query[that.queryKey] = [x1, x2];
                             that.$emit('hoverBarchart', query);
                         }));
+
+                this.mainSvg
+                    .append('text')
+                    .attr('x', 20)
+                    .attr('y', this.globalAttrs['height']-3)
+                    .attr('fill', 'currentColor')
+                    .attr('font-family', that.textAttrs['font-family'])
+                    .attr('font-weight', that.textAttrs['font-weight'])
+                    .attr('font-size', that.textAttrs['font-size'])
+                    .text(this.title);
+
+                that.mainSvg
+                    .append('circle')
+                    .attr('cx', 13)
+                    .attr('cy', this.globalAttrs['height']-6)
+                    .attr('r', 2)
+                    .attr('fill', 'currentColor');
             }
             const selectDataBins = [];
             const allDataBins = [];
-            const rectWidth = 0.1;
+            const rectWidth = 1 / this.barNum;
             for (let i = 0; i < this.allData.length; ++i) {
                 selectDataBins.push({
                     'val': this.selectData[i],
@@ -214,8 +216,8 @@ export default {
                     .attr('x', (d) => that.xScale(d.x0) + that.globalAttrs['insetLeft'])
                     .attr('width', (d) => Math.max(0, that.xScale(d.x1) - that.xScale(d.x0) -
                                                       that.globalAttrs['insetLeft'] - that.globalAttrs['insetRight']))
-                    .attr('y', (d, i) => that.yScale(that.log10(Math.max(1, d.val))))
-                    .attr('height', (d, i) => that.yScale(0) - that.yScale(that.log10(Math.max(1, d.val))))
+                    .attr('y', (d, i) => that.yScale(that.cal(d.val)))
+                    .attr('height', (d, i) => that.yScale(0) - that.yScale(that.cal(d.val)))
                     .attr('fill', that.globalAttrs['unselectFill'])
                     .append('title')
                     .text((d, i) => [`${d.x0.toFixed(1)} ≤ x < ${d.x1.toFixed(1)}`, `quantity: ${d.val}`].join('\n'));
@@ -233,8 +235,8 @@ export default {
                     .attr('x', (d) => that.xScale(d.x0) + that.globalAttrs['insetLeft'])
                     .attr('width', (d) => Math.max(0, that.xScale(d.x1) - that.xScale(d.x0) -
                                                       that.globalAttrs['insetLeft'] - that.globalAttrs['insetRight']))
-                    .attr('y', (d, i) => that.yScale(that.log10(Math.max(1, d.val))))
-                    .attr('height', (d, i) => that.yScale(0) - that.yScale(that.log10(Math.max(1, d.val))))
+                    .attr('y', (d, i) => that.yScale(that.cal(d.val)))
+                    .attr('height', (d, i) => that.yScale(0) - that.yScale(that.cal(d.val)))
                     .attr('fill', 'steelblue');
 
                 if ((that.selectDataRectG.enter().size() === 0) && (that.allDataRectG.enter().size() === 0)) {
@@ -250,7 +252,8 @@ export default {
                     d3.select(this).select('rect')
                         .transition()
                         .duration(that.updateDuration)
-                        .attr('height', that.yScale(0) - that.yScale(that.log10(Math.max(1, d.val))))
+                        .attr('y', that.yScale(that.cal(d.val)))
+                        .attr('height', that.yScale(0) - that.yScale(that.cal(d.val)))
                         .on('end', resolve);
                 });
                 that.selectDataRectG.each(function(d, i) {
@@ -258,8 +261,8 @@ export default {
                     d3.select(this).select('rect')
                         .transition()
                         .duration(that.updateDuration)
-                        .attr('y', that.yScale(that.log10(Math.max(1, d.val))))
-                        .attr('height', that.yScale(0) - that.yScale(that.log10(Math.max(1, d.val))))
+                        .attr('y', that.yScale(that.cal(d.val)))
+                        .attr('height', that.yScale(0) - that.yScale(that.cal(d.val)))
                         .on('end', resolve);
                 });
 
@@ -291,8 +294,9 @@ export default {
         },
         transform: async function() {
         },
-        log10: function(d) {
-            return Math.log10(d);
+        cal: function(d) {
+            if (this.displayMode === 'log') return Math.log10(Math.max(1, d));
+            else if (this.displayMode === 'linear') return d;
         },
     },
     mounted: function() {
