@@ -2,9 +2,9 @@
     <div id="data-content">
         <div id="left-widgets">
             <div class="toolbox">
-                <div id="encoding-select">
+                <div class="mode-select">
                     <span class="select-label">Matrix Encoding</span>
-                    <el-select v-model="returnMode" @change="changeMode" size="mini">
+                    <el-select v-model="returnMode" @change="changeDataMode" size="mini">
                         <el-option
                             v-for="item in dataMode"
                             :key="item.value"
@@ -12,32 +12,36 @@
                             :value="item.value">
                         </el-option>
                     </el-select>
+                    <i v-if="gettingMatrix||gettingSizeBarchart||gettingAspectRatioBarchart" class="el-icon-loading"></i>
                 </div>
-                <i v-if="gettingMatrix||gettingSizeBarchart||gettingAspectRatioBarchart" class="el-icon-loading"></i>
+                <div class="mode-select">
+                    <span class="select-label">Display mode</span>
+                    <el-button id="log-linear-button" size="mini" @click="changeDisplayMode">{{displayMode}}</el-button>
+                </div>
             </div>
 
             <div id="scented-barcharts">
                 <scented-barchart ref="label-size-hist"
-                    :allData="labelSizeAll" :title="'gt_box_size'" queryKey="label_size" :selectData="labelSizeSelect" :xSplit="sizeSplit"
+                    :allData="labelSizeAll" :title="'GT_size'" queryKey="label_size"
+                    :selectData="labelSizeSelect" :xSplit="sizeSplit" :displayMode="displayMode"
                     @hoverBarchart="hoverBarchart"></scented-barchart>
                 <scented-barchart ref="predict-size-hist"
-                    :allData="predictSizeAll" :title="'pred_box_size'" queryKey="predict_size" :selectData="predictSizeSelect" :xSplit="sizeSplit"
+                    :allData="predictSizeAll" :title="'PR_size'" queryKey="predict_size"
+                    :selectData="predictSizeSelect" :xSplit="sizeSplit" :displayMode="displayMode"
                     @hoverBarchart="hoverBarchart"></scented-barchart>
                 <scented-barchart ref="label-aspect-ratio-hist"
-                    :allData="labelAspectRatioAll" :title="'gt_box_aspect_ratio'" queryKey="label_aspect_ratio"
-                    :selectData="labelAspectRatioSelect" :xSplit="aspectRatioSplit"
+                    :allData="labelAspectRatioAll" :title="'GT_AR'" queryKey="label_aspect_ratio"
+                    :selectData="labelAspectRatioSelect" :xSplit="aspectRatioSplit" :displayMode="displayMode"
                     @hoverBarchart="hoverBarchart"></scented-barchart>
                 <scented-barchart ref="predict-aspect_ratio-hist"
-                    :allData="predictAspectRatioAll" :title="'pred_box_aspect_ratio'" queryKey="predict_aspect_ratio"
-                    :selectData="predictAspectRatioSelect" :xSplit="aspectRatioSplit"
+                    :allData="predictAspectRatioAll" :title="'PR_AR'" queryKey="predict_aspect_ratio"
+                    :selectData="predictAspectRatioSelect" :xSplit="aspectRatioSplit" :displayMode="displayMode"
                     @hoverBarchart="hoverBarchart"></scented-barchart>
             </div>
         </div>
-        <div id="matrices-container">
-            <div id="confusion-matrix-container">
-                <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion"
-                    :showColor="true" :confusionMatrix="confusionMatrix" :returnMode="returnMode"></confusion-matrix>
-            </div>
+        <div id="confusion-matrix-container">
+            <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion"
+                :showColor="true" :confusionMatrix="confusionMatrix" :returnMode="returnMode"></confusion-matrix>
         </div>
     </div>
 </template>
@@ -47,17 +51,20 @@ import Vue from 'vue';
 import ConfusionMatrix from './ConfusionMatrix.vue';
 import ScentedBarchart from './ScentedBarchart.vue';
 import axios from 'axios';
-import {Select, Option, Icon} from 'element-ui';
+import {Select, Option, Icon, Button} from 'element-ui';
 
 Vue.use(Select);
 Vue.use(Option);
 Vue.use(Icon);
+Vue.use(Button);
 
 export default {
     components: {ConfusionMatrix, ScentedBarchart},
     name: 'DataView',
     data() {
         return {
+            displayMode: 'log',
+            barchartNum: 25,
             confusionMatrix: undefined,
             returnMode: 'count',
             dataMode: [{
@@ -107,6 +114,11 @@ export default {
         };
     },
     methods: {
+        changeDisplayMode: function() {
+            if (this.displayMode === 'log') this.displayMode = 'linear';
+            else this.displayMode = 'log';
+            document.getElementById('log-linear-button').blur();
+        },
         setConfusionMatrix: function(query) {
             this.gettingMatrix = true;
             // this.confusionMatrix = undefined;
@@ -167,7 +179,7 @@ export default {
                     that.gettingAspectRatioBarchart = false;
                 });
         },
-        changeMode: function() {
+        changeDataMode: function() {
             this.setConfusionMatrix({});
         },
         hoverConfusion: function(labelClasses, predictClasses) {
@@ -182,7 +194,7 @@ export default {
             const tmp2 = [];
             const tmp3 = [];
             const tmp4 = [];
-            for (let i = 0; i < 10; ++i) {
+            for (let i = 0; i < this.barchartNum; ++i) {
                 tmp1.push(0);
                 tmp2.push(0);
                 tmp3.push(0);
@@ -190,7 +202,7 @@ export default {
             }
             for (const i of labelClasses) {
                 for (const j of predictClasses) {
-                    for (let k = 0; k < 10; ++k) {
+                    for (let k = 0; k < this.barchartNum; ++k) {
                         tmp1[k] += this.labelSizeConfusion[i][j][k];
                         tmp2[k] += this.predictSizeConfusion[i][j][k];
                         tmp3[k] += this.labelAspectRatioConfusion[i][j][k];
@@ -207,32 +219,32 @@ export default {
             if (query===undefined) {
                 query = {};
             }
-            this.gettingSizeBarchart = true;
-            this.gettingAspectRatioBarchart = true;
             this.query = {...this.query, ...query};
             this.setConfusionMatrix(this.query);
-            const store = this.$store;
-            const that = this;
-            axios.post(store.getters.URL_GET_BOX_SIZE_DIST, query===undefined?{}:{query: this.query})
-                .then(function(response) {
-                    that.labelSizeSelect = response.data.labelSizeAll;
-                    that.predictSizeSelect = response.data.predictSizeAll;
-                    that.labelSizeConfusion = response.data.labelSizeConfusion;
-                    that.predictSizeConfusion = response.data.predictSizeConfusion;
-                    that.labelSizeSelectBuffer = response.data.labelSizeAll;
-                    that.predictSizeSelectBuffer = response.data.predictSizeAll;
-                    that.gettingSizeBarchart = false;
-                });
-            axios.post(store.getters.URL_GET_BOX_ASPECT_RATIO_DIST, query===undefined?{}:{query: this.query})
-                .then(function(response) {
-                    that.labelAspectRatioSelect = response.data.labelAspectRatioAll;
-                    that.predictAspectRatioSelect = response.data.predictAspectRatioAll;
-                    that.labelAspectRatioConfusion = response.data.labelAspectRatioConfusion;
-                    that.predictAspectRatioConfusion = response.data.predictAspectRatioConfusion;
-                    that.labelAspectRatioSelectBuffer = response.data.labelAspectRatioAll;
-                    that.predictAspectRatioSelectBuffer = response.data.predictAspectRatioAll;
-                    that.gettingAspectRatioBarchart = false;
-                });
+            // this.gettingSizeBarchart = true;
+            // this.gettingAspectRatioBarchart = true;
+            // const store = this.$store;
+            // const that = this;
+            // axios.post(store.getters.URL_GET_BOX_SIZE_DIST, query===undefined?{}:{query: this.query})
+            //     .then(function(response) {
+            //         that.labelSizeSelect = response.data.labelSizeAll;
+            //         that.predictSizeSelect = response.data.predictSizeAll;
+            //         that.labelSizeConfusion = response.data.labelSizeConfusion;
+            //         that.predictSizeConfusion = response.data.predictSizeConfusion;
+            //         that.labelSizeSelectBuffer = response.data.labelSizeAll;
+            //         that.predictSizeSelectBuffer = response.data.predictSizeAll;
+            //         that.gettingSizeBarchart = false;
+            //     });
+            // axios.post(store.getters.URL_GET_BOX_ASPECT_RATIO_DIST, query===undefined?{}:{query: this.query})
+            //     .then(function(response) {
+            //         that.labelAspectRatioSelect = response.data.labelAspectRatioAll;
+            //         that.predictAspectRatioSelect = response.data.predictAspectRatioAll;
+            //         that.labelAspectRatioConfusion = response.data.labelAspectRatioConfusion;
+            //         that.predictAspectRatioConfusion = response.data.predictAspectRatioConfusion;
+            //         that.labelAspectRatioSelectBuffer = response.data.labelAspectRatioAll;
+            //         that.predictAspectRatioSelectBuffer = response.data.predictAspectRatioAll;
+            //         that.gettingAspectRatioBarchart = false;
+            //     });
         },
     },
     mounted: function() {
@@ -247,18 +259,23 @@ export default {
 .select-label {
     font-family: Comic Sans MS;
     font-weight: normal;
-    font-size: 15px;
-    margin-right: 15px;
+    font-size: 10px;
+    margin-right: 5px;
 }
 
-#encoding-select>.el-select {
+.mode-select>.el-select {
     width: 100px;
 }
 .toolbox {
     width: 100%;
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: left;
+    flex-direction: column;
+}
+
+.mode-select {
+    margin: 2px;
 }
 
 #data-content {
@@ -268,33 +285,23 @@ export default {
     flex-direction: row;
 }
 
-#matrices-container {
-  width: 80%;
-  height: 100%;
-  display: flex;
-  margin: 10px 10px 10px 10px;
-}
 
 #confusion-matrix-container {
-    width: 100%;
-    height: 80%;
+  width: 80%;
+  height: 90%;
 }
 
 
 #left-widgets {
-    margin: 0;
-    padding: 10px;
-    width: 20%;
+    padding: 2px;
+    width: 15%;
+    display: flex;
+    flex-direction: column;
 }
 
-#scented-barcharts {
+#scented-barcharts>svg {
     width: 100%;
-    height: 20%;
-    margin: auto;
-}
-
-svg {
-    margin: 10px;
+    height: 5%;
 }
 
 </style>

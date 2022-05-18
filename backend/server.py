@@ -23,12 +23,6 @@ def confusionMatrix():
         query = request.json['query']
     return jsonify(dataCtrler.getConfusionMatrix(query))
 
-@app.route('/api/sizeMatrix', methods=["POST"])
-def sizeMatrix():
-    query = None
-    if 'query' in request.json:
-        query = request.json['query']
-    return jsonify(dataCtrler.getSizeMatrix(query))
 
 @app.route('/api/boxSizeDist', methods=["POST"])
 def boxSizeDist():
