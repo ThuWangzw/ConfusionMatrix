@@ -9,16 +9,16 @@
             </marker>
         </defs>
         <g id="main-g" transform="translate(0,0)">
-            <g id="legend-g" :transform="`translate(5,${leftCornerSize/2-25})`"></g>
-            <g id="horizon-text-g" :transform="`translate(${leftCornerSize-maxHorizonTextWidth}, ${leftCornerSize+textMatrixMargin})`">
+            <g id="legend-g" transform="translate(0,0)"></g>
+            <g id="horizon-text-g" transform="`translate(0, 0)`">
                 <text id="horizon-legend" transform="translate(0,0) scale(270)" text-anchor="middle" font-size="15" opacity="0"
                     font-family="Comic Sans MS" font-weight="normal">Ground Truth</text>
             </g>
-            <g id="vertical-text-g" :transform="`translate(${leftCornerSize+textMatrixMargin}, ${leftCornerSize}) rotate(-90)`">
+            <g id="vertical-text-g" transform="`translate(0, 0) rotate(-90)`">
                 <text id="vertical-legend" transform="translate(0,0) scale(90)" opacity="0"
                     text-anchor="middle" font-size="15" font-family="Comic Sans MS" font-weight="normal">Prediction</text>
             </g>
-            <g id="matrix-cells-g" :transform="`translate(${leftCornerSize+textMatrixMargin}, ${leftCornerSize+textMatrixMargin})`"></g>
+            <g id="matrix-cells-g" transform="`translate(0, 0)`"></g>
         </g>
     </svg>
 </template>
@@ -123,10 +123,10 @@ export default {
             return maxwidth;
         },
         legendWidth: function() {
-            return Math.max(250, this.maxHorizonTextWidth);
+            return Math.min(250, this.matrixWidth);
         },
         leftCornerSize: function() {
-            return this.legendWidth;
+            return this.maxHorizonTextWidth;
         },
         colorScale: function() {
             if (this.returnMode==='count') {
@@ -814,6 +814,23 @@ export default {
                 that.mainG.transition()
                     .duration(that.transformDuration)
                     .attr('transform', `translate(${shiftx} ${shifty}) scale(${scale})`)
+                    .on('end', resolve);
+                that.horizonTextG.transition()
+                    .duration(that.transformDuration)
+                    .attr('transform', `translate(${that.leftCornerSize-that.maxHorizonTextWidth}, ${that.leftCornerSize+that.textMatrixMargin})`)
+                    .on('end', resolve);
+                that.verticalTextG.transition()
+                    .duration(that.transformDuration)
+                    .attr('transform', `translate(${that.leftCornerSize+that.textMatrixMargin}, ${that.leftCornerSize}) rotate(-90)`)
+                    .on('end', resolve);
+                that.matrixCellsG.transition()
+                    .duration(that.transformDuration)
+                    .attr('transform', `translate(${that.leftCornerSize+that.textMatrixMargin}, ${that.leftCornerSize+that.textMatrixMargin})`)
+                    .on('end', resolve);
+                that.legendG.transition()
+                    .duration(that.transformDuration)
+                    .attr('transform', `translate(${that.leftCornerSize+that.textMatrixMargin},
+                        ${that.leftCornerSize+that.textMatrixMargin+that.matrixWidth+5})`)
                     .on('end', resolve);
             });
         },

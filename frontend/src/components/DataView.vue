@@ -43,9 +43,11 @@
                     @hoverBarchart="hoverBarchart"></scented-barchart>
             </div>
         </div>
-        <div id="confusion-matrix-container">
-            <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion" :showDirection="showDirection"
-                :showColor="true" :confusionMatrix="confusionMatrix" :returnMode="returnMode"></confusion-matrix>
+        <div id="matrices-container">
+            <div id="confusion-matrix-container">
+                <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion"
+                    :showColor="false" :confusionMatrix="confusionMatrix" :returnMode="returnMode"></confusion-matrix>
+            </div>
         </div>
     </div>
 </template>
@@ -296,10 +298,16 @@ export default {
     flex-direction: row;
 }
 
+#matrices-container {
+  width: 80%;
+  height: 100%;
+  display: flex;
+  margin: 0 10px 0 10px;
+}
 
 #confusion-matrix-container {
-  width: 80%;
-  height: 90%;
+    width: 100%;
+    height: 100%;
 }
 
 
