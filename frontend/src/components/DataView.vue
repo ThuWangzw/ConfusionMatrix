@@ -15,32 +15,36 @@
                     <i v-if="gettingMatrix||gettingSizeBarchart||gettingAspectRatioBarchart" class="el-icon-loading"></i>
                 </div>
                 <div class="mode-select">
-                    <span class="select-label">Display mode</span>
+                    <span class="select-label">Display Mode</span>
                     <el-button id="log-linear-button" size="mini" @click="changeDisplayMode">{{displayMode}}</el-button>
+                </div>
+                <div class="mode-select">
+                    <span class="select-label">Show Direction</span>
+                    <el-button id="direction-button" size="mini" @click="changeShowDirection">{{showDirection}}</el-button>
                 </div>
             </div>
 
             <div id="scented-barcharts">
-                <scented-barchart ref="label-size-hist"
+                <scented-barchart ref="label-size-hist" :barNum="barNum"
                     :allData="labelSizeAll" :title="'GT_size'" queryKey="label_size"
                     :selectData="labelSizeSelect" :xSplit="sizeSplit" :displayMode="displayMode"
                     @hoverBarchart="hoverBarchart"></scented-barchart>
-                <scented-barchart ref="predict-size-hist"
+                <scented-barchart ref="predict-size-hist" :barNum="barNum"
                     :allData="predictSizeAll" :title="'PR_size'" queryKey="predict_size"
                     :selectData="predictSizeSelect" :xSplit="sizeSplit" :displayMode="displayMode"
                     @hoverBarchart="hoverBarchart"></scented-barchart>
-                <scented-barchart ref="label-aspect-ratio-hist"
+                <scented-barchart ref="label-aspect-ratio-hist" :barNum="barNum"
                     :allData="labelAspectRatioAll" :title="'GT_AR'" queryKey="label_aspect_ratio"
                     :selectData="labelAspectRatioSelect" :xSplit="aspectRatioSplit" :displayMode="displayMode"
                     @hoverBarchart="hoverBarchart"></scented-barchart>
-                <scented-barchart ref="predict-aspect_ratio-hist"
+                <scented-barchart ref="predict-aspect_ratio-hist" :barNum="barNum"
                     :allData="predictAspectRatioAll" :title="'PR_AR'" queryKey="predict_aspect_ratio"
                     :selectData="predictAspectRatioSelect" :xSplit="aspectRatioSplit" :displayMode="displayMode"
                     @hoverBarchart="hoverBarchart"></scented-barchart>
             </div>
         </div>
         <div id="confusion-matrix-container">
-            <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion"
+            <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion" :showDirection="showDirection"
                 :showColor="true" :confusionMatrix="confusionMatrix" :returnMode="returnMode"></confusion-matrix>
         </div>
     </div>
@@ -64,8 +68,9 @@ export default {
     data() {
         return {
             displayMode: 'log',
-            barchartNum: 25,
+            barNum: 25,
             confusionMatrix: undefined,
+            showDirection: false,
             returnMode: 'count',
             dataMode: [{
                 value: 'count',
@@ -119,18 +124,20 @@ export default {
             else this.displayMode = 'log';
             document.getElementById('log-linear-button').blur();
         },
+        changeShowDirection: function() {
+            this.showDirection = !this.showDirection;
+            document.getElementById('direction-button').blur();
+        },
         setConfusionMatrix: function(query) {
             this.gettingMatrix = true;
             // this.confusionMatrix = undefined;
             if (query===undefined) {
                 query = {};
             }
-            if (this.returnMode!=='count') {
-                query['return'] = ['count', this.returnMode];
-            } else {
-                query['return'] = ['count'];
-            }
-            // this.query = query;
+            const returnList = ['count'];
+            if (this.returnMode!=='count') returnList.push(this.returnMode);
+            returnList.push('direction');
+            query['return'] = returnList;
             const store = this.$store;
             const that = this;
             axios.post(store.getters.URL_GET_CONFUSION_MATRIX, query===undefined?{}:{query: query})
@@ -180,7 +187,7 @@ export default {
                 });
         },
         changeDataMode: function() {
-            this.setConfusionMatrix({});
+            this.setConfusionMatrix();
         },
         hoverConfusion: function(labelClasses, predictClasses) {
             if (labelClasses === undefined) {
@@ -194,7 +201,7 @@ export default {
             const tmp2 = [];
             const tmp3 = [];
             const tmp4 = [];
-            for (let i = 0; i < this.barchartNum; ++i) {
+            for (let i = 0; i < this.barNum; ++i) {
                 tmp1.push(0);
                 tmp2.push(0);
                 tmp3.push(0);
@@ -202,7 +209,7 @@ export default {
             }
             for (const i of labelClasses) {
                 for (const j of predictClasses) {
-                    for (let k = 0; k < this.barchartNum; ++k) {
+                    for (let k = 0; k < this.barNum; ++k) {
                         tmp1[k] += this.labelSizeConfusion[i][j][k];
                         tmp2[k] += this.predictSizeConfusion[i][j][k];
                         tmp3[k] += this.labelAspectRatioConfusion[i][j][k];
@@ -221,30 +228,30 @@ export default {
             }
             this.query = {...this.query, ...query};
             this.setConfusionMatrix(this.query);
-            // this.gettingSizeBarchart = true;
-            // this.gettingAspectRatioBarchart = true;
-            // const store = this.$store;
-            // const that = this;
-            // axios.post(store.getters.URL_GET_BOX_SIZE_DIST, query===undefined?{}:{query: this.query})
-            //     .then(function(response) {
-            //         that.labelSizeSelect = response.data.labelSizeAll;
-            //         that.predictSizeSelect = response.data.predictSizeAll;
-            //         that.labelSizeConfusion = response.data.labelSizeConfusion;
-            //         that.predictSizeConfusion = response.data.predictSizeConfusion;
-            //         that.labelSizeSelectBuffer = response.data.labelSizeAll;
-            //         that.predictSizeSelectBuffer = response.data.predictSizeAll;
-            //         that.gettingSizeBarchart = false;
-            //     });
-            // axios.post(store.getters.URL_GET_BOX_ASPECT_RATIO_DIST, query===undefined?{}:{query: this.query})
-            //     .then(function(response) {
-            //         that.labelAspectRatioSelect = response.data.labelAspectRatioAll;
-            //         that.predictAspectRatioSelect = response.data.predictAspectRatioAll;
-            //         that.labelAspectRatioConfusion = response.data.labelAspectRatioConfusion;
-            //         that.predictAspectRatioConfusion = response.data.predictAspectRatioConfusion;
-            //         that.labelAspectRatioSelectBuffer = response.data.labelAspectRatioAll;
-            //         that.predictAspectRatioSelectBuffer = response.data.predictAspectRatioAll;
-            //         that.gettingAspectRatioBarchart = false;
-            //     });
+            this.gettingSizeBarchart = true;
+            this.gettingAspectRatioBarchart = true;
+            const store = this.$store;
+            const that = this;
+            axios.post(store.getters.URL_GET_BOX_SIZE_DIST, query===undefined?{}:{query: this.query})
+                .then(function(response) {
+                    that.labelSizeSelect = response.data.labelSizeAll;
+                    that.predictSizeSelect = response.data.predictSizeAll;
+                    that.labelSizeConfusion = response.data.labelSizeConfusion;
+                    that.predictSizeConfusion = response.data.predictSizeConfusion;
+                    that.labelSizeSelectBuffer = response.data.labelSizeAll;
+                    that.predictSizeSelectBuffer = response.data.predictSizeAll;
+                    that.gettingSizeBarchart = false;
+                });
+            axios.post(store.getters.URL_GET_BOX_ASPECT_RATIO_DIST, query===undefined?{}:{query: this.query})
+                .then(function(response) {
+                    that.labelAspectRatioSelect = response.data.labelAspectRatioAll;
+                    that.predictAspectRatioSelect = response.data.predictAspectRatioAll;
+                    that.labelAspectRatioConfusion = response.data.labelAspectRatioConfusion;
+                    that.predictAspectRatioConfusion = response.data.predictAspectRatioConfusion;
+                    that.labelAspectRatioSelectBuffer = response.data.labelAspectRatioAll;
+                    that.predictAspectRatioSelectBuffer = response.data.predictAspectRatioAll;
+                    that.gettingAspectRatioBarchart = false;
+                });
         },
     },
     mounted: function() {
@@ -260,7 +267,11 @@ export default {
     font-family: Comic Sans MS;
     font-weight: normal;
     font-size: 10px;
-    margin-right: 5px;
+    /* margin-right: 5px; */
+    display: block;
+    float: left;
+    width: 100px;
+    line-height: 28px;
 }
 
 .mode-select>.el-select {

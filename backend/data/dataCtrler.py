@@ -7,7 +7,7 @@ import pickle
 import torch
 import math
 
-from fisher import get_split_pos
+from data.fisher import get_split_pos
 
 class DataCtrler(object):
 
@@ -315,13 +315,13 @@ class DataCtrler(object):
             stat_matrix = np.zeros((len(matrix), len(matrix[0])), dtype=np.float64).tolist()
             for i in range(len(stat_matrix)):
                 for j in range(len(stat_matrix[0])):
-                    if len(matrix[i][j]) == 0:
+                    if statistics_mode != 'direction' and len(matrix[i][j]) == 0:
                         continue
-                    if i==len(stat_matrix)-1 or j==len(stat_matrix[0])-1:
+                    if statistics_mode == 'direction' and (i == len(stat_matrix)-1 or j == len(stat_matrix[0])-1):
                         stat_matrix[i][j] = [0 for _ in range(9)]
                     else:
                         stat_matrix[i][j] = map_func(matrix[i][j])
-            ret_matrixes.append(stat_matrix)
+            ret_matrixes.append(np.array(stat_matrix).tolist())
         return ret_matrixes
 
     def getConfusionMatrix(self, query = None):

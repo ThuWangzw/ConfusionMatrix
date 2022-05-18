@@ -1,5 +1,13 @@
 <template>
     <svg id="confusion-svg" width="100%" height="100%" ref="svg">
+        <defs>
+            <!-- arrowhead marker definition -->
+            <marker id="arrow" viewBox="0 0 4 4" refX="2" refY="2"
+                markerWidth="3" markerHeight="3"
+                orient="auto-start-reverse">
+            <path d="M 0 0 L 4 2 L 0 4 z" />
+            </marker>
+        </defs>
         <g id="main-g" transform="translate(0,0)">
             <g id="legend-g" :transform="`translate(5,${leftCornerSize/2-25})`"></g>
             <g id="horizon-text-g" :transform="`translate(${leftCornerSize-maxHorizonTextWidth}, ${leftCornerSize+textMatrixMargin})`">
@@ -38,6 +46,10 @@ export default {
         returnMode: {
             type: String,
             default: 'count',
+        },
+        showDirection: {
+            type: Boolean,
+            default: false,
         },
     },
     computed: {
@@ -144,6 +156,9 @@ export default {
         confusionMatrix: function() {
             this.getDataAndRender();
         },
+        showDirection: function() {
+            this.getDataAndRender();
+        },
     },
     data: function() {
         return {
@@ -195,6 +210,7 @@ export default {
                 'font-weight': 'normal',
                 'font-size': 15,
                 'cursor': 'pointer',
+                'direction-color': 'currentColor',
             },
             legendExist: false,
             // buffer
@@ -262,7 +278,7 @@ export default {
                     const nodeb = this.showNodes[j];
                     const cell = {
                         key: nodea.name+','+nodeb.name,
-                        value: this.getTwoCellConfusion(nodea, nodeb),
+                        info: this.getTwoCellConfusion(nodea, nodeb),
                         row: i,
                         column: j,
                         rowNode: nodea,
@@ -270,7 +286,7 @@ export default {
                     };
                     this.cells.push(cell);
                     if (!this.isHideCell(cell) && (i!=j || this.returnMode!=='count') && i!==this.showNodes.length-1 && j!==this.showNodes.length-1) {
-                        this.maxCellValue = Math.max(this.maxCellValue, cell.value[cell.value.length-1]);
+                        this.maxCellValue = Math.max(this.maxCellValue, cell.info.val);
                     }
                 }
             }
@@ -463,27 +479,14 @@ export default {
                     .append('g')
                     .attr('class', that.cellAttrs['gClass'])
                     .attr('opacity', 0)
-                    .attr('cursor', that.cellAttrs['cursor'])
+                    .attr('cursor', (d)=>that.isHideCell(d)?'default':that.cellAttrs['cursor'])
                     .attr('transform', (d) => `translate(${d.column*that.cellAttrs['size']}, 
                         ${d.row*that.cellAttrs['size']})`)
                     .on('click', function(e, d) {
                         return;
-                        // if (d.value[0] === 0) return;
-                        // const labelTarget = [];
-                        // const predictTarget = [];
-                        // for (const name of d.rowNode.leafs) {
-                        //     let idx = that.name2index[name];
-                        //     if (idx === that.indexNames.length-1) idx = -1;
-                        //     labelTarget.push(idx);
-                        // }
-                        // for (const name of d.colNode.leafs) {
-                        //     let idx = that.name2index[name];
-                        //     if (idx === that.indexNames.length-1) idx = -1;
-                        //     predictTarget.push(idx);
-                        // }
                     })
                     .on('mouseover', function(e, d) {
-                        // if (d.value[0] === 0) return;
+                        if (that.isHideCell(d)) return;
                         const labelTarget = [];
                         const predictTarget = [];
                         for (const name of d.rowNode.leafs) {
@@ -510,25 +513,56 @@ export default {
                     .attr('height', that.cellAttrs['size'])
                     .attr('stroke', that.cellAttrs['stroke'])
                     .attr('stroke-width', that.cellAttrs['stroke-width'])
-                    .attr('fill', (d)=>d.value[0]===0?'rgb(255,255,255)':that.colorScale(d.value[d.value.length-1]));
+                    .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val));
 
-                matrixCellsinG.filter((d) => d.value[0]===0)
+
+                // matrixCellsinG.filter((d) => d.info.val>0)
+                //     .append('text')
+                //     .attr('x', that.cellAttrs['size']/2)
+                //     .attr('y', (that.cellAttrs['size']+that.cellAttrs['font-size'])/2)
+                //     .attr('text-anchor', 'middle')
+                //     .attr('font-size', that.cellAttrs['font-size'])
+                //     .attr('font-weight', that.cellAttrs['font-weight'])
+                //     .attr('font-family', that.cellAttrs['font-family'])
+                //     .attr('opacity', 0)
+                //     .attr('fill', that.cellAttrs['text-fill'])
+                //     .text((d) => d.info.val);
+
+                matrixCellsinG.append('circle')
+                    .attr('cx', that.cellAttrs['size']/2)
+                    .attr('cy', that.cellAttrs['size']/2)
+                    .attr('r', that.cellAttrs['size']/12)
+                    .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.cellAttrs['direction-color'])
+                    .attr('opacity', (d)=>d.info.direction===undefined?0:d.info.direction[8]/Math.max(1, d3.max(d.info.direction)));
+
+                for (let i = 0; i < 8; ++i) {
+                    matrixCellsinG.filter((d) => d.info.count>0)
+                        .append('polyline')
+                        .attr('class', 'dir-'+i)
+                        .attr('points', `${that.cellAttrs['size']/3},${that.cellAttrs['size']/2}
+                                         ${that.cellAttrs['size']/6},${that.cellAttrs['size']/2}`)
+                        .attr('fill', 'none')
+                        .attr('stroke', 'currentColor')
+                        .attr('marker-end', 'url(#arrow)')
+                        .attr('opacity', (d)=>d.info.direction===undefined?0:d.info.direction[i]/Math.max(1, d3.max(d.info.direction)))
+                        .attr('transform', `rotate(${i*45} ${that.cellAttrs['size']/2} ${that.cellAttrs['size']/2})`);
+                }
+
+
+                matrixCellsinG.filter((d) => d.info.count===0)
                     .append('path')
                     .attr('d', `M ${that.cellAttrs['size']*0.25} ${that.cellAttrs['size']*0.25} 
                         L ${that.cellAttrs['size']*0.75} ${that.cellAttrs['size']*0.75}`)
                     .attr('stroke', that.cellAttrs['slash-text-stroke']);
 
-                matrixCellsinG.filter((d) => d.value[d.value.length-1]>0)
-                    .append('text')
-                    .attr('x', that.cellAttrs['size']/2)
-                    .attr('y', (that.cellAttrs['size']+that.cellAttrs['font-size'])/2)
-                    .attr('text-anchor', 'middle')
-                    .attr('font-size', that.cellAttrs['font-size'])
-                    .attr('font-weight', that.cellAttrs['font-weight'])
-                    .attr('font-family', that.cellAttrs['font-family'])
-                    .attr('opacity', 0)
-                    .attr('fill', that.cellAttrs['text-fill'])
-                    .text((d) => d.value[d.value.length-1]);
+                if (!that.showDirection) {
+                    matrixCellsinG.select('circle')
+                        .attr('fill-opacity', 0);
+                } else {
+                    matrixCellsinG.select('rect')
+                        .attr('fill-opacity', 0);
+                }
+
 
                 // show matrix legend text
                 if (that.horizonLegend.attr('opacity')==0) {
@@ -665,14 +699,56 @@ export default {
                         ${d.row*that.cellAttrs['size']})`)
                     .on('end', resolve);
 
-                that.matrixCellsinG.each(function(d) {
-                    // eslint-disable-next-line no-invalid-this
-                    d3.select(this).select('rect')
-                        .transition()
-                        .duration(that.updateDuration)
-                        .attr('fill', (d)=>d.value[0]===0?'rgb(255,255,255)':that.colorScale(d.value[d.value.length-1]))
-                        .on('end', resolve);
-                });
+                if (!that.showDirection) {
+                    that.matrixCellsinG.each(function(d) {
+                        // eslint-disable-next-line no-invalid-this
+                        d3.select(this).select('rect')
+                            .transition()
+                            .duration(that.updateDuration)
+                            .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val))
+                            .attr('fill-opacity', 1)
+                            .on('end', resolve);
+                        // eslint-disable-next-line no-invalid-this
+                        d3.select(this).select('circle')
+                            .transition()
+                            .duration(that.updateDuration)
+                            .attr('fill-opacity', 0)
+                            .on('end', resolve);
+                        for (let i = 0; i < 8; ++i) {
+                            // eslint-disable-next-line no-invalid-this
+                            d3.select(this).select('.dir-'+i)
+                                .transition()
+                                .duration(that.updateDuration)
+                                .attr('opacity', 0)
+                                .on('end', resolve);
+                        }
+                    });
+                } else {
+                    that.matrixCellsinG.each(function(d) {
+                        // eslint-disable-next-line no-invalid-this
+                        d3.select(this).select('rect')
+                            .transition()
+                            .duration(that.updateDuration)
+                            .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val))
+                            .attr('fill-opacity', 0)
+                            .on('end', resolve);
+                        // eslint-disable-next-line no-invalid-this
+                        d3.select(this).select('circle')
+                            .transition()
+                            .duration(that.updateDuration)
+                            .attr('opacity', (d)=>d.info.direction[8]/Math.max(1, d3.max(d.info.direction)))
+                            .attr('fill-opacity', 1)
+                            .on('end', resolve);
+                        for (let i = 0; i < 8; ++i) {
+                            // eslint-disable-next-line no-invalid-this
+                            d3.select(this).select('.dir-'+i)
+                                .transition()
+                                .duration(that.updateDuration)
+                                .attr('opacity', (d)=>d.info.direction[i]/Math.max(1, d3.max(d.info.direction)))
+                                .on('end', resolve);
+                        }
+                    });
+                }
 
                 if ((that.horizonTextinG.size() === 0) && (that.verticalTextinG.size() === 0) &&
                     (that.matrixCellsinG.size() === 0)) {
@@ -734,32 +810,31 @@ export default {
             });
         },
         getTwoCellConfusion: function(nodea, nodeb) {
-            const cnt = [];
-            const sum = [];
-            for (let i=0; i<this.baseMatrix.length; i++) {
-                cnt.push(0);
-                sum.push(0);
-                for (const leafa of nodea.leafs) {
-                    for (const leafb of nodeb.leafs) {
-                        if (i===0) {
-                            cnt[i] = 1;
-                            sum[i] += this.baseMatrix[0][this.name2index[leafa]][this.name2index[leafb]];
-                        } else {
-                            cnt[i] += this.baseMatrix[0][this.name2index[leafa]][this.name2index[leafb]];
-                            sum[i] += this.baseMatrix[1][this.name2index[leafa]][this.name2index[leafb]]*
-                                this.baseMatrix[0][this.name2index[leafa]][this.name2index[leafb]];
+            const infoMap = {
+                'count': 0,
+                'val': 0,
+            };
+            if (this.showDirection) {
+                infoMap['direction'] = [];
+                for (let i = 0; i < 9; ++i) infoMap['direction'].push(0);
+            }
+            for (const leafa of nodea.leafs) {
+                for (const leafb of nodeb.leafs) {
+                    infoMap.count += this.baseMatrix[0][this.name2index[leafa]][this.name2index[leafb]];
+                    if (this.returnMode !== 'count') {
+                        infoMap.val += this.baseMatrix[1][this.name2index[leafa]][this.name2index[leafb]]*
+                                       this.baseMatrix[0][this.name2index[leafa]][this.name2index[leafb]];
+                    }
+                    if (this.showDirection) {
+                        for (let i = 0; i < 9; ++i) {
+                            infoMap.direction[i] += this.baseMatrix[this.baseMatrix.length-1][this.name2index[leafa]][this.name2index[leafb]][i];
                         }
                     }
                 }
             }
-            for (let i=0; i<this.baseMatrix.length; i++) {
-                if (cnt[i]===0) {
-                    sum[i]=0;
-                } else {
-                    sum[i] /= cnt[i];
-                }
-            }
-            return sum;
+            if (this.returnMode === 'count') infoMap.val = infoMap.count;
+            else infoMap.val /= infoMap.count;
+            return infoMap;
         },
         drawLegend: function() {
             const that = this;

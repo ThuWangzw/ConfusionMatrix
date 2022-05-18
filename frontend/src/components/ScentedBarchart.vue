@@ -37,6 +37,10 @@ export default {
             type: String,
             default: 'log',
         },
+        barNum: {
+            type: Number,
+            default: 10,
+        },
     },
     computed: {
         widgetId: function() {
@@ -141,16 +145,16 @@ export default {
                     .attr('id', 'select-data-g');
 
                 this.mainSvg
-                    .call(this.brush.extent([[this.globalAttrs['marginLeft'], this.globalAttrs['marginTop']],
-                        [this.globalAttrs['width'] - this.globalAttrs['marginRight'], this.globalAttrs['height'] - this.globalAttrs['marginBottom']]])
+                    .call(this.brush.extent([[this.xScale(0), this.globalAttrs['marginTop']],
+                        [this.xScale(1), this.globalAttrs['height'] - this.globalAttrs['marginBottom']]])
                         .on('end', function({selection}) {
                             that.createResetBrush();
-                            const len = that.globalAttrs['width'] - that.globalAttrs['marginRight']-that.globalAttrs['marginLeft'];
+                            const len = that.xScale(1) - that.xScale(0);
                             let x1 = that.xSplit[0];
                             let x2 = that.xSplit[that.xSplit.length-1];
                             if (selection!==null) {
-                                x1 = that.xSplit[Math.floor((selection[0] - that.globalAttrs['marginLeft'])/len*10)]+(1e-5);
-                                x2 = that.xSplit[Math.ceil((selection[1] - that.globalAttrs['marginLeft'])/len*10)];
+                                x1 = that.xSplit[Math.floor((selection[0] - that.xScale(0))/len*that.barNum)]+(1e-5);
+                                x2 = that.xSplit[Math.ceil((selection[1] - that.xScale(0))/len*that.barNum)];
                             }
                             const query = {};
                             query[that.queryKey] = [x1, x2];
@@ -176,7 +180,7 @@ export default {
             }
             const selectDataBins = [];
             const allDataBins = [];
-            const rectWidth = 0.04;
+            const rectWidth = 1 / this.barNum;
             for (let i = 0; i < this.allData.length; ++i) {
                 selectDataBins.push({
                     'val': this.selectData[i],
