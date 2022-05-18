@@ -5,8 +5,9 @@ import numpy as np
 # import data.reorder as reorder
 import pickle
 import torch
+import math
 
-from data.fisher import get_split_pos
+from fisher import get_split_pos
 
 class DataCtrler(object):
 
@@ -163,7 +164,21 @@ class DataCtrler(object):
             self.box_aspect_ratio_dist_map = self.getBoxAspectRatioDistribution()
             with open(self.box_aspect_ratio_dist_path, 'wb') as f:
                 pickle.dump(self.box_aspect_ratio_dist_map, f)
-        ## TODO init direction
+        ## direction
+        directionIdxes = np.where(np.logical_and(self.predict_label_pairs[:,0]>-1, self.predict_label_pairs[:,1]>-1))
+        directionVectors = self.raw_predicts[self.predict_label_pairs[directionIdxes][:,0]][:,[2,3]] - self.raw_labels[self.predict_label_pairs[directionIdxes][:,1]][:,[1,2]]
+        directionNorm = np.sqrt(np.power(directionVectors[:,0], 2)+ np.power(directionVectors[:,1], 2))
+        directionCos = directionVectors[:,0]/directionNorm
+        directions = np.zeros(directionCos.shape[0], dtype=np.int32)
+        directionSplits = np.array([math.cos(angle/180*math.pi) for angle in [180, 157.5, 112.5, 67.5, 22.5, 0]])
+        for i in range(2,len(directionSplits)):
+            directions[np.logical_and(directionCos>directionSplits[i-1], directionCos<=directionSplits[i])] = i-1
+        negaYs = np.logical_and(directionVectors[:,1]<0, directions!=0)
+        directions[negaYs] = 8-directions[negaYs]
+        directions[directionNorm<0.05] = 8
+        self.directions = -1*np.ones(self.predict_label_pairs.shape[0], dtype=np.int32)
+        self.directions[directionIdxes] = directions
+        
         
     def getMetaData(self):
         return {
@@ -290,19 +305,23 @@ class DataCtrler(object):
                             (self.raw_predicts[self.predict_label_pairs[x,0], 0]==self.raw_labels[self.predict_label_pairs[x,1], 0]).mean(),
             'avg_label_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],1]==-1 else self.label_aspect_ratio[self.predict_label_pairs[x, 1]].mean(),
             'avg_predict_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],0]==-1 else self.predict_aspect_ratio[self.predict_label_pairs[x, 0]].mean(),
+            'direction': lambda x: [int(np.count_nonzero(self.directions[x]==i)) for i in range(9)]
         }
         ret_matrixes = []
         for statistics_mode in statistics_modes:
             if statistics_mode not in function_map:
                 raise NotImplementedError()
             map_func = function_map[statistics_mode]
-            stat_matrix = np.zeros((len(matrix), len(matrix[0])), dtype=np.float64)
-            for i in range(stat_matrix.shape[0]):
-                for j in range(stat_matrix.shape[1]):
+            stat_matrix = np.zeros((len(matrix), len(matrix[0])), dtype=np.float64).tolist()
+            for i in range(len(stat_matrix)):
+                for j in range(len(stat_matrix[0])):
                     if len(matrix[i][j]) == 0:
                         continue
-                    stat_matrix[i, j] = map_func(matrix[i][j])
-            ret_matrixes.append(stat_matrix.tolist())
+                    if i==len(stat_matrix)-1 or j==len(stat_matrix[0])-1:
+                        stat_matrix[i][j] = [0 for _ in range(9)]
+                    else:
+                        stat_matrix[i][j] = map_func(matrix[i][j])
+            ret_matrixes.append(stat_matrix)
         return ret_matrixes
 
     def getConfusionMatrix(self, query = None):
@@ -471,16 +490,14 @@ dataCtrler = DataCtrler()
 
 if __name__ == "__main__":
     dataCtrler.process("/data/zhaowei/ConfusionMatrix//datasets/coco/", "/data/zhaowei/ConfusionMatrix/backend/buffer/")
-    for rt_type in ['count','avg_label_size','avg_predict_size','avg_iou','avg_acc','avg_label_aspect_ratio','avg_predict_aspect_ratio']:
-        matrix = dataCtrler.getBoxSizeDistribution({
-            "label_size": [0,1],
-            "predict_size": [0,1],
-            "label_aspect_ratio": [0,1],
-            "predict_aspect_ratio": [0,1],
-            "direction": [0,1,2,3,4,5,6,7,8],
-            "label": np.arange(80),
-            "predict": np.arange(80),
-            "return": [rt_type],
-            "split": 10
-        })
-        print(rt_type, matrix)
+    matrix = dataCtrler.getConfusionMatrix({
+        "label_size": [0,1],
+        "predict_size": [0,1],
+        "label_aspect_ratio": [0,1],
+        "predict_aspect_ratio": [0,1],
+        "direction": [0,1,2,3,4,5,6,7,8],
+        "label": np.arange(80),
+        "predict": np.arange(80),
+        "return": ['count', 'direction'],
+        "split": 10
+    })
