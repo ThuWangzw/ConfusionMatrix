@@ -548,12 +548,11 @@ export default {
                         .attr('transform', `rotate(${i*45} ${that.cellAttrs['size']/2} ${that.cellAttrs['size']/2})`);
                 }
 
-
-                matrixCellsinG.filter((d) => d.info.count===0)
-                    .append('path')
+                matrixCellsinG.append('path')
                     .attr('d', `M ${that.cellAttrs['size']*0.25} ${that.cellAttrs['size']*0.25} 
                         L ${that.cellAttrs['size']*0.75} ${that.cellAttrs['size']*0.75}`)
-                    .attr('stroke', that.cellAttrs['slash-text-stroke']);
+                    .attr('stroke', that.cellAttrs['slash-text-stroke'])
+                    .attr('opacity', (d)=>d.info.count===0?1:0);
 
                 if (!that.showDirection) {
                     matrixCellsinG.select('circle')
@@ -698,6 +697,15 @@ export default {
                     .attr('transform', (d) => `translate(${d.column*that.cellAttrs['size']}, 
                         ${d.row*that.cellAttrs['size']})`)
                     .on('end', resolve);
+
+                that.matrixCellsinG.each(function(d) {
+                    // eslint-disable-next-line no-invalid-this
+                    d3.select(this).select('path')
+                        .transition()
+                        .duration(that.updateDuration)
+                        .attr('opacity', (d)=>d.info.count===0?1:0)
+                        .on('end', resolve);
+                });
 
                 if (!that.showDirection) {
                     that.matrixCellsinG.each(function(d) {
