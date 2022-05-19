@@ -99,4 +99,15 @@ html, body, #app {
 .router-link {
   text-decoration: none;
 }
+
+.toolbar-title {
+  height: 18px;
+  font-size: 15px;
+  font-family: "Roboto", "Helvetica", "Arial", sans-serif;
+  font-weight: 600;
+  background: rgb(238, 238, 238);
+  color: rgb(120, 120, 120);
+  border-radius: 5px;
+  padding-left: 10px;
+}
 </style>

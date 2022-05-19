@@ -1,49 +1,64 @@
 <template>
     <div id="data-content">
         <div id="left-widgets">
-            <div class="toolbox">
-                <div class="mode-select">
-                    <span class="select-label">Matrix Encoding</span>
-                    <el-select v-model="returnMode" @change="changeDataMode" size="mini">
-                        <el-option
-                            v-for="item in dataMode"
-                            :key="item.value"
-                            :label="item.value"
-                            :value="item.value">
-                        </el-option>
-                    </el-select>
-                    <i v-if="gettingMatrix||gettingSizeBarchart||gettingAspectRatioBarchart" class="el-icon-loading"></i>
-                </div>
-                <div class="mode-select">
-                    <span class="select-label">Display Mode</span>
-                    <el-button id="log-linear-button" size="mini" @click="changeDisplayMode">{{displayMode}}</el-button>
-                </div>
-                <div class="mode-select">
-                    <span class="select-label">Show Direction</span>
-                    <el-button id="direction-button" size="mini" @click="changeShowDirection">{{showDirection}}</el-button>
+            <div id="toolbox-container">
+                <div class="toolbar-title">Settings</div>
+                <div class="toolbox">
+                    <div class="mode-select">
+                        <span class="select-label">Matrix Encoding</span>
+                        <el-select v-model="returnMode" @change="changeDataMode" size="mini">
+                            <el-option
+                                v-for="item in dataMode"
+                                :key="item.value"
+                                :label="item.value"
+                                :value="item.value">
+                            </el-option>
+                        </el-select>
+                        <i v-if="gettingMatrix||gettingSizeBarchart||gettingAspectRatioBarchart" class="el-icon-loading"></i>
+                    </div>
+                    <div class="mode-select">
+                        <span class="select-label">Display Mode</span>
+                        <el-button id="log-linear-button" size="mini" @click="changeDisplayMode">{{displayMode}}</el-button>
+                    </div>
+                    <div class="mode-select">
+                        <span class="select-label">Show Direction</span>
+                        <el-button id="direction-button" size="mini" @click="changeShowDirection">{{showDirection}}</el-button>
+                    </div>
                 </div>
             </div>
 
-            <div id="scented-barcharts">
-                <scented-barchart ref="label-size-hist" :barNum="barNum"
-                    :allData="labelSizeAll" :title="'GT_size'" queryKey="label_size"
-                    :selectData="labelSizeSelect" :xSplit="sizeSplit" :displayMode="displayMode"
-                    @hoverBarchart="hoverBarchart"></scented-barchart>
-                <scented-barchart ref="predict-size-hist" :barNum="barNum"
-                    :allData="predictSizeAll" :title="'PR_size'" queryKey="predict_size"
-                    :selectData="predictSizeSelect" :xSplit="sizeSplit" :displayMode="displayMode"
-                    @hoverBarchart="hoverBarchart"></scented-barchart>
-                <scented-barchart ref="label-aspect-ratio-hist" :barNum="barNum"
-                    :allData="labelAspectRatioAll" :title="'GT_AR'" queryKey="label_aspect_ratio"
-                    :selectData="labelAspectRatioSelect" :xSplit="aspectRatioSplit" :displayMode="displayMode"
-                    @hoverBarchart="hoverBarchart"></scented-barchart>
-                <scented-barchart ref="predict-aspect_ratio-hist" :barNum="barNum"
-                    :allData="predictAspectRatioAll" :title="'PR_AR'" queryKey="predict_aspect_ratio"
-                    :selectData="predictAspectRatioSelect" :xSplit="aspectRatioSplit" :displayMode="displayMode"
-                    @hoverBarchart="hoverBarchart"></scented-barchart>
+            <div id="barcharts-container">
+                <div class="toolbar-title">Filters</div>
+                <div id="scented-barcharts">
+                    <scented-barchart ref="label-size-hist" :barNum="barNum"
+                        :allData="labelSizeAll" :title="'GT_size'" queryKey="label_size"
+                        :selectData="labelSizeSelect" :xSplit="sizeSplit" :displayMode="displayMode"
+                        @hoverBarchart="hoverBarchart"></scented-barchart>
+                    <scented-barchart ref="predict-size-hist" :barNum="barNum"
+                        :allData="predictSizeAll" :title="'PR_size'" queryKey="predict_size"
+                        :selectData="predictSizeSelect" :xSplit="sizeSplit" :displayMode="displayMode"
+                        @hoverBarchart="hoverBarchart"></scented-barchart>
+                    <scented-barchart ref="label-aspect-ratio-hist" :barNum="barNum"
+                        :allData="labelAspectRatioAll" :title="'GT_AR'" queryKey="label_aspect_ratio"
+                        :selectData="labelAspectRatioSelect" :xSplit="aspectRatioSplit" :displayMode="displayMode"
+                        @hoverBarchart="hoverBarchart"></scented-barchart>
+                    <scented-barchart ref="predict-aspect_ratio-hist" :barNum="barNum"
+                        :allData="predictAspectRatioAll" :title="'PR_AR'" queryKey="predict_aspect_ratio"
+                        :selectData="predictAspectRatioSelect" :xSplit="aspectRatioSplit" :displayMode="displayMode"
+                        @hoverBarchart="hoverBarchart"></scented-barchart>
+                </div>
             </div>
+
+            <div id="selection-container">
+                <div class="toolbar-title">Selections</div>
+                <div id="selections">
+                    selections
+                </div>
+            </div>
+
         </div>
         <div id="matrices-container">
+            <div class="toolbar-title">Matrix</div>
             <div id="confusion-matrix-container">
                 <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion" :showDirection="showDirection"
                     :confusionMatrix="confusionMatrix" :returnMode="returnMode"></confusion-matrix>
@@ -285,6 +300,8 @@ export default {
     justify-content: space-between;
     align-items: left;
     flex-direction: column;
+    border: 1px solid #c1c1c1;
+    border-radius: 5px;
 }
 
 .mode-select {
@@ -298,29 +315,65 @@ export default {
     flex-direction: row;
 }
 
+#toolbox-container {
+    display: flex;
+    flex-direction: column;
+}
+
+#barcharts-container {
+    margin: 5px 0 0 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+}
+
+#selection-container {
+    margin: 5px 0 0 0;
+    display: flex;
+    flex-direction: column;
+    flex: 100 1 auto;
+}
+
+#selections {
+    height: 100%;
+    border: 1px solid #c1c1c1;
+    border-radius: 5px;
+    flex: 10 1 auto;
+}
+
 #matrices-container {
-  width: 80%;
-  height: 100%;
-  display: flex;
-  margin: 0 10px 0 10px;
+    padding: 2px;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    margin: 0 0 0 10px;
+    flex-direction: column;
 }
 
 #confusion-matrix-container {
-    width: 100%;
+    /* width: 100%; */
     height: 100%;
+    border: 1px solid #c1c1c1;
+    border-radius: 5px;
 }
 
 
 #left-widgets {
     padding: 2px;
     width: 15%;
+    height: 100%;
     display: flex;
     flex-direction: column;
 }
 
 #scented-barcharts>svg {
     width: 100%;
-    height: 5%;
+    height: 35px;
+}
+
+#scented-barcharts {
+    border: 1px solid #c1c1c1;
+    border-radius: 5px;
 }
 
 </style>
