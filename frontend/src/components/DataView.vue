@@ -45,7 +45,7 @@
         </div>
         <div id="matrices-container">
             <div id="confusion-matrix-container">
-                <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion"
+                <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion" :showDirection="showDirection"
                     :confusionMatrix="confusionMatrix" :returnMode="returnMode"></confusion-matrix>
             </div>
         </div>
