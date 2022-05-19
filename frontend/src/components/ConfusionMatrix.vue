@@ -10,15 +10,15 @@
         </defs>
         <g id="main-g" transform="translate(0,0)">
             <g id="legend-g" transform="translate(0,0)"></g>
-            <g id="horizon-text-g" transform="`translate(0, 0)`">
-                <text id="horizon-legend" transform="translate(0,0) scale(270)" text-anchor="middle" font-size="15" opacity="0"
+            <g id="horizon-text-g" transform="translate(0, 0)">
+                <text id="horizon-legend" transform="translate(0,0) rotate(270)" text-anchor="middle" font-size="15" opacity="0"
                     font-family="Comic Sans MS" font-weight="normal">Ground Truth</text>
             </g>
-            <g id="vertical-text-g" transform="`translate(0, 0) rotate(-90)`">
-                <text id="vertical-legend" transform="translate(0,0) scale(90)" opacity="0"
+            <g id="vertical-text-g" transform="translate(0, 0) rotate(-90)">
+                <text id="vertical-legend" transform="translate(0,0) rotate(90)" opacity="0"
                     text-anchor="middle" font-size="15" font-family="Comic Sans MS" font-weight="normal">Prediction</text>
             </g>
-            <g id="matrix-cells-g" transform="`translate(0, 0)`"></g>
+            <g id="matrix-cells-g" transform="translate(0, 0)"></g>
         </g>
     </svg>
 </template>
@@ -35,10 +35,6 @@ export default {
     name: 'ConfusionMatrix',
     mixins: [Util, GlobalVar],
     props: {
-        showColor: {
-            type: Boolean,
-            default: false,
-        },
         confusionMatrix: {
             type: Array,
             default: undefined,
@@ -56,8 +52,6 @@ export default {
         ...mapGetters([
             'labelHierarchy',
             'labelnames',
-            'hierarchyColors',
-            'colors',
         ]),
         baseMatrix: function() {
             return this.confusionMatrix;
@@ -82,7 +76,7 @@ export default {
             return this.showNodes.length * this.cellAttrs['size'];
         },
         svgWidth: function() {
-            return this.leftCornerSize+this.textMatrixMargin+this.matrixWidth;
+            return this.leftCornerSize+this.textMatrixMargin+this.matrixWidth+50;// legend height
         },
         colorCellSize: function() {
             return this.showColor?this.cellAttrs['size']*0.7:0;
@@ -103,7 +97,7 @@ export default {
             return d3.select('g#legend-g');
         },
         mainG: function() {
-            return d3.selectAll('g#main-g');
+            return d3.select('g#main-g');
         },
         horizonLegend: function() {
             return d3.select('text#horizon-legend');
@@ -148,9 +142,6 @@ export default {
     watch: {
         labelHierarchy: function(newLabelHierarchy, oldLabelHierarchy) {
             this.hierarchy = this.getHierarchy(newLabelHierarchy);
-            this.getDataAndRender();
-        },
-        hierarchyColors: function() {
             this.getDataAndRender();
         },
         confusionMatrix: function() {
@@ -263,10 +254,9 @@ export default {
             return showNodes;
         },
         getDataAndRender: function() {
-            if (this.confusionMatrix===undefined || this.labelHierarchy===undefined || this.hierarchyColors===undefined) {
+            if (this.confusionMatrix===undefined || this.labelHierarchy===undefined) {
                 return;
             }
-            // this.setLabelColorsByHierarchy(this.colors, this.hierarchy);
             // get nodes to show
             this.showNodes = this.getShowNodes(this.hierarchy);
             // get cells to render
@@ -292,23 +282,6 @@ export default {
             }
             this.render();
         },
-        setLabelColorsByHierarchy: function(colors, hierarchy) {
-            const hierarchyColors = {};
-            const dfs = function(root, colors, hierarchyColors, isExpand, parentColor) {
-                if (isExpand) {
-                    hierarchyColors[root.name] = colors[root.name];
-                } else {
-                    hierarchyColors[root.name] = parentColor;
-                }
-                for (const child of root.children) {
-                    dfs(child, colors, hierarchyColors, isExpand&&root.expand, hierarchyColors[root.name]);
-                }
-            };
-            for (const root of hierarchy) {
-                dfs(root, colors, hierarchyColors, true, '');
-            }
-            this.$store.commit('setHierarchyColors', hierarchyColors);
-        },
         render: async function() {
             this.horizonTextinG = this.horizonTextG.selectAll('g.'+this.horizonTextAttrs['gClass']).data(this.showNodes, (d)=>d.name);
             this.verticalTextinG = this.verticalTextG.selectAll('g.'+this.verticalTextAttrs['gClass']).data(this.showNodes, (d)=>d.name);
@@ -319,8 +292,8 @@ export default {
             }
 
             await this.remove();
+            this.transform();
             await this.update();
-            await this.transform();
             await this.create();
         },
         create: async function() {
@@ -452,28 +425,6 @@ export default {
                         const x = that.verticalTextAttrs['font-size']/2;
                         return `M ${x} ${that.cellAttrs['size']} L ${x} ${that.cellAttrs['size']+linelen}`;
                     });
-
-                if (that.showColor) {
-                    horizonTextinG.append('rect')
-                        .attr('x', (d) => d.children.length===0?0:that.horizonTextAttrs['font-size'] + that.horizonTextAttrs['iconMargin'])
-                        .attr('y', (that.cellAttrs['size']-that.colorCellSize)/2+that.horizonTextAttrs['iconDy'])
-                        .attr('width', that.colorCellSize)
-                        .attr('height', that.colorCellSize)
-                        .attr('stroke', that.cellAttrs['stroke'])
-                        .attr('stroke-width', that.cellAttrs['stroke-width'])
-                        .attr('fill', (d) => that.hierarchyColors[d.name].fill)
-                        .attr('opacity', (d) => that.hierarchyColors[d.name].opacity);
-
-                    verticalTextinG.append('rect')
-                        .attr('x', (d) => d.children.length===0?0:that.verticalTextAttrs['font-size'] + that.verticalTextAttrs['iconMargin'])
-                        .attr('y', (that.cellAttrs['size']-that.colorCellSize)/2+that.verticalTextAttrs['iconDy'])
-                        .attr('width', that.colorCellSize)
-                        .attr('height', that.colorCellSize)
-                        .attr('stroke', that.cellAttrs['stroke'])
-                        .attr('stroke-width', that.cellAttrs['stroke-width'])
-                        .attr('fill', (d) => that.hierarchyColors[d.name].fill)
-                        .attr('opacity', (d) => that.hierarchyColors[d.name].opacity);
-                }
 
                 const matrixCellsinG = that.matrixCellsinG.enter()
                     .append('g')
@@ -624,7 +575,8 @@ export default {
                         const linelen = that.cellAttrs['size']*expandlen;
                         const x = that.horizonTextAttrs['font-size']/2;
                         return `M ${x} ${that.cellAttrs['size']} L ${x} ${that.cellAttrs['size']+linelen}`;
-                    });
+                    })
+                    .on('end', resolve);
 
                 that.horizonLegend
                     .transition()
@@ -639,6 +591,7 @@ export default {
                         ${i*that.cellAttrs['size']})`)
                     .on('end', resolve);
 
+                console.log(`translate(${that.maxHorizonTextWidth},${that.matrixWidth/2}) rotate(90)`);
                 that.verticalLegend
                     .transition()
                     .duration(that.updateDuration)
@@ -674,21 +627,8 @@ export default {
                         const linelen = that.cellAttrs['size']*expandlen;
                         const x = that.verticalTextAttrs['font-size']/2;
                         return `M ${x} ${that.cellAttrs['size']} L ${x} ${that.cellAttrs['size']+linelen}`;
-                    });
-
-                if (that.showColor) {
-                    that.horizonTextinG.selectAll('rect')
-                        .attr('x', (d) => d.children.length===0?0:that.horizonTextAttrs['font-size'] + that.horizonTextAttrs['iconMargin'])
-                        .attr('y', (that.cellAttrs['size']-that.colorCellSize)/2+that.horizonTextAttrs['iconDy'])
-                        .attr('fill', (d) => that.hierarchyColors[d.name].fill)
-                        .attr('opacity', (d) => that.hierarchyColors[d.name].opacity);
-
-                    that.verticalTextinG.selectAll('rect')
-                        .attr('x', (d) => d.children.length===0?0:that.verticalTextAttrs['font-size'] + that.verticalTextAttrs['iconMargin'])
-                        .attr('y', (that.cellAttrs['size']-that.colorCellSize)/2+that.verticalTextAttrs['iconDy'])
-                        .attr('fill', (d) => that.hierarchyColors[d.name].fill)
-                        .attr('opacity', (d) => that.hierarchyColors[d.name].opacity);
-                }
+                    })
+                    .on('end', resolve);
 
                 that.matrixCellsinG
                     .transition()
@@ -757,11 +697,6 @@ export default {
                         }
                     });
                 }
-
-                if ((that.horizonTextinG.size() === 0) && (that.verticalTextinG.size() === 0) &&
-                    (that.matrixCellsinG.size() === 0)) {
-                    resolve();
-                }
             });
         },
         remove: async function() {
@@ -800,6 +735,7 @@ export default {
                 // compute transform
                 const svgRealWidth = that.$refs.svg.clientWidth;
                 const svgRealHeight = that.$refs.svg.clientHeight;
+                console.log(svgRealWidth, svgRealHeight);
                 const realSize = Math.min(svgRealWidth, svgRealHeight);
                 let shiftx = 0;
                 let shifty = 0;
@@ -809,6 +745,7 @@ export default {
                 } else {
                     scale = 1;
                 }
+                console.log(that.svgWidth);
                 shiftx = (svgRealWidth-scale*that.svgWidth)/2;
                 shifty = (svgRealHeight-scale*that.svgWidth)/2;
                 that.mainG.transition()
