@@ -360,7 +360,7 @@ export default {
 
 #left-widgets {
     padding: 2px;
-    width: 15%;
+    width: 18%;
     height: 100%;
     display: flex;
     flex-direction: column;

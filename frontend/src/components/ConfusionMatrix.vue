@@ -206,6 +206,7 @@ export default {
             legendExist: false,
             // buffer
             maxCellValue: 0,
+            maxCellDirection: 0,
         };
     },
     methods: {
@@ -262,6 +263,7 @@ export default {
             // get cells to render
             this.cells = [];
             this.maxCellValue = 0;
+            this.maxCellDirection = 0;
             for (let i=0; i<this.showNodes.length; i++) {
                 const nodea = this.showNodes[i];
                 for (let j=0; j<this.showNodes.length; j++) {
@@ -277,6 +279,7 @@ export default {
                     this.cells.push(cell);
                     if (!this.isHideCell(cell) && (i!=j || this.returnMode!=='count') && i!==this.showNodes.length-1 && j!==this.showNodes.length-1) {
                         this.maxCellValue = Math.max(this.maxCellValue, cell.info.val);
+                        if (cell.info.direction!==undefined) this.maxCellDirection = Math.max(this.maxCellDirection, d3.sum(cell.info.direction));
                     }
                 }
             }
@@ -479,38 +482,46 @@ export default {
                 //     .attr('fill', that.cellAttrs['text-fill'])
                 //     .text((d) => d.info.val);
 
+                const directionScale = d3.scaleLinear([0, that.maxCellDirection], [0.4, 1]);
+
                 matrixCellsinG.append('circle')
                     .attr('cx', that.cellAttrs['size']/2)
                     .attr('cy', that.cellAttrs['size']/2)
                     .attr('r', that.cellAttrs['size']/12)
                     .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.cellAttrs['direction-color'])
-                    .attr('opacity', (d)=>d.info.direction===undefined?0:d.info.direction[8]/Math.max(1, d3.max(d.info.direction)));
+                    .attr('opacity', (d)=>d.info.direction===undefined?0:d.info.direction[8]/Math.max(1, d3.max(d.info.direction)))
+                    .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
+                                             scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
+                                             translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})`);
 
                 for (let i = 0; i < 8; ++i) {
                     matrixCellsinG.filter((d) => d.info.count>0)
                         .append('polyline')
                         .attr('class', 'dir-'+i)
                         .attr('points', `${that.cellAttrs['size']/3},${that.cellAttrs['size']/2}
-                                         ${that.cellAttrs['size']/6},${that.cellAttrs['size']/2}`)
+                                         ${that.cellAttrs['size']/18},${that.cellAttrs['size']/2}`)
                         .attr('fill', 'none')
                         .attr('stroke', 'currentColor')
                         .attr('marker-end', 'url(#arrow)')
                         .attr('opacity', (d)=>d.info.direction===undefined?0:d.info.direction[i]/Math.max(1, d3.max(d.info.direction)))
-                        .attr('transform', `rotate(${i*45} ${that.cellAttrs['size']/2} ${that.cellAttrs['size']/2})`);
+                        .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
+                                                 scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
+                                                 translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})
+                                                 rotate(${i*45} ${that.cellAttrs['size']/2} ${that.cellAttrs['size']/2})`);
                 }
 
                 matrixCellsinG.append('path')
                     .attr('d', `M ${that.cellAttrs['size']*0.25} ${that.cellAttrs['size']*0.25} 
                         L ${that.cellAttrs['size']*0.75} ${that.cellAttrs['size']*0.75}`)
                     .attr('stroke', that.cellAttrs['slash-text-stroke'])
-                    .attr('opacity', (d)=>d.info.count===0?1:0);
+                    .attr('opacity', (d)=>d.info.count===0&&!that.showDirection?1:0);
 
                 if (!that.showDirection) {
                     matrixCellsinG.select('circle')
                         .attr('fill-opacity', 0);
                 } else {
                     matrixCellsinG.select('rect')
-                        .attr('fill-opacity', 0);
+                        .attr('opacity', 0);
                 }
 
 
@@ -643,7 +654,7 @@ export default {
                     d3.select(this).select('path')
                         .transition()
                         .duration(that.updateDuration)
-                        .attr('opacity', (d)=>d.info.count===0?1:0)
+                        .attr('opacity', (d)=>d.info.count===0&&!that.showDirection?1:0)
                         .on('end', resolve);
                 });
 
@@ -654,7 +665,7 @@ export default {
                             .transition()
                             .duration(that.updateDuration)
                             .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val))
-                            .attr('fill-opacity', 1)
+                            .attr('opacity', 1)
                             .on('end', resolve);
                         // eslint-disable-next-line no-invalid-this
                         d3.select(this).select('circle')
@@ -672,13 +683,14 @@ export default {
                         }
                     });
                 } else {
+                    const directionScale = d3.scaleLinear([0, that.maxCellDirection], [0.4, 1]);
                     that.matrixCellsinG.each(function(d) {
                         // eslint-disable-next-line no-invalid-this
                         d3.select(this).select('rect')
                             .transition()
                             .duration(that.updateDuration)
                             .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val))
-                            .attr('fill-opacity', 0)
+                            .attr('opacity', 0)
                             .on('end', resolve);
                         // eslint-disable-next-line no-invalid-this
                         d3.select(this).select('circle')
@@ -686,6 +698,9 @@ export default {
                             .duration(that.updateDuration)
                             .attr('opacity', (d)=>d.info.direction[8]/Math.max(1, d3.max(d.info.direction)))
                             .attr('fill-opacity', 1)
+                            .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
+                                scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
+                                translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})`)
                             .on('end', resolve);
                         for (let i = 0; i < 8; ++i) {
                             // eslint-disable-next-line no-invalid-this
@@ -693,6 +708,10 @@ export default {
                                 .transition()
                                 .duration(that.updateDuration)
                                 .attr('opacity', (d)=>d.info.direction[i]/Math.max(1, d3.max(d.info.direction)))
+                                .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
+                                    scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
+                                    translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})
+                                    rotate(${i*45} ${that.cellAttrs['size']/2} ${that.cellAttrs['size']/2})`)
                                 .on('end', resolve);
                         }
                     });
