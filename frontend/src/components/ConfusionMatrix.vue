@@ -469,48 +469,21 @@ export default {
                     .attr('stroke-width', that.cellAttrs['stroke-width'])
                     .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val));
 
+                const directionScale = d3.scaleLinear([0, that.maxCellDirection], [that.cellAttrs['size']/2*0.4, that.cellAttrs['size']/2]);
 
-                // matrixCellsinG.filter((d) => d.info.val>0)
-                //     .append('text')
-                //     .attr('x', that.cellAttrs['size']/2)
-                //     .attr('y', (that.cellAttrs['size']+that.cellAttrs['font-size'])/2)
-                //     .attr('text-anchor', 'middle')
-                //     .attr('font-size', that.cellAttrs['font-size'])
-                //     .attr('font-weight', that.cellAttrs['font-weight'])
-                //     .attr('font-family', that.cellAttrs['font-family'])
-                //     .attr('opacity', 0)
-                //     .attr('fill', that.cellAttrs['text-fill'])
-                //     .text((d) => d.info.val);
+                matrixCellsinG.filter((d) => d.info.count>0)
+                    .append('path')
+                    .attr('class', 'radar')
+                    .attr('fill-opacity', 0)
+                    .attr('stroke', 'rgb(127,127,127)')
+                    .attr('opacity', 1)
+                    .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})`)
+                    .attr('d', (d) => that.drawRadar(d3.path(), d.info.direction, Math.min(that.cellAttrs['size']/2,
+                        directionScale(d3.sum(d.info.direction)))));
 
-                const directionScale = d3.scaleLinear([0, that.maxCellDirection], [0.4, 1]);
-
-                matrixCellsinG.append('circle')
-                    .attr('cx', that.cellAttrs['size']/2)
-                    .attr('cy', that.cellAttrs['size']/2)
-                    .attr('r', that.cellAttrs['size']/12)
-                    .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.cellAttrs['direction-color'])
-                    .attr('opacity', (d)=>d.info.direction===undefined?0:d.info.direction[8]/Math.max(1, d3.max(d.info.direction)))
-                    .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
-                                             scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
-                                             translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})`);
-
-                for (let i = 0; i < 8; ++i) {
-                    matrixCellsinG.filter((d) => d.info.count>0)
-                        .append('polyline')
-                        .attr('class', 'dir-'+i)
-                        .attr('points', `${that.cellAttrs['size']/3},${that.cellAttrs['size']/2}
-                                         ${that.cellAttrs['size']/18},${that.cellAttrs['size']/2}`)
-                        .attr('fill', 'none')
-                        .attr('stroke', 'currentColor')
-                        .attr('marker-end', 'url(#arrow)')
-                        .attr('opacity', (d)=>d.info.direction===undefined?0:d.info.direction[i]/Math.max(1, d3.max(d.info.direction)))
-                        .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
-                                                 scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
-                                                 translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})
-                                                 rotate(${i*45} ${that.cellAttrs['size']/2} ${that.cellAttrs['size']/2})`);
-                }
 
                 matrixCellsinG.append('path')
+                    .attr('class', 'slash')
                     .attr('d', `M ${that.cellAttrs['size']*0.25} ${that.cellAttrs['size']*0.25} 
                         L ${that.cellAttrs['size']*0.75} ${that.cellAttrs['size']*0.75}`)
                     .attr('stroke', that.cellAttrs['slash-text-stroke'])
@@ -651,7 +624,7 @@ export default {
 
                 that.matrixCellsinG.each(function(d) {
                     // eslint-disable-next-line no-invalid-this
-                    d3.select(this).select('path')
+                    d3.select(this).select('.slash')
                         .transition()
                         .duration(that.updateDuration)
                         .attr('opacity', (d)=>d.info.count===0&&!that.showDirection?1:0)
@@ -664,56 +637,44 @@ export default {
                         d3.select(this).select('rect')
                             .transition()
                             .duration(that.updateDuration)
-                            .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val))
+                            .attr('fill', d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val))
                             .attr('opacity', 1)
                             .on('end', resolve);
                         // eslint-disable-next-line no-invalid-this
-                        d3.select(this).select('circle')
+                        d3.select(this).select('.radar')
                             .transition()
                             .duration(that.updateDuration)
-                            .attr('fill-opacity', 0)
+                            .attr('opacity', 0)
                             .on('end', resolve);
-                        for (let i = 0; i < 8; ++i) {
-                            // eslint-disable-next-line no-invalid-this
-                            d3.select(this).select('.dir-'+i)
-                                .transition()
-                                .duration(that.updateDuration)
-                                .attr('opacity', 0)
-                                .on('end', resolve);
-                        }
                     });
                 } else {
-                    const directionScale = d3.scaleLinear([0, that.maxCellDirection], [0.4, 1]);
+                    const directionScale = d3.scaleLinear([0, that.maxCellDirection], [that.cellAttrs['size']/2*0.4, that.cellAttrs['size']/2]);
+
+                    // matrixCellsinG.filter((d) => d.info.count>0 && d.info.direction!==undefined)
+                    //     .append('path')
+                    //     .attr('fill', 'none')
+                    //     .attr('stroke', 'currentColor')
+                    //     .attr('opacity', 1)
+                    //     .attr('d', (d) => that.drawRadar(d3.path(), d.info.direction))
+                    //     .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
+                    //                 scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})`);
                     that.matrixCellsinG.each(function(d) {
                         // eslint-disable-next-line no-invalid-this
                         d3.select(this).select('rect')
                             .transition()
                             .duration(that.updateDuration)
-                            .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val))
+                            .attr('fill', d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val))
                             .attr('opacity', 0)
                             .on('end', resolve);
                         // eslint-disable-next-line no-invalid-this
-                        d3.select(this).select('circle')
+                        d3.select(this).select('.radar')
                             .transition()
                             .duration(that.updateDuration)
-                            .attr('opacity', (d)=>d.info.direction[8]/Math.max(1, d3.max(d.info.direction)))
-                            .attr('fill-opacity', 1)
-                            .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
-                                scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
-                                translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})`)
+                            .attr('opacity', 1)
+                            .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})`)
+                            .attr('d', (d) => that.drawRadar(d3.path(), d.info.direction, Math.min(that.cellAttrs['size']/2,
+                                directionScale(d3.sum(d.info.direction)))))
                             .on('end', resolve);
-                        for (let i = 0; i < 8; ++i) {
-                            // eslint-disable-next-line no-invalid-this
-                            d3.select(this).select('.dir-'+i)
-                                .transition()
-                                .duration(that.updateDuration)
-                                .attr('opacity', (d)=>d.info.direction[i]/Math.max(1, d3.max(d.info.direction)))
-                                .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
-                                    scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
-                                    translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})
-                                    rotate(${i*45} ${that.cellAttrs['size']/2} ${that.cellAttrs['size']/2})`)
-                                .on('end', resolve);
-                        }
                     });
                 }
             });
@@ -910,6 +871,25 @@ export default {
                 return node.expand===true && node.children.length>0;
             };
             return isHideNode(this.showNodes[cell.row]) || isHideNode(this.showNodes[cell.column]);
+        },
+        drawRadar: function(context, directions, baselen) {
+            if (directions===undefined) {
+                return '';
+            }
+            const maxDirection = Math.max(1, d3.max(directions));
+            let begin = undefined;
+            for (let i=0; i<8; i++) {
+                const len = directions[i]/maxDirection*baselen;
+                const angle = Math.PI*(i/4-1);
+                if (i===0) {
+                    begin = [len*Math.cos(angle), len*Math.sin(angle)];
+                    context.moveTo(begin[0], begin[1]);
+                } else {
+                    context.lineTo(len*Math.cos(angle), len*Math.sin(angle));
+                }
+            }
+            context.lineTo(begin[0], begin[1]);
+            return context.toString();
         },
     },
 };
