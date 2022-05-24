@@ -1,4 +1,3 @@
-from data.dataCtrler import DataCtrler
 import numpy as np
 import os
 import numpy as np
@@ -27,6 +26,8 @@ class Annotator:
         self.pil = pil or non_ascii
         if self.pil:  # use PIL
             self.im = im if isinstance(im, Image.Image) else Image.fromarray(im)
+            if len(np.array(self.im).shape)==2:
+                self.im = self.im.convert('RGB')
             self.draw = ImageDraw.Draw(self.im)
             self.font = ImageFont.load_default()
         else:  # use cv2
@@ -61,38 +62,40 @@ class Annotator:
         # Return annotated image as array
         return np.asarray(self.im)
 
-dataCtrler = DataCtrler()
-dataCtrler.process("/data/zhaowei/ConfusionMatrix/datasets/coco/", "/data/zhaowei/ConfusionMatrix/backend/buffer/")
-samples = dataCtrler.filterSamples({
-    "label": [28],
-    "predict": [0],
-    # "label_size": [0.96, 1]
-})[0]
-pairs = dataCtrler.predict_label_pairs[samples]
-print(len(samples))
-# print(dataCtrler.predict_label_ious[samples])
+if __name__ == "__main__":
+    from data.dataCtrler import DataCtrler
+    dataCtrler = DataCtrler()
+    dataCtrler.process("/data/zhaowei/ConfusionMatrix/datasets/coco/", "/data/zhaowei/ConfusionMatrix/backend/buffer/")
+    samples = dataCtrler.filterSamples({
+        "label": [28],
+        "predict": [0],
+        # "label_size": [0.96, 1]
+    })[0]
+    pairs = dataCtrler.predict_label_pairs[samples]
+    print(len(samples))
+    # print(dataCtrler.predict_label_ious[samples])
 
-for pr, gt in pairs:
-    try:
-        # print(pr,gt)
-        image_id = dataCtrler.raw_label2imageid[gt]
-        pr_name = np.array(dataCtrler.names)[int(dataCtrler.raw_predicts[pr, 0])]
-        gt_name = np.array(dataCtrler.names)[int(dataCtrler.raw_labels[gt, 0])]
-        pic_name = os.path.join(dataCtrler.images_path, os.listdir(dataCtrler.images_path)[image_id])
-        dir_name = os.path.join('/home/yukai/large/UnifiedConfusionMatrix',gt_name+'-'+pr_name, pic_name.split('/')[-1].split('.')[0])
-        if not os.path.exists(dir_name):
-            os.makedirs(dir_name)
-        pic = np.array(Image.open(pic_name))
-        anno = Annotator(pic, pil=True)
-        pic = Image.fromarray(pic)
-        amp = np.array([pic.width,pic.height,pic.width,pic.height])
-        anno.box_label(xywh2xyxy(dataCtrler.raw_predicts[pr, 1:5]*amp).tolist(), color=(255,0,0))
-        anno.box_label(xywh2xyxy(dataCtrler.raw_labels[gt, 1:5]*amp).tolist(), color=(0,255,0))
-        Image.fromarray(anno.result()).save(os.path.join(dir_name, '1.jpg'))
-        for i in range(dataCtrler.imageid2raw_label[image_id][0], dataCtrler.imageid2raw_label[image_id][1]):
-            anno.box_label(xywh2xyxy(dataCtrler.raw_labels[i, 1:5]*amp).tolist(), color=(0,255,0), label=''+np.array(dataCtrler.names)[int(dataCtrler.raw_labels[i, 0])])
-        for i in range(dataCtrler.imageid2raw_predict[image_id][0], dataCtrler.imageid2raw_predict[image_id][1]):
-            anno.box_label(xywh2xyxy(dataCtrler.raw_predicts[i, 1:5]*amp).tolist(), color=(255,0,0), label=''+np.array(dataCtrler.names)[int(dataCtrler.raw_predicts[i, 0])])
-        Image.fromarray(anno.result()).save(os.path.join(dir_name, 'all.jpg'))
-    except:
-        print(os.listdir(dataCtrler.images_path)[dataCtrler.raw_label2imageid[gt]])
+    for pr, gt in pairs:
+        try:
+            # print(pr,gt)
+            image_id = dataCtrler.raw_label2imageid[gt]
+            pr_name = np.array(dataCtrler.names)[int(dataCtrler.raw_predicts[pr, 0])]
+            gt_name = np.array(dataCtrler.names)[int(dataCtrler.raw_labels[gt, 0])]
+            pic_name = os.path.join(dataCtrler.images_path, os.listdir(dataCtrler.images_path)[image_id])
+            dir_name = os.path.join('/home/yukai/large/UnifiedConfusionMatrix',gt_name+'-'+pr_name, pic_name.split('/')[-1].split('.')[0])
+            if not os.path.exists(dir_name):
+                os.makedirs(dir_name)
+            pic = np.array(Image.open(pic_name))
+            anno = Annotator(pic, pil=True)
+            pic = Image.fromarray(pic)
+            amp = np.array([pic.width,pic.height,pic.width,pic.height])
+            anno.box_label(xywh2xyxy(dataCtrler.raw_predicts[pr, 1:5]*amp).tolist(), color=(255,0,0))
+            anno.box_label(xywh2xyxy(dataCtrler.raw_labels[gt, 1:5]*amp).tolist(), color=(0,255,0))
+            Image.fromarray(anno.result()).save(os.path.join(dir_name, '1.jpg'))
+            for i in range(dataCtrler.imageid2raw_label[image_id][0], dataCtrler.imageid2raw_label[image_id][1]):
+                anno.box_label(xywh2xyxy(dataCtrler.raw_labels[i, 1:5]*amp).tolist(), color=(0,255,0), label=''+np.array(dataCtrler.names)[int(dataCtrler.raw_labels[i, 0])])
+            for i in range(dataCtrler.imageid2raw_predict[image_id][0], dataCtrler.imageid2raw_predict[image_id][1]):
+                anno.box_label(xywh2xyxy(dataCtrler.raw_predicts[i, 1:5]*amp).tolist(), color=(255,0,0), label=''+np.array(dataCtrler.names)[int(dataCtrler.raw_predicts[i, 0])])
+            Image.fromarray(anno.result()).save(os.path.join(dir_name, 'all.jpg'))
+        except:
+            print(os.listdir(dataCtrler.images_path)[dataCtrler.raw_label2imageid[gt]])

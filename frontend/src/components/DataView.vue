@@ -64,6 +64,12 @@
                     :confusionMatrix="confusionMatrix" :returnMode="returnMode"></confusion-matrix>
             </div>
         </div>
+        <div id="grid-view-container">
+            <div class="toolbar-title">Grid</div>
+            <div id="grid-layout-container">
+                <grid-layout></grid-layout>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -71,6 +77,7 @@
 import Vue from 'vue';
 import ConfusionMatrix from './ConfusionMatrix.vue';
 import ScentedBarchart from './ScentedBarchart.vue';
+import GridLayout from './GridLayout.vue';
 import axios from 'axios';
 import {Select, Option, Icon, Button} from 'element-ui';
 
@@ -80,7 +87,7 @@ Vue.use(Icon);
 Vue.use(Button);
 
 export default {
-    components: {ConfusionMatrix, ScentedBarchart},
+    components: {ConfusionMatrix, ScentedBarchart, GridLayout},
     name: 'DataView',
     data() {
         return {
@@ -343,7 +350,7 @@ export default {
 
 #matrices-container {
     padding: 2px;
-    width: 100%;
+    width: 43%;
     height: 100%;
     display: flex;
     margin: 0 0 0 10px;
@@ -357,10 +364,26 @@ export default {
     border-radius: 5px;
 }
 
+#grid-view-container {
+    padding: 2px;
+    width: 43%;
+    height: 100%;
+    display: flex;
+    margin: 0 0 0 10px;
+    flex-direction: column;
+}
+
+#grid-layout-container {
+    /* width: 100%; */
+    height: 100%;
+    border: 1px solid #c1c1c1;
+    border-radius: 5px;
+}
+
 
 #left-widgets {
     padding: 2px;
-    width: 18%;
+    width: 14%;
     height: 100%;
     display: flex;
     flex-direction: column;

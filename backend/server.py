@@ -5,7 +5,7 @@ import pickle
 import json
 import argparse
 import numpy as np
-from flask import Flask, jsonify, request, send_file, render_template
+from flask import Flask, jsonify, request, send_file, render_template, make_response
 from data.dataCtrler import dataCtrler
 from flask_cors import CORS
 app = Flask(__name__)
@@ -38,6 +38,24 @@ def boxAspectRatioDist():
         query = request.json['query']
     return jsonify(dataCtrler.getBoxAspectRatioDistribution(query))
 
+@app.route('/api/image', methods=["GET"])
+def imageGradient():
+    boxID = int(request.args['boxID'])
+    image_binary = dataCtrler.getImage(boxID).getvalue()
+    response = make_response(image_binary)
+    response.headers.set('Content-Type', 'image/jpeg')
+    response.headers.set(
+        'Content-Disposition', 'attachment', filename='%s.jpg' % boxID)
+    return response
+
+@app.route('/api/grid', methods=["POST"])
+def grid():
+    nodes = request.json['nodes']
+    constraints = None
+    if 'constraints' in request.json:
+        constraints = request.json['constraints']
+    depth = request.json['depth']
+    return jsonify(dataCtrler.gridZoomIn(nodes, constraints, depth))
 
 def main():
     parser = argparse.ArgumentParser(description='manual to this script')

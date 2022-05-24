@@ -1,13 +1,19 @@
 import os
 import json
+import copy
 import bisect
 import numpy as np
 # import data.reorder as reorder
 import pickle
 import torch
 import math
+from PIL import Image
+from queue import PriorityQueue
 
+from data.grid.sampling import HierarchySampling
+from data.grid.gridLayout import GridLayout
 from data.fisher import get_split_pos
+from data.drawBox import Annotator
 
 class DataCtrler(object):
 
@@ -18,6 +24,7 @@ class DataCtrler(object):
         self.classID2Idx = {}      
         self.hierarchy = {}  
         self.names = []
+        self.grider = GridLayout()
 
     def process(self, rawDataPath, bufferPath, reordered=True):
         """process raw data
@@ -33,6 +40,7 @@ class DataCtrler(object):
         self.labels_path = os.path.join(self.root_path, "labels")
         self.predicts_path = os.path.join(self.root_path, "predicts")
         self.meta_path = os.path.join(self.root_path, "meta.json")
+        self.feature_path = os.path.join(self.root_path, "feature.npy")
         if not os.path.exists(bufferPath):
             os.makedirs(bufferPath)
         self.raw_data_path = os.path.join(bufferPath, "{}_raw_data.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
@@ -41,6 +49,7 @@ class DataCtrler(object):
         self.box_size_dist_path = os.path.join(bufferPath, "{}_box_size_dist.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         self.box_aspect_ratio_split_path = os.path.join(bufferPath, "{}_box_aspect_ratio_split.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         self.box_aspect_ratio_dist_path = os.path.join(bufferPath, "{}_box_aspect_ratio_dist.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
+        self.hierarchy_sample_path = os.path.join(bufferPath, "{}_hierarchy_samples.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
 
         #read raw data
         if os.path.exists(self.raw_data_path):
@@ -92,7 +101,9 @@ class DataCtrler(object):
                         self.raw_predict2imageid = np.concatenate((self.raw_predict2imageid, np.ones(len(lb), dtype=np.int32)*imageid))
             with open(self.raw_data_path, 'wb') as f:
                 pickle.dump((self.image2index, self.raw_labels, self.raw_label2imageid, self.imageid2raw_label, self.raw_predicts, self.raw_predict2imageid, self.imageid2raw_predict), f)
-        
+        self.index2image = ['']*len(self.image2index)
+        for image, index in self.image2index.items():
+            self.index2image[index] = image
         ## init meta data
         with open(self.meta_path) as f:
             metas = json.load(f)
@@ -179,7 +190,22 @@ class DataCtrler(object):
         self.directions = -1*np.ones(self.predict_label_pairs.shape[0], dtype=np.int32)
         self.directions[directionIdxes] = directions
         
-        
+        # hierarchy sampling
+        # self.features = np.load(self.feature_path)
+        self.features = np.random.rand(self.raw_predicts.shape[0], 256)
+        n = self.features.shape[0]
+        d = 1
+        for dx in self.features.shape[1:]:
+            d *= dx
+        self.features = self.features.reshape((n, d))
+        self.sampler = HierarchySampling()
+        if os.path.exists(self.hierarchy_sample_path):
+            self.sampler.load(self.hierarchy_sample_path)
+        else:
+            labels =self.raw_predicts[:, 0].astype(np.int32)
+            self.sampler.fit(self.features, labels, 0.5, 400)
+            self.sampler.dump(self.hierarchy_sample_path)
+          
     def getMetaData(self):
         return {
             "hierarchy": self.hierarchy,
@@ -453,9 +479,220 @@ class DataCtrler(object):
             'labelAspectRatioConfusion': label_box_aspect_ratio_confusion,
             'predictAspectRatioConfusion': predict_box_aspect_ratio_confusion,
             'aspectRatioSplit': split_aspect_ratio.tolist()
-        }
+        }        
 
+    def findGridParent(self, children, parents):
+        return self.sampler.findParents(children, parents)
+    
+    def transformBottomLabelToTop(self, topLabels):
+        topLabelChildren = {}
+        topLabelSet = set(topLabels)
+        def dfs(nodes):
+            childrens = []
+            for root in nodes:
+                if type(root)==str:
+                    childrens.append(root)
+                    if root in topLabelSet:
+                        topLabelChildren[root] = [root]
+                else:
+                    rootChildren = dfs(root['children'])
+                    childrens += rootChildren
+                    if root['name'] in topLabelSet:
+                        topLabelChildren[root['name']] = rootChildren
+            return childrens
+        dfs(self.hierarchy)
+        childToTop = {}
+        for topLabelIdx in range(len(topLabels)):
+            for child in topLabelChildren[topLabels[topLabelIdx]]:
+                childToTop[child] = topLabelIdx
+        n = len(self.names)
+        labelTransform = np.zeros(n, dtype=int)
+        for i in range(n):
+            if not childToTop.__contains__(self.names[i]):
+                print('not include ' + self.names[i])
+            else:
+                labelTransform[i] = childToTop[self.names[i]]
+        return labelTransform.astype(int)
         
+    def gridZoomIn(self, nodes, constraints, depth):
+        allpreds = self.raw_predicts[:, 0].astype(np.int32)
+        alllabels = self.raw_labels[self.predict_label_pairs[:len(self.raw_predicts),1], 0].astype(np.int32)
+        allconfidence = self.raw_predicts[self.predict_label_pairs[:,0], 1]
+        allfeatures = np.random.rand(self.raw_predicts.shape[0], 256)
+        neighbors, newDepth = self.sampler.zoomin(nodes, depth)
+        if type(neighbors)==dict:
+            while True:
+                newnodes = []
+                for neighbor in neighbors.values():
+                    newnodes += neighbor
+                if len(newnodes) >= 1000 or newDepth==self.sampler.max_depth:
+                    break
+                neighbors, newDepth = self.sampler.zoomin(newnodes, newDepth)
+        zoomInConstraints = None
+        zoomInConstraintX = None
+        if constraints is not None:
+            zoomInConstraints = []
+            zoomInConstraintX = []
+        zoomInNodes = []
+        if type(neighbors)==list:
+            zoomInNodes = neighbors
+            if constraints is not None:
+                zoomInConstraints = np.array(constraints)
+                nodesset = set(neighbors)
+                for node in nodes:
+                    if node in nodesset:
+                        zoomInConstraintX.append(node)
+                zoomInConstraintX = allfeatures[nodes]
+        else:
+            for children in neighbors.values():
+                for child in children:
+                    if int(child) not in nodes:
+                        zoomInNodes.append(int(child))
+                    # initY.append([constraints[i][0], constraints[i][1]])
+            if constraints is not None:
+                zoomInConstraints = np.array(constraints)
+            zoomInConstraintX = allfeatures[nodes]
+            zoomInNodes = nodes + zoomInNodes
+        zoomInLabels = alllabels[zoomInNodes]
+        zoomInPreds = allpreds[zoomInNodes]
+        zoomInConfidence = allconfidence[zoomInNodes]
+
+        def getBottomLabels(zoomInNodes):
+            hierarchy = copy.deepcopy(self.hierarchy)
+            labelnames = copy.deepcopy(self.names)
+            nodes = [{
+                "index": zoomInNodes[i],
+                "label": zoomInLabels[i],
+                "pred": zoomInPreds[i]
+            } for i in range(len(zoomInNodes))]
+
+            root = {
+                'name': '',
+                'children': hierarchy,
+            }
+            counts = {}
+            for node in nodes:
+                if not counts.__contains__(labelnames[node['pred']]):
+                    counts[labelnames[node['pred']]] = 0
+                counts[labelnames[node['pred']]] += 1
+
+            def dfsCount(root, counts):
+                if isinstance(root, str):
+                    if not counts.__contains__(root): # todo
+                        counts[root] = 0
+                    return {
+                        'name': root,
+                        'count': counts[root],
+                        'children': [],
+                        'realChildren': [],
+                        'emptyChildren': [],
+                    }
+                else:
+                    count = 0
+                    realChildren = []
+                    emptyChildren = []
+                    for i in range(len(root['children'])):
+                        root['children'][i] = dfsCount(root['children'][i], counts)
+                        count += root['children'][i]['count']
+                        if root['children'][i]['count'] != 0:
+                            realChildren.append(root['children'][i])
+                        else: 
+                            emptyChildren.append(root['children'][i])
+                    root['realChildren'] = realChildren
+                    root['emptyChildren'] = emptyChildren
+                    counts[root['name']] = count
+                    root['count'] = count
+                    return root
+            
+            dfsCount(root, counts)
+
+            pq = PriorityQueue()
+
+            class Cmp:
+                def __init__(self, name, count, realChildren):
+                    self.name = name
+                    self.count = count
+                    self.realChildren = realChildren
+
+                def __lt__(self, other):
+                    if self.count <= other.count:
+                        return False
+                    else:
+                        return True
+
+                def to_list(self):
+                    return [self.name, self.count, self.realChildren]
+            
+            pq.put(Cmp(root['name'], root['count'], root['realChildren']))
+            classThreshold = 10
+            countThreshold = 0.5
+        
+            while True:
+                if pq.qsize()==0:
+                    break
+                top = pq.get()
+                if pq.qsize() + len(top.realChildren) <= classThreshold or top.count / root['count'] >= countThreshold:
+                    for child in top.realChildren:
+                        pq.put(Cmp(child['name'], child['count'], child['realChildren']))
+                    if pq.qsize()==0:
+                        pq.put(top)
+                        break
+                else:
+                    pq.put(top)
+                    break
+    
+            pq_list = []
+            while not pq.empty():
+                pq_list.append(pq.get().name)
+            return pq_list
+
+        bottomLabels = getBottomLabels(copy.deepcopy(zoomInNodes))
+        labelTransform = self.transformBottomLabelToTop(bottomLabels)
+        constraintLabels = labelTransform[alllabels[nodes]]
+        labels = labelTransform[zoomInLabels]  
+
+        # oroginal
+        # labelTransform = self.transformBottomLabelToTop([node['name'] for node in self.statistic['confusion']['hierarchy']])       
+
+        tsne, grid, gridsize = self.grider.fit(allfeatures[zoomInNodes], labels = labels, constraintX = zoomInConstraintX,  constraintY = zoomInConstraints, constraintLabels = constraintLabels)
+        tsne = tsne.tolist()
+        grid = grid.tolist()
+        zoomInLabels = zoomInLabels.tolist()
+        zoomInPreds = zoomInPreds.tolist()
+        zoomInConfidence = zoomInConfidence.tolist()
+
+        n = len(zoomInNodes)
+        nodes = [{
+            "index": zoomInNodes[i],
+            "tsne": tsne[i],
+            "grid": grid[i],
+            "label": zoomInLabels[i],
+            "pred": zoomInPreds[i],
+            "confidence": zoomInConfidence[i]
+        } for i in range(n)]
+        res = {
+            "nodes": nodes,
+            "grid": {
+                "width": gridsize,
+                "height": gridsize,
+            },
+            "depth": newDepth
+        }
+        return res
+        
+    def getImage(self, boxID: int) -> list:
+        import io
+        img = Image.open(os.path.join(self.images_path, self.index2image[self.raw_predict2imageid[boxID]]+'.jpg'))
+        anno = Annotator(np.array(img), pil=True, line_width=20)
+        amp = np.array([img.width,img.height,img.width,img.height])
+        predictBox, labelBox = self.predict_label_pairs[boxID]
+        if predictBox != -1:
+            anno.box_label(xywh2xyxy(self.raw_predicts[predictBox, 1:5]*amp).tolist(), color=(255,0,0))
+        if labelBox != -1:
+            anno.box_label(xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist(), color=(0,255,0))
+        output = io.BytesIO()
+        anno.im.save(output, format="JPEG")
+        return output
         
 def box_area(box):
     # box = xyxy(4,n)
@@ -464,11 +701,18 @@ def box_area(box):
 def xywh2xyxy(x):
     # Convert nx4 boxes from [x, y, w, h] to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
     y = x.clone() if isinstance(x, torch.Tensor) else np.copy(x)
-    y[:, 0] = x[:, 0] - x[:, 2] / 2  # top left x
-    y[:, 1] = x[:, 1] - x[:, 3] / 2  # top left y
-    y[:, 2] = x[:, 0] + x[:, 2] / 2  # bottom right x
-    y[:, 3] = x[:, 1] + x[:, 3] / 2  # bottom right y
-    return y
+    if len(x.shape)==1:
+        y[0] = x[0] - x[2] / 2  # top left x
+        y[1] = x[1] - x[3] / 2  # top left y
+        y[2] = x[0] + x[2] / 2  # bottom right x
+        y[3] = x[1] + x[3] / 2  # bottom right y
+        return y
+    else:
+        y[:, 0] = x[:, 0] - x[:, 2] / 2  # top left x
+        y[:, 1] = x[:, 1] - x[:, 3] / 2  # top left y
+        y[:, 2] = x[:, 0] + x[:, 2] / 2  # bottom right x
+        y[:, 3] = x[:, 1] + x[:, 3] / 2  # bottom right y
+        return y
 
 def box_iou(box1, box2):
     # https://github.com/pytorch/vision/blob/master/torchvision/ops/boxes.py
