@@ -379,10 +379,10 @@ class DataCtrler(object):
         for i in range(K):
             last = split_size[i]
             cur = split_size[i+1]
-            label_box_size_dist[i] = np.count_nonzero(np.logical_and(filtered_label_size>last, filtered_label_size<=cur)) 
-            + np.count_nonzero(np.logical_and(unmatched_label_size>last, unmatched_label_size<=cur))
-            predict_box_size_dist[i] = np.count_nonzero(np.logical_and(filtered_predict_size>last, filtered_predict_size<=cur)) 
-            + np.count_nonzero(np.logical_and(unmatched_predict_size>last, unmatched_predict_size<=cur))
+            label_box_size_dist[i] = np.count_nonzero(np.logical_and(filtered_label_size>last, filtered_label_size<=cur)) + \
+             np.count_nonzero(np.logical_and(unmatched_label_size>last, unmatched_label_size<=cur))
+            predict_box_size_dist[i] = np.count_nonzero(np.logical_and(filtered_predict_size>last, filtered_predict_size<=cur)) + \
+             np.count_nonzero(np.logical_and(unmatched_predict_size>last, unmatched_predict_size<=cur))
             
         label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
         label_box_size_confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
@@ -425,16 +425,17 @@ class DataCtrler(object):
         # split_pos = self.box_aspect_ratio_split_map[K]
         # split_aspect_ratio = self.predict_aspect_ratio[pred_aspect_ratio_argsort][split_pos]
         maximum_val = np.max(np.concatenate((self.label_aspect_ratio, self.predict_aspect_ratio)))
-        split_aspect_ratio = np.array([i*maximum_val/K for i in range(K+1)])
+        # split_aspect_ratio = np.array([i*maximum_val/K for i in range(K+1)])
+        split_aspect_ratio = np.array([i*4.0/(K-1) for i in range(K)]+[maximum_val])
         
         label_box_aspect_ratio_dist, predict_box_aspect_ratio_dist = [0 for _ in range(K)], [0 for _ in range(K)]
         for i in range(K):
             last = split_aspect_ratio[i]
             cur = split_aspect_ratio[i+1]
-            label_box_aspect_ratio_dist[i] = np.count_nonzero(np.logical_and(filtered_label_aspect_ratio>last, filtered_label_aspect_ratio<=cur)) 
-            + np.count_nonzero(np.logical_and(unmatched_label_aspect_ratio>last, unmatched_label_aspect_ratio<=cur))
-            predict_box_aspect_ratio_dist[i] = np.count_nonzero(np.logical_and(filtered_predict_aspect_ratio>last, filtered_predict_aspect_ratio<=cur)) 
-            + np.count_nonzero(np.logical_and(unmatched_predict_aspect_ratio>last, unmatched_predict_aspect_ratio<=cur))
+            label_box_aspect_ratio_dist[i] = np.count_nonzero(np.logical_and(filtered_label_aspect_ratio>last, filtered_label_aspect_ratio<=cur)) + \
+             np.count_nonzero(np.logical_and(unmatched_label_aspect_ratio>last, unmatched_label_aspect_ratio<=cur))
+            predict_box_aspect_ratio_dist[i] = np.count_nonzero(np.logical_and(filtered_predict_aspect_ratio>last, filtered_predict_aspect_ratio<=cur)) + \
+             np.count_nonzero(np.logical_and(unmatched_predict_aspect_ratio>last, unmatched_predict_aspect_ratio<=cur))
             
         label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
         label_box_aspect_ratio_confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
