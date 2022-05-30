@@ -8,6 +8,7 @@ import pickle
 import torch
 import math
 from PIL import Image
+import logging
 from queue import PriorityQueue
 
 from data.grid.sampling import HierarchySampling
@@ -40,7 +41,9 @@ class DataCtrler(object):
         self.labels_path = os.path.join(self.root_path, "labels")
         self.predicts_path = os.path.join(self.root_path, "predicts")
         self.meta_path = os.path.join(self.root_path, "meta.json")
-        self.feature_path = os.path.join(self.root_path, "feature.npy")
+        self.features_path = os.path.join(self.root_path, "features")
+        if not os.path.exists(self.features_path):
+            os.makedirs(self.features_path)
         if not os.path.exists(bufferPath):
             os.makedirs(bufferPath)
         self.raw_data_path = os.path.join(bufferPath, "{}_raw_data.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
@@ -50,6 +53,8 @@ class DataCtrler(object):
         self.box_aspect_ratio_split_path = os.path.join(bufferPath, "{}_box_aspect_ratio_split.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         self.box_aspect_ratio_dist_path = os.path.join(bufferPath, "{}_box_aspect_ratio_dist.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         self.hierarchy_sample_path = os.path.join(bufferPath, "{}_hierarchy_samples.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
+        
+        self.logger = logging.getLogger('dataCtrler')
 
         #read raw data
         if os.path.exists(self.raw_data_path):
@@ -104,6 +109,21 @@ class DataCtrler(object):
         self.index2image = ['']*len(self.image2index)
         for image, index in self.image2index.items():
             self.index2image[index] = image
+        
+        # read feature data
+        # self.features = np.load(self.feature_path)
+        self.features = np.zeros((self.raw_predicts.shape[0], 256))
+        for name in os.listdir(self.images_path):
+            feature_path = os.path.join(self.features_path, name.split('.')[0]+'.npy')
+            imageid = self.image2index[name.split('.')[0]]
+            boxCount = self.imageid2raw_predict[imageid][1]-self.imageid2raw_predict[imageid][0]
+            if not os.path.exists(feature_path):
+                # WARNING
+                self.logger.warning("can't find feature: %s" % feature_path)
+                self.features[self.imageid2raw_predict[imageid][0]:self.imageid2raw_predict[imageid][1]] = np.random.rand(boxCount, 256)
+            else:
+                self.features[self.imageid2raw_predict[imageid][0]:self.imageid2raw_predict[imageid][1]] = np.load(feature_path)
+        
         ## init meta data
         with open(self.meta_path) as f:
             metas = json.load(f)
@@ -191,13 +211,6 @@ class DataCtrler(object):
         self.directions[directionIdxes] = directions
         
         # hierarchy sampling
-        # self.features = np.load(self.feature_path)
-        self.features = np.random.rand(self.raw_predicts.shape[0], 256)
-        n = self.features.shape[0]
-        d = 1
-        for dx in self.features.shape[1:]:
-            d *= dx
-        self.features = self.features.reshape((n, d))
         self.sampler = HierarchySampling()
         if os.path.exists(self.hierarchy_sample_path):
             self.sampler.load(self.hierarchy_sample_path)
