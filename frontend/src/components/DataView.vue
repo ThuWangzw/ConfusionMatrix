@@ -60,14 +60,14 @@
         <div id="matrices-container">
             <div class="toolbar-title">Matrix</div>
             <div id="confusion-matrix-container">
-                <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion" :showDirection="showDirection"
+                <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion" :showDirection="showDirection" @clickCell="clickConfusionCell"
                     :confusionMatrix="confusionMatrix" :returnMode="returnMode"></confusion-matrix>
             </div>
         </div>
         <div id="grid-view-container">
             <div class="toolbar-title">Grid</div>
             <div id="grid-layout-container">
-                <grid-layout></grid-layout>
+                <grid-layout ref="grid"></grid-layout>
             </div>
         </div>
     </div>
@@ -276,6 +276,20 @@ export default {
                     that.predictAspectRatioSelectBuffer = response.data.predictAspectRatioAll;
                     that.gettingAspectRatioBarchart = false;
                 });
+        },
+        clickConfusionCell: function(d) {
+            const store = this.$store;
+            const that = this;
+            axios.post(store.getters.URL_GET_IMAGES_IN_MATRIX_CELL, {
+                labels: d.rowNode.leafs,
+                preds: d.colNode.leafs,
+            }).then(function(response) {
+                const images = response.data;
+                if (images.length>0) {
+                    console.log(images);
+                    that.$refs.grid.showBottomNodes(images);
+                }
+            });
         },
     },
     mounted: function() {

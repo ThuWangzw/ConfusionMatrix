@@ -437,7 +437,7 @@ export default {
                     .attr('transform', (d) => `translate(${d.column*that.cellAttrs['size']}, 
                         ${d.row*that.cellAttrs['size']})`)
                     .on('click', function(e, d) {
-                        return;
+                        that.$emit('clickCell', d);
                     })
                     .on('mouseover', function(e, d) {
                         if (that.isHideCell(d)) return;

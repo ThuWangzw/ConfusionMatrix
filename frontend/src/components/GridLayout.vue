@@ -109,7 +109,7 @@ export default {
             this.rendering = true;
             if (nodes===undefined) {
                 // zoom home
-                nodes = this.nodes;
+                nodes = [];
                 this.depth = 0;
             }
             if (nodes.length>0 && typeof(nodes[0])!=='number') {
@@ -117,10 +117,31 @@ export default {
             }
             const that = this;
             const tsnes = nodes.map((d) => this.nodesDict[d].tsne);
-            axios.post(this.URL_GET_GRID, {
+            const data = nodes.length===0?{
+                nodes: nodes,
+                depth: this.depth,
+            }:{
                 nodes: nodes,
                 depth: this.depth,
                 constraints: tsnes,
+            };
+            axios.post(this.URL_GET_GRID, data)
+                .then(function(response) {
+                    that.nodes = response.data.nodes;
+                    that.depth = response.data.depth;
+                    that.gridInfo = response.data.grid;
+                    that.render();
+                });
+        },
+        showBottomNodes: function(nodes) {
+            this.rendering = true;
+            if (nodes.length>0 && typeof(nodes[0])!=='number') {
+                nodes = nodes.map((d) => d.index);
+            }
+            const that = this;
+            axios.post(this.URL_GET_GRID, {
+                nodes: nodes,
+                depth: 1000,
             }).then(function(response) {
                 that.nodes = response.data.nodes;
                 that.depth = response.data.depth;

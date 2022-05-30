@@ -551,7 +551,7 @@ class DataCtrler(object):
                     # initY.append([constraints[i][0], constraints[i][1]])
             if constraints is not None:
                 zoomInConstraints = np.array(constraints)
-            zoomInConstraintX = allfeatures[nodes]
+                zoomInConstraintX = allfeatures[nodes]
             zoomInNodes = nodes + zoomInNodes
         zoomInLabels = alllabels[zoomInNodes]
         zoomInPreds = allpreds[zoomInNodes]
@@ -694,6 +694,42 @@ class DataCtrler(object):
         anno.im.save(output, format="JPEG")
         return output
         
+    def getImagesInConsuionMatrixCell(self, labels: list, preds: list) -> list:
+        """
+        return images in a cell of confusionmatrix
+
+        Args:
+            labels (list): true labels of corresponding cell
+            preds (list): predicted labels of corresponding cell
+
+        Returns:
+            list: images id
+        """ 
+        allpreds = self.raw_predicts[:, 0].astype(np.int32)
+        alllabels = self.raw_labels[self.predict_label_pairs[:len(self.raw_predicts),1], 0].astype(np.int32)
+        # convert list of label names to dict
+        labelNames = self.names
+        name2idx = {}
+        for i in range(len(labelNames)):
+            name2idx[labelNames[i]]=i
+        
+        # find images
+        labelSet = set()
+        for label in labels:
+            labelSet.add(name2idx[label])
+        predSet = set()
+        for label in preds:
+            predSet.add(name2idx[label])
+        imageids = []
+        if alllabels is not None and allpreds is not None:
+            n = len(alllabels)
+            for i in range(n):
+                if alllabels[i] in labelSet and allpreds[i] in predSet:
+                    imageids.append(i)
+                    
+        # limit length of images
+        return imageids[:1600]
+    
 def box_area(box):
     # box = xyxy(4,n)
     return (box[2] - box[0]) * (box[3] - box[1])
