@@ -61,7 +61,7 @@ class GridLayout(object):
         # dummy at [0.5, 0.5]
         dummy_vertices = (1 - cdist(grids, dummy_points, "euclidean")) * 100
         cost_matrix = np.concatenate((original_cost_matrix, dummy_vertices), axis=1)
-        row_asses, col_asses, info = fastlapjv(cost_matrix, k_value=50)
+        row_asses, col_asses, info = fastlapjv(cost_matrix, k_value=50 if len(cost_matrix)>50 else len(cost_matrix))
         col_asses = col_asses[:num]
         return col_asses, square_len
         
