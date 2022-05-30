@@ -53,6 +53,7 @@ class DataCtrler(object):
         self.box_aspect_ratio_split_path = os.path.join(bufferPath, "{}_box_aspect_ratio_split.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         self.box_aspect_ratio_dist_path = os.path.join(bufferPath, "{}_box_aspect_ratio_dist.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
         self.hierarchy_sample_path = os.path.join(bufferPath, "{}_hierarchy_samples.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
+        self.all_features_path = os.path.join(bufferPath, "{}_features.npy".format(os.path.basename(os.path.normpath(rawDataPath))))
         
         self.logger = logging.getLogger('dataCtrler')
 
@@ -111,18 +112,21 @@ class DataCtrler(object):
             self.index2image[index] = image
         
         # read feature data
-        # self.features = np.load(self.feature_path)
-        self.features = np.zeros((self.raw_predicts.shape[0], 256))
-        for name in os.listdir(self.images_path):
-            feature_path = os.path.join(self.features_path, name.split('.')[0]+'.npy')
-            imageid = self.image2index[name.split('.')[0]]
-            boxCount = self.imageid2raw_predict[imageid][1]-self.imageid2raw_predict[imageid][0]
-            if not os.path.exists(feature_path):
-                # WARNING
-                self.logger.warning("can't find feature: %s" % feature_path)
-                self.features[self.imageid2raw_predict[imageid][0]:self.imageid2raw_predict[imageid][1]] = np.random.rand(boxCount, 256)
-            else:
-                self.features[self.imageid2raw_predict[imageid][0]:self.imageid2raw_predict[imageid][1]] = np.load(feature_path)
+        if os.path.exists(self.all_features_path):
+            self.features = np.load(self.all_features_path)
+        else:
+            self.features = np.zeros((self.raw_predicts.shape[0], 256))
+            for name in os.listdir(self.images_path):
+                feature_path = os.path.join(self.features_path, name.split('.')[0]+'.npy')
+                imageid = self.image2index[name.split('.')[0]]
+                boxCount = self.imageid2raw_predict[imageid][1]-self.imageid2raw_predict[imageid][0]
+                if not os.path.exists(feature_path):
+                    # WARNING
+                    self.logger.warning("can't find feature: %s" % feature_path)
+                    self.features[self.imageid2raw_predict[imageid][0]:self.imageid2raw_predict[imageid][1]] = np.random.rand(boxCount, 256)
+                else:
+                    self.features[self.imageid2raw_predict[imageid][0]:self.imageid2raw_predict[imageid][1]] = np.load(feature_path)
+            np.save(self.all_features_path, self.features)
         
         ## init meta data
         with open(self.meta_path) as f:
@@ -786,7 +790,8 @@ def box_iou(box1, box2):
 dataCtrler = DataCtrler()
 
 if __name__ == "__main__":
-    dataCtrler.process("/data/zhaowei/ConfusionMatrix//datasets/coco/", "/data/zhaowei/ConfusionMatrix/backend/buffer/")
+    # dataCtrler.process("/data/yukai/UnifiedConfusionMatrix/datasets/coco/", "/data/yukai/UnifiedConfusionMatrix/buffer/")
+    dataCtrler.process("/data/zhaowei/ConfusionMatrix/datasets/coco/", "/data/zhaowei/ConfusionMatrix/backend/buffer/")
     matrix = dataCtrler.getConfusionMatrix({
         "label_size": [0,1],
         "predict_size": [0,1],

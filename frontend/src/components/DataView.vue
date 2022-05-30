@@ -58,14 +58,14 @@
 
         </div>
         <div id="matrices-container">
-            <div class="toolbar-title">Matrix</div>
+            <div class="toolbar-title">Confusion Matrix</div>
             <div id="confusion-matrix-container">
                 <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion" :showDirection="showDirection" @clickCell="clickConfusionCell"
                     :confusionMatrix="confusionMatrix" :returnMode="returnMode"></confusion-matrix>
             </div>
         </div>
         <div id="grid-view-container">
-            <div class="toolbar-title">Grid</div>
+            <div class="toolbar-title">Images</div>
             <div id="grid-layout-container">
                 <grid-layout ref="grid"></grid-layout>
             </div>

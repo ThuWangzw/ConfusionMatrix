@@ -91,7 +91,7 @@ export default {
             gridCellAttrs: {
                 'gClass': 'grid-cell-in-g',
                 'size': 60,
-                'stroke-width': 0,
+                'stroke-width': 0.2,
                 'stroke': 'gray',
                 'rectOpacity': 1,
                 'centerR': 3,
@@ -211,7 +211,7 @@ export default {
                     .attr('height', that.gridCellAttrs['size'])
                     .attr('stroke', that.gridCellAttrs['stroke'])
                     .attr('stroke-width', that.gridCellAttrs['stroke-width'])
-                    .attr('fill', 'rgb(127,127,127)')
+                    .attr('fill', 'rgb(255,255,255)')
                     .attr('opacity', 1);
 
                 gridCellsInG.filter(function(d) {
@@ -248,7 +248,7 @@ export default {
                 that.gridCellsInG.selectAll('rect')
                     .transition()
                     .duration(that.updateDuration)
-                    .attr('fill', 'rgb(127,127,127)')
+                    .attr('fill', 'rgb(255,255,255)')
                     .attr('opacity', 1)
                     .on('end', resolve);
 

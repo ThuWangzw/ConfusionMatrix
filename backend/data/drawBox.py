@@ -63,6 +63,19 @@ class Annotator:
         return np.asarray(self.im)
 
 if __name__ == "__main__":
+    # pic = np.array(Image.open('/home/yukai/large/UnifiedConfusionMatrix/datasets/coco/images/000000000009.jpg'))
+    # # with open('/data/zhaowei/ConfusionMatrix/datasets/coco/predicts/000000074842.txt') as f:
+    # with open('/home/yukai/large/UnifiedConfusionMatrix/datasets/coco/predicts/000000000009.txt') as f:
+    #     gt = np.array([x.split() for x in f.read().strip().splitlines() if len(x)])
+    # gt = gt.astype(np.float64)
+    # anno = Annotator(pic, pil=True)
+    # pic = Image.fromarray(pic)
+    # amp = np.array([pic.width,pic.height,pic.width,pic.height])
+    # for i in range(len(gt)):
+    #     anno.box_label(xywh2xyxy(gt[i,2:6]*amp).tolist(), color=(255,0,0), label=''+str(gt[i,0]))
+    # Image.fromarray(anno.result()).save('./123.jpg')
+    # exit(0)
+
     from data.dataCtrler import DataCtrler
     dataCtrler = DataCtrler()
     dataCtrler.process("/data/zhaowei/ConfusionMatrix/datasets/coco/", "/data/zhaowei/ConfusionMatrix/backend/buffer/")
