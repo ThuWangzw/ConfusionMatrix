@@ -534,10 +534,12 @@ class DataCtrler(object):
         return labelTransform.astype(int)
         
     def gridZoomIn(self, nodes, constraints, depth):
-        allpreds = self.raw_predicts[:, 0].astype(np.int32)
+        allpreds = self.raw_predicts[self.predict_label_pairs[:len(self.raw_predicts),0], 0].astype(np.int32)
         alllabels = self.raw_labels[self.predict_label_pairs[:len(self.raw_predicts),1], 0].astype(np.int32)
+        negaLabels = np.where(self.predict_label_pairs[:len(self.raw_predicts),1]==-1)[0]
+        alllabels[negaLabels] = len(self.names)-1
         allconfidence = self.raw_predicts[self.predict_label_pairs[:,0], 1]
-        allfeatures = np.random.rand(self.raw_predicts.shape[0], 256)
+        allfeatures = self.features
         neighbors, newDepth = self.sampler.zoomin(nodes, depth)
         if type(neighbors)==dict:
             while True:
@@ -724,8 +726,10 @@ class DataCtrler(object):
         Returns:
             list: images id
         """ 
-        allpreds = self.raw_predicts[:, 0].astype(np.int32)
+        allpreds = self.raw_predicts[self.predict_label_pairs[:len(self.raw_predicts),0], 0].astype(np.int32)
         alllabels = self.raw_labels[self.predict_label_pairs[:len(self.raw_predicts),1], 0].astype(np.int32)
+        negaLabels = np.where(self.predict_label_pairs[:len(self.raw_predicts),1]==-1)[0]
+        alllabels[negaLabels] = len(self.names)-1
         # convert list of label names to dict
         labelNames = self.names
         name2idx = {}
@@ -747,7 +751,7 @@ class DataCtrler(object):
                     imageids.append(i)
                     
         # limit length of images
-        return imageids[:1600]
+        return imageids[:225]
     
 def box_area(box):
     # box = xyxy(4,n)

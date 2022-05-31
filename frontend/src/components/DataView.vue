@@ -288,6 +288,8 @@ export default {
                 if (images.length>0) {
                     console.log(images);
                     that.$refs.grid.showBottomNodes(images);
+                } else {
+                    console.log('no images');
                 }
             });
         },
