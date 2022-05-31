@@ -1,14 +1,5 @@
 <template>
   <div id="app">
-    <el-menu
-      :default-active="activeRoute"
-      :router="true"
-      mode="horizontal"
-      background-color="#545c64"
-      text-color="#fff"
-      active-text-color="#ffd04b">
-      <li id="navi-title">ConfusionMatrix</li>
-    </el-menu>
     <svg width="0" height="0">
         <defs id="texture">
             <pattern v-for="(texture, i) in textures" v-html="texture" :key="i">
@@ -71,7 +62,7 @@ export default {
 html, body, #app {
   margin: 0;
   width: 100%;
-  height: 100%;
+  height: 99.8%;
 }
 
 #app {

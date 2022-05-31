@@ -437,7 +437,7 @@ export default {
                     .attr('transform', (d) => `translate(${d.column*that.cellAttrs['size']}, 
                         ${d.row*that.cellAttrs['size']})`)
                     .on('click', function(e, d) {
-                        return;
+                        that.$emit('clickCell', d);
                     })
                     .on('mouseover', function(e, d) {
                         if (that.isHideCell(d)) return;
@@ -498,12 +498,15 @@ export default {
                     matrixCellsinG.filter((d) => d.info.count>0)
                         .append('polyline')
                         .attr('class', 'dir-'+i)
-                        .attr('points', `${that.cellAttrs['size']/3},${that.cellAttrs['size']/2}
-                                         ${that.cellAttrs['size']/18},${that.cellAttrs['size']/2}`)
+                        .attr('points', (d)=>`${that.cellAttrs['size']/3},${that.cellAttrs['size']/2}
+                                         ${d.info.direction===undefined?
+        that.cellAttrs['size']/18:
+        that.cellAttrs['size']*Math.min(2/9, 1/3-5/18*d.info.direction[i]/Math.max(1, d3.max(d.info.direction)))},
+                                         ${that.cellAttrs['size']/2}`)
                         .attr('fill', 'none')
                         .attr('stroke', 'currentColor')
                         .attr('marker-end', 'url(#arrow)')
-                        .attr('opacity', (d)=>d.info.direction===undefined?0:d.info.direction[i]/Math.max(1, d3.max(d.info.direction)))
+                        .attr('opacity', (d)=>d.info.direction===undefined?0:1)
                         .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
                                                  scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
                                                  translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})
@@ -707,7 +710,12 @@ export default {
                             d3.select(this).select('.dir-'+i)
                                 .transition()
                                 .duration(that.updateDuration)
-                                .attr('opacity', (d)=>d.info.direction[i]/Math.max(1, d3.max(d.info.direction)))
+                                .attr('points', (d)=>`${that.cellAttrs['size']/3},${that.cellAttrs['size']/2}
+                                                ${d.info.direction===undefined?that.cellAttrs['size']/18:
+        that.cellAttrs['size']*Math.min(2/9, 1/3-5/18*d.info.direction[i]/Math.max(1, d3.max(d.info.direction)))},
+                                                ${that.cellAttrs['size']/2}`)
+                                .attr('opacity', 1)
+                                // .attr('marker-end', (d)=>`${d.info.direction[i]/Math.max(1, d3.max(d.info.direction))<0.1?'':'url(#arrow)'}`)
                                 .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
                                     scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
                                     translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})

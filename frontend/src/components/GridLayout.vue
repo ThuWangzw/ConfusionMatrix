@@ -1,0 +1,532 @@
+<template>
+    <div id="grid-layout">
+        <div id="grid-icons">
+            <img id="grid-zoomin-icon" class="grid-icon" src="/static/images/zoomin.svg" @click="initlasso">
+            <img id="grid-home-icon" class="grid-icon" src="/static/images/home.png" @click="zoomin()">
+        </div>
+        <svg id="grid-drawer" ref="gridsvg">
+            <g id="grid-main-g" transform="translate(0,0)">
+                <g id="grid-g"></g>
+                <g id="highlight-g"></g>
+                <g id="lasso-g"></g>
+            </g>
+        </svg>
+        <waiting-icon v-if="rendering"></waiting-icon>
+    </div>
+</template>
+
+<script>
+import {mapGetters} from 'vuex';
+import axios from 'axios';
+import * as d3 from 'd3';
+window.d3 = d3;
+require('../js/d3-lasso.js');
+import Util from './Util.vue';
+import GlobalVar from './GlovalVar.vue';
+import WaitingIcon from './WaitingIcon.vue';
+import {createPopper} from '@popperjs/core';
+
+export default {
+    name: 'GridLayout',
+    components: {WaitingIcon},
+    mixins: [Util, GlobalVar],
+    computed: {
+        ...mapGetters([
+            'labelHierarchy',
+            'labelnames',
+            'URL_GET_GRID',
+            'URL_GET_IMAGE',
+        ]),
+        svg: function() {
+            return d3.select('#grid-drawer');
+        },
+        mainG: function() {
+            return this.svg.select('#grid-main-g');
+        },
+        girdG: function() {
+            return this.mainG.select('#grid-g');
+        },
+        lassoG: function() {
+            return this.mainG.select('#lasso-g');
+        },
+        svgWidth: function() {
+            return this.gridCellAttrs['size'] * this.gridInfo['width'];
+        },
+        nodesDict: function() {
+            const nodesDict = {};
+            for (const node of this.nodes) {
+                nodesDict[node.index] = node;
+            }
+            return nodesDict;
+        },
+        lasso: function() {
+            return d3.lasso;
+        },
+        highlightG: function() {
+            return this.mainG.select('#highlight-g');
+        },
+    },
+    watch: {
+        // all info was loaded
+        labelnames: function(newColors, oldColors) {
+            if (!this.rendering && this.nodes.length>0 ) {
+                this.render();
+            }
+        },
+    },
+    data: function() {
+        return {
+            nodes: [],
+            showImageNodesMax: 1600,
+            showImageNodes: [],
+            depth: 0,
+            gridInfo: {},
+            rendering: false,
+
+            //
+            gridCellsInG: undefined,
+            lassoNodesInG: undefined,
+
+            //
+            gridCellAttrs: {
+                'gClass': 'grid-cell-in-g',
+                'size': 60,
+                'stroke-width': 0.2,
+                'stroke': 'gray',
+                'rectOpacity': 1,
+                'centerR': 3,
+                'centerClass': 'lasso-node',
+                'centerClassNotSelect': 'lasso-not-possible',
+                'centerClassSelect': 'lasso-possible',
+                'imageMargin': 4,
+            },
+
+            tooltipClass: 'cell-tooltip',
+        };
+    },
+    methods: {
+        zoomin: function(nodes) {
+            this.rendering = true;
+            if (nodes===undefined) {
+                // zoom home
+                nodes = [];
+                this.depth = 0;
+            }
+            if (nodes.length>0 && typeof(nodes[0])!=='number') {
+                nodes = nodes.map((d) => d.index);
+            }
+            const that = this;
+            const tsnes = nodes.map((d) => this.nodesDict[d].tsne);
+            const data = nodes.length===0?{
+                nodes: nodes,
+                depth: this.depth,
+            }:{
+                nodes: nodes,
+                depth: this.depth,
+                constraints: tsnes,
+            };
+            axios.post(this.URL_GET_GRID, data)
+                .then(function(response) {
+                    that.nodes = response.data.nodes;
+                    that.depth = response.data.depth;
+                    that.gridInfo = response.data.grid;
+                    that.render();
+                });
+        },
+        showBottomNodes: function(nodes) {
+            this.rendering = true;
+            if (nodes.length>0 && typeof(nodes[0])!=='number') {
+                nodes = nodes.map((d) => d.index);
+            }
+            const that = this;
+            axios.post(this.URL_GET_GRID, {
+                nodes: nodes,
+                depth: 1000,
+            }).then(function(response) {
+                that.nodes = response.data.nodes;
+                that.depth = response.data.depth;
+                that.gridInfo = response.data.grid;
+                that.render();
+            });
+        },
+        render: async function() {
+            // sort nodes and find most unconfident nodes
+            this.nodes.sort(function(a, b) {
+                return a.confidence-b.confidence;
+            });
+            for (let i=0; i<Math.min(this.showImageNodesMax, this.nodes.length); i++) {
+                this.nodes[i].showImage = true;
+            }
+
+            this.gridCellsInG = this.girdG.selectAll('.'+this.gridCellAttrs['gClass']).data(this.nodes, (d)=>d.index);
+            this.lassoNodesInG = this.lassoG.selectAll('.'+this.gridCellAttrs['centerClass']).data(this.nodes, (d)=>d.index);
+
+            await this.remove();
+            this.transform();
+            await this.update();
+            await this.create();
+
+            this.gridCellsInG = this.girdG.selectAll('.'+this.gridCellAttrs['gClass']);
+            this.lassoNodesInG = this.lassoG.selectAll('.'+this.gridCellAttrs['centerClass']);
+            this.rendering = false;
+        },
+        create: async function() {
+            const that = this;
+            return new Promise((resolve, reject) => {
+                const gridCellsInG = that.gridCellsInG.enter()
+                    .append('g')
+                    .attr('class', that.gridCellAttrs['gClass'])
+                    .attr('opacity', 0)
+                    .attr('transform', (d) => `translate(${(d.grid%that.gridInfo.width)*that.gridCellAttrs['size']},
+                        ${Math.floor(d.grid/that.gridInfo.width)*that.gridCellAttrs['size']})`)
+                    .on('mouseenter', function(e, d) {
+                        // eslint-disable-next-line no-invalid-this
+                        const node = d3.select(this).node();
+                        that.$emit('hoveredNode', [that.labelnames[d.label], that.labelnames[d.pred]]);
+                        createPopper(node, that.createTooltip(d), {
+                            modifiers: [
+                                {
+                                    name: 'offset',
+                                    options: {
+                                        offset: [0, 8],
+                                    },
+                                },
+                            ],
+                        });
+                    })
+                    .on('mouseleave', function() {
+                        that.$emit('hoveredNode', [null, null]);
+                        that.removeTooltip();
+                    });
+
+                gridCellsInG.transition()
+                    .duration(that.createDuration)
+                    .attr('opacity', 1)
+                    .on('end', resolve);
+
+                gridCellsInG.append('rect')
+                    .attr('x', 0)
+                    .attr('y', 0)
+                    .attr('width', that.gridCellAttrs['size'])
+                    .attr('height', that.gridCellAttrs['size'])
+                    .attr('stroke', that.gridCellAttrs['stroke'])
+                    .attr('stroke-width', that.gridCellAttrs['stroke-width'])
+                    .attr('fill', 'rgb(255,255,255)')
+                    .attr('opacity', 1);
+
+                gridCellsInG.filter(function(d) {
+                    return d.showImage;
+                }).append('image')
+                    .attr('x', that.gridCellAttrs['imageMargin'])
+                    .attr('y', that.gridCellAttrs['imageMargin'])
+                    .attr('width', that.gridCellAttrs['size']-2*that.gridCellAttrs['imageMargin'])
+                    .attr('height', that.gridCellAttrs['size']-2*that.gridCellAttrs['imageMargin'])
+                    // eslint-disable-next-line new-cap
+                    .attr('href', (node) => that.URL_GET_IMAGE(node.index));
+
+                that.lassoNodesInG.enter().append('circle')
+                    .attr('class', that.gridCellAttrs['centerClass'])
+                    .attr('r', that.gridCellAttrs['centerR'])
+                    .attr('cx', (d)=>that.gridCellAttrs['size']/2+(d.grid%that.gridInfo.width)*that.gridCellAttrs['size'])
+                    .attr('cy', (d)=>that.gridCellAttrs['size']/2+Math.floor(d.grid/that.gridInfo.width)*that.gridCellAttrs['size']);
+
+
+                if ((that.gridCellsInG.enter().size() === 0) && (that.lassoNodesInG.enter().size() === 0)) {
+                    resolve();
+                }
+            });
+        },
+        update: async function() {
+            const that = this;
+            return new Promise((resolve, reject) => {
+                that.gridCellsInG.transition()
+                    .duration(that.updateDuration)
+                    .attr('transform', (d) => `translate(${(d.grid%that.gridInfo.width)*that.gridCellAttrs['size']},
+                        ${Math.floor(d.grid/that.gridInfo.width)*that.gridCellAttrs['size']})`)
+                    .on('end', resolve);
+
+                that.gridCellsInG.selectAll('rect')
+                    .transition()
+                    .duration(that.updateDuration)
+                    .attr('fill', 'rgb(255,255,255)')
+                    .attr('opacity', 1)
+                    .on('end', resolve);
+
+                that.lassoNodesInG
+                    .attr('cx', (d)=>that.gridCellAttrs['size']/2+(d.grid%that.gridInfo.width)*that.gridCellAttrs['size'])
+                    .attr('cy', (d)=>that.gridCellAttrs['size']/2+Math.floor(d.grid/that.gridInfo.width)*that.gridCellAttrs['size']);
+
+                if ((that.gridCellsInG.size() === 0) && (that.lassoNodesInG.size() === 0)) {
+                    resolve();
+                }
+            });
+        },
+        remove: async function() {
+            const that = this;
+            return new Promise((resolve, reject) => {
+                that.gridCellsInG.exit()
+                    .transition()
+                    .duration(that.removeDuration)
+                    .attr('opacity', 0)
+                    .remove()
+                    .on('end', resolve);
+
+                that.lassoNodesInG.exit()
+                    .transition()
+                    .duration(that.removeDuration)
+                    .attr('opacity', 0)
+                    .remove()
+                    .on('end', resolve);
+
+                if ((that.gridCellsInG.exit().size() === 0) && (that.lassoNodesInG.exit().size() === 0)) {
+                    resolve();
+                }
+            });
+        },
+        transform: async function() {
+            const that = this;
+            return new Promise((resolve, reject) => {
+                // compute transform
+                const svgRealWidth = that.$refs.gridsvg.clientWidth;
+                const svgRealHeight = that.$refs.gridsvg.clientHeight;
+                const realSize = Math.min(svgRealWidth, svgRealHeight);
+                let shiftx = 0;
+                let shifty = 0;
+                let scale = 1;
+                if (that.svgWidth > realSize) {
+                    scale = realSize/that.svgWidth;
+                } else {
+                    scale = 1;
+                }
+                shiftx = (svgRealWidth-scale*that.svgWidth)/2;
+                shifty = (svgRealHeight-scale*that.svgWidth)/2;
+                that.mainG.transition()
+                    .duration(that.transformDuration)
+                    .attr('transform', `translate(${shiftx} ${shifty}) scale(${scale})`)
+                    .on('end', resolve);
+            });
+        },
+        initlasso: function() {
+            // Lasso functions
+            const that = this;
+            const lassoStart = function() {
+                lasso.items()
+                    .classed('lasso-not-possible', true)
+                    .classed('lasso-possible', false);
+            };
+
+            const lassoDraw = function() {
+                // Style the possible dots
+                lasso.possibleItems()
+                    .classed('lasso-not-possible', false)
+                    .classed('lasso-possible', true);
+
+                // Style the not possible dot
+                lasso.notPossibleItems()
+                    .classed('lasso-not-possible', true)
+                    .classed('lasso-possible', false);
+            };
+
+            const lassoEnd = function() {
+            // Reset the color of all dots
+                lasso.items()
+                    .classed('lasso-not-possible', false)
+                    .classed('lasso-possible', false);
+                const selectednodes = lasso.selectedItems().data();
+                if (selectednodes.length>0) {
+                    that.zoomin(selectednodes);
+                }
+                that.stoplasso();
+            };
+
+            const lasso = d3.lasso()
+                .closePathSelect(true)
+                .closePathDistance(100)
+                .items(this.lassoNodesInG)
+                .targetArea(this.svg)
+                .on('start', lassoStart)
+                .on('draw', lassoDraw)
+                .on('end', lassoEnd);
+
+            this.svg.call(lasso);
+        },
+        stoplasso: function() {
+            this.svg.select('.lasso').remove();
+            this.svg.on('.drag', null);
+        },
+        highlightCells: function(cells) {
+            const cellDict = {};
+            const that = this;
+            for (const cell of cells) cellDict[cell] = true;
+            this.gridCellsInG.filter((d) => cellDict[d.index]!==undefined)
+                .each(function(d) {
+                    that.highlightG.append('rect')
+                        .attr('x', (d.grid%that.gridInfo.width)*that.gridCellAttrs['size'])
+                        .attr('y', Math.floor(d.grid/that.gridInfo.width)*that.gridCellAttrs['size'])
+                        .attr('width', that.gridCellAttrs['size'])
+                        .attr('height', that.gridCellAttrs['size'])
+                        .attr('stroke', that.gridCellAttrs['stroke'])
+                        .attr('stroke-width', 4)
+                        .attr('fill', 'none');
+                });
+        },
+        unhighlightCells: function(cells) {
+            this.highlightG
+                .selectAll('rect')
+                .remove();
+        },
+        createTooltip: function(node) {
+            const that = this;
+            const getImageGradientURL = this.URL_GET_IMAGE;
+            const tooltip = d3.select('#grid-layout').append('div').attr('class', that.tooltipClass).style('display', 'none');
+            tooltip.style('display', 'flex');
+            tooltip.html(`<div class="grid-tooltip-info">ID: ${node.index}</div>
+                        <div>${that.labelnames[node.label]} -> ${that.labelnames[node.pred]}</div>
+                        <div>confidence: ${Math.round(node.confidence*100000)/100000}</div>
+                    <img class="gird-tooltip-image" src="${getImageGradientURL(node.index)}"/>
+                    <div id="grid-tooltip-arrow" data-popper-arrow></div>`);
+            return tooltip.node();
+        },
+        removeTooltip: function() {
+            d3.selectAll('.'+this.tooltipClass).remove();
+        },
+    },
+    mounted: function() {
+        const that = this;
+        axios.post(that.URL_GET_GRID, {
+            nodes: [],
+            depth: 0,
+        }).then(function(response) {
+            that.nodes = response.data.nodes;
+            that.depth = response.data.depth;
+            that.gridInfo = response.data.grid;
+            if (!that.rendering && that.labelnames.length>0) {
+                that.rendering = true;
+                that.render();
+            }
+        });
+    },
+};
+</script>
+
+<style>
+#grid-layout {
+    width: -moz-calc(100% - 20px);
+    width: -webkit-calc(100% - 20px);
+    width: -o-calc(100% - 20px);
+    width: calc(100% - 20px);
+    height: -moz-calc(100% - 20px);
+    height: -webkit-calc(100% - 20px);
+    height: -o-calc(100% - 20px);
+    height: calc(100% - 20px);
+    margin: 10px 10px 10px 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+}
+
+#grid-drawer {
+    width: 100%;
+    height: 100%;
+    flex-shrink: 100;
+}
+
+#grid-icons {
+    width: 90%;
+    height: 50px;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    margin: 0 0 0 25px;
+    flex-shrink: 1;
+    align-self: flex-start;
+}
+
+.grid-icon {
+    width: 20px;
+    height: 20px;
+    margin: 0 5px 0 5px;
+    cursor: pointer;
+}
+
+.lasso-not-possible, .lasso-node {
+    fill: none
+}
+
+.lasso-possible {
+    fill: rgb(200,200,200);
+}
+
+.lasso path {
+    stroke: rgb(80,80,80);
+    stroke-width:2px;
+}
+
+.lasso .drawn {
+    fill-opacity:.05 ;
+}
+
+.lasso .loop_close {
+    fill:none;
+    stroke-dasharray: 4,4;
+}
+
+.lasso .origin {
+    fill:#3399FF;
+    fill-opacity:.5;
+}
+
+.cell-tooltip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #ffffff;
+  color: gray;
+  font-weight: bold;
+  padding: 5px 10px;
+  font-size: 13px;
+  border-radius: 4px;
+}
+
+.gird-tooltip-image {
+    width: 100px;
+    height: 100px;
+    margin: 10px 0 0 0;
+}
+
+#grid-tooltip-arrow,
+#grid-tooltip-arrow::before {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: inherit;
+}
+
+#grid-tooltip-arrow {
+  visibility: hidden;
+}
+
+#grid-tooltip-arrow::before {
+  visibility: visible;
+  content: '';
+  transform: rotate(45deg);
+}
+
+.cell-tooltip[data-popper-placement^='top'] > #grid-tooltip-arrow {
+  bottom: -4px;
+}
+
+.cell-tooltip[data-popper-placement^='bottom'] > #grid-tooltip-arrow {
+  top: -4px;
+}
+
+.cell-tooltip[data-popper-placement^='left'] > #grid-tooltip-arrow {
+  right: -4px;
+}
+
+.cell-tooltip[data-popper-placement^='right'] > #grid-tooltip-arrow {
+  left: -4px;
+}
+</style>
