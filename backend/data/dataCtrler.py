@@ -57,7 +57,7 @@ class DataCtrler(object):
         
         self.logger = logging.getLogger('dataCtrler')
 
-        #read raw data
+        # read raw data
         if os.path.exists(self.raw_data_path):
             with open(self.raw_data_path, 'rb') as f:
                 self.image2index, self.raw_labels, self.raw_label2imageid, self.imageid2raw_label, self.raw_predicts, self.raw_predict2imageid, self.imageid2raw_predict = pickle.load(f)
@@ -68,6 +68,7 @@ class DataCtrler(object):
                 self.image2index[name.split('.')[0]]=id
                 id += 1
             ## read raw labels
+            # format: label, box(cx, cy, w, h)
             self.raw_labels = np.zeros((0,5), dtype=np.float32)
             self.raw_label2imageid = np.zeros(0, dtype=np.int32)
             self.imageid2raw_label = np.zeros((id, 2), dtype=np.int32)
@@ -88,6 +89,7 @@ class DataCtrler(object):
                     
                     
             ## read raw predicts
+            # format: predict, confidence, box(cx, cy, w, h)
             self.raw_predicts = np.zeros((0,6), dtype=np.float32)
             self.raw_predict2imageid = np.zeros(0, dtype=np.int32)
             self.imageid2raw_predict = np.zeros((id, 2), dtype=np.int32)
@@ -219,7 +221,7 @@ class DataCtrler(object):
         if os.path.exists(self.hierarchy_sample_path):
             self.sampler.load(self.hierarchy_sample_path)
         else:
-            labels =self.raw_predicts[:, 0].astype(np.int32)
+            labels = self.raw_predicts[:, 0].astype(np.int32)
             self.sampler.fit(self.features, labels, 0.5, 400)
             self.sampler.dump(self.hierarchy_sample_path)
           
@@ -232,7 +234,7 @@ class DataCtrler(object):
     def compute_label_predict_pair(self):
         def compute_per_image(detections, labels):
             # Updated version of https://github.com/kaanakan/object_detection_confusion_matrix
-            iou = box_iou(detections[:, 1:5], labels[:, 1:])
+            iou = box_iou(detections[:, 2:6], labels[:, 1:5])
 
             x = np.where(iou > self.iou_threshold_miss)
             if x[0].shape[0]:
@@ -704,7 +706,7 @@ class DataCtrler(object):
         amp = np.array([img.width,img.height,img.width,img.height])
         predictBox, labelBox = self.predict_label_pairs[boxID]
         if predictBox != -1:
-            anno.box_label(xywh2xyxy(self.raw_predicts[predictBox, 1:5]*amp).tolist(), color=(255,0,0))
+            anno.box_label(xywh2xyxy(self.raw_predicts[predictBox, 2:6]*amp).tolist(), color=(255,0,0))
         if labelBox != -1:
             anno.box_label(xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist(), color=(0,255,0))
         output = io.BytesIO()
@@ -790,8 +792,8 @@ def box_iou(box1, box2):
 dataCtrler = DataCtrler()
 
 if __name__ == "__main__":
-    # dataCtrler.process("/data/yukai/UnifiedConfusionMatrix/datasets/coco/", "/data/yukai/UnifiedConfusionMatrix/buffer/")
-    dataCtrler.process("/data/zhaowei/ConfusionMatrix/datasets/coco/", "/data/zhaowei/ConfusionMatrix/backend/buffer/")
+    dataCtrler.process("/data/yukai/UnifiedConfusionMatrix/datasets/coco/", "/data/yukai/UnifiedConfusionMatrix/buffer/")
+    # dataCtrler.process("/data/zhaowei/ConfusionMatrix/datasets/coco/", "/data/zhaowei/ConfusionMatrix/backend/buffer/")
     matrix = dataCtrler.getConfusionMatrix({
         "label_size": [0,1],
         "predict_size": [0,1],
