@@ -65,7 +65,13 @@
             </div>
         </div>
         <div id="grid-view-container">
-            <div class="toolbar-title">Images</div>
+            <div class="toolbar-title" id="grid-toolbar">
+                <span>Images</span>
+                <div id="grid-icons">
+                    <img id="grid-zoomin-icon" class="grid-icon" src="/static/images/zoomin.svg" @click="initGridLayoutLasso">
+                    <img id="grid-home-icon" class="grid-icon" src="/static/images/home.png" @click="gridLayoutZoomin()">
+                </div>
+            </div>
             <div id="grid-layout-container">
                 <grid-layout ref="grid"></grid-layout>
             </div>
@@ -293,6 +299,12 @@ export default {
                 }
             });
         },
+        initGridLayoutLasso: function() {
+            this.$refs.grid.initlasso();
+        },
+        gridLayoutZoomin: function() {
+            this.$refs.grid.zoomin();
+        },
     },
     mounted: function() {
         this.setBoxSizeInfo();
@@ -307,7 +319,6 @@ export default {
     font-family: Comic Sans MS;
     font-weight: normal;
     font-size: 10px;
-    /* margin-right: 5px; */
     display: block;
     float: left;
     width: 100px;
@@ -369,7 +380,6 @@ export default {
     width: 43%;
     height: 100%;
     display: flex;
-    margin: 0 0 0 10px;
     flex-direction: column;
 }
 
@@ -385,7 +395,6 @@ export default {
     width: 43%;
     height: 100%;
     display: flex;
-    margin: 0 0 0 10px;
     flex-direction: column;
 }
 
@@ -415,4 +424,27 @@ export default {
     border-radius: 5px;
 }
 
+
+#grid-icons {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    margin: 0 0 0 25px;
+    flex-shrink: 1;
+    /* align-self: flex-start; */
+}
+
+.grid-icon {
+    width: 15px;
+    height: 15px;
+    margin: 0 5px 0 5px;
+    cursor: pointer;
+}
+
+#grid-toolbar {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+}
 </style>

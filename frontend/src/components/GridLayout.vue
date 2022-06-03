@@ -1,9 +1,5 @@
 <template>
     <div id="grid-layout">
-        <div id="grid-icons">
-            <img id="grid-zoomin-icon" class="grid-icon" src="/static/images/zoomin.svg" @click="initlasso">
-            <img id="grid-home-icon" class="grid-icon" src="/static/images/home.png" @click="zoomin()">
-        </div>
         <svg id="grid-drawer" ref="gridsvg">
             <g id="grid-main-g" transform="translate(0,0)">
                 <g id="grid-g"></g>
@@ -447,24 +443,6 @@ export default {
     width: 100%;
     height: 100%;
     flex-shrink: 100;
-}
-
-#grid-icons {
-    width: 90%;
-    height: 50px;
-    display: flex;
-    justify-content: flex-start;
-    align-items: center;
-    margin: 0 0 0 25px;
-    flex-shrink: 1;
-    align-self: flex-start;
-}
-
-.grid-icon {
-    width: 20px;
-    height: 20px;
-    margin: 0 5px 0 5px;
-    cursor: pointer;
 }
 
 .lasso-not-possible, .lasso-node {
