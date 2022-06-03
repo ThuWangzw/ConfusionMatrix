@@ -49,6 +49,9 @@ export default {
         svgWidth: function() {
             return this.gridCellAttrs['size'] * this.gridInfo['width'];
         },
+        svgHeight: function() {
+            return this.gridCellAttrs['size'] * this.gridInfo['height'];
+        },
         nodesDict: function() {
             const nodesDict = {};
             for (const node of this.nodes) {
@@ -117,10 +120,12 @@ export default {
             const data = nodes.length===0?{
                 nodes: nodes,
                 depth: this.depth,
+                aspectRatio: that.getAspectArtio(),
             }:{
                 nodes: nodes,
                 depth: this.depth,
                 constraints: tsnes,
+                aspectRatio: this.getAspectArtio(),
             };
             axios.post(this.URL_GET_GRID, data)
                 .then(function(response) {
@@ -139,6 +144,7 @@ export default {
             axios.post(this.URL_GET_GRID, {
                 nodes: nodes,
                 depth: 1000,
+                aspectRatio: this.getAspectArtio(),
             }).then(function(response) {
                 that.nodes = response.data.nodes;
                 that.depth = response.data.depth;
@@ -287,17 +293,11 @@ export default {
                 // compute transform
                 const svgRealWidth = that.$refs.gridsvg.clientWidth;
                 const svgRealHeight = that.$refs.gridsvg.clientHeight;
-                const realSize = Math.min(svgRealWidth, svgRealHeight);
                 let shiftx = 0;
                 let shifty = 0;
-                let scale = 1;
-                if (that.svgWidth > realSize) {
-                    scale = realSize/that.svgWidth;
-                } else {
-                    scale = 1;
-                }
+                const scale = Math.min(1, svgRealWidth/that.svgWidth, svgRealHeight/that.svgHeight);
                 shiftx = (svgRealWidth-scale*that.svgWidth)/2;
-                shifty = (svgRealHeight-scale*that.svgWidth)/2;
+                shifty = (svgRealHeight-scale*that.svgHeight)/2;
                 that.mainG.transition()
                     .duration(that.transformDuration)
                     .attr('transform', `translate(${shiftx} ${shifty}) scale(${scale})`)
@@ -402,12 +402,18 @@ export default {
         removeTooltip: function() {
             d3.selectAll('.'+this.tooltipClass).remove();
         },
+        getAspectArtio: function() {
+            const svgRealWidth = this.$refs.gridsvg.clientWidth;
+            const svgRealHeight = this.$refs.gridsvg.clientHeight;
+            return svgRealHeight/svgRealWidth;
+        },
     },
     mounted: function() {
         const that = this;
         axios.post(that.URL_GET_GRID, {
             nodes: [],
             depth: 0,
+            aspectRatio: this.getAspectArtio(),
         }).then(function(response) {
             that.nodes = response.data.nodes;
             that.depth = response.data.depth;

@@ -68,7 +68,10 @@ def grid():
     if 'constraints' in request.json:
         constraints = request.json['constraints']
     depth = request.json['depth']
-    return jsonify(dataCtrler.gridZoomIn(nodes, constraints, depth))
+    aspectRatio = 1
+    if 'aspectRatio' in request.json:
+        aspectRatio = request.json['aspectRatio']
+    return jsonify(dataCtrler.gridZoomIn(nodes, constraints, depth, aspectRatio))
 
 def main():
     parser = argparse.ArgumentParser(description='manual to this script')

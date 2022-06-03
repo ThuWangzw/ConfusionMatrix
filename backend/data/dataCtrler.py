@@ -536,7 +536,7 @@ class DataCtrler(object):
                 labelTransform[i] = childToTop[self.names[i]]
         return labelTransform.astype(int)
         
-    def gridZoomIn(self, nodes, constraints, depth):
+    def gridZoomIn(self, nodes, constraints, depth, aspectRatio):
         allpreds = self.raw_predicts[self.predict_label_pairs[:len(self.raw_predicts),0], 0].astype(np.int32)
         alllabels = self.raw_labels[self.predict_label_pairs[:len(self.raw_predicts),1], 0].astype(np.int32)
         negaLabels = np.where(self.predict_label_pairs[:len(self.raw_predicts),1]==-1)[0]
@@ -678,7 +678,8 @@ class DataCtrler(object):
         # oroginal
         # labelTransform = self.transformBottomLabelToTop([node['name'] for node in self.statistic['confusion']['hierarchy']])       
 
-        tsne, grid, gridsize = self.grider.fit(allfeatures[zoomInNodes], labels = labels, constraintX = zoomInConstraintX,  constraintY = zoomInConstraints, constraintLabels = constraintLabels)
+        tsne, grid, grid_width, grid_height = self.grider.fit(allfeatures[zoomInNodes], labels = labels, constraintX = zoomInConstraintX, 
+                                               constraintY = zoomInConstraints, constraintLabels = constraintLabels, aspectRatio = aspectRatio)
         tsne = tsne.tolist()
         grid = grid.tolist()
         zoomInLabels = zoomInLabels.tolist()
@@ -697,8 +698,8 @@ class DataCtrler(object):
         res = {
             "nodes": nodes,
             "grid": {
-                "width": gridsize,
-                "height": gridsize,
+                "width": grid_width,
+                "height": grid_height,
             },
             "depth": newDepth
         }
