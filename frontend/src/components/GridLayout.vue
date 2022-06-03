@@ -1,9 +1,5 @@
 <template>
     <div id="grid-layout">
-        <div id="grid-icons">
-            <img id="grid-zoomin-icon" class="grid-icon" src="/static/images/zoomin.svg" @click="initlasso">
-            <img id="grid-home-icon" class="grid-icon" src="/static/images/home.png" @click="zoomin()">
-        </div>
         <svg id="grid-drawer" ref="gridsvg">
             <g id="grid-main-g" transform="translate(0,0)">
                 <g id="grid-g"></g>
@@ -36,6 +32,7 @@ export default {
             'labelnames',
             'URL_GET_GRID',
             'URL_GET_IMAGE',
+            'URL_GET_IMAGES',
         ]),
         svg: function() {
             return d3.select('#grid-drawer');
@@ -51,6 +48,9 @@ export default {
         },
         svgWidth: function() {
             return this.gridCellAttrs['size'] * this.gridInfo['width'];
+        },
+        svgHeight: function() {
+            return this.gridCellAttrs['size'] * this.gridInfo['height'];
         },
         nodesDict: function() {
             const nodesDict = {};
@@ -120,10 +120,12 @@ export default {
             const data = nodes.length===0?{
                 nodes: nodes,
                 depth: this.depth,
+                aspectRatio: that.getAspectArtio(),
             }:{
                 nodes: nodes,
                 depth: this.depth,
                 constraints: tsnes,
+                aspectRatio: this.getAspectArtio(),
             };
             axios.post(this.URL_GET_GRID, data)
                 .then(function(response) {
@@ -142,6 +144,7 @@ export default {
             axios.post(this.URL_GET_GRID, {
                 nodes: nodes,
                 depth: 1000,
+                aspectRatio: this.getAspectArtio(),
             }).then(function(response) {
                 that.nodes = response.data.nodes;
                 that.depth = response.data.depth;
@@ -157,6 +160,9 @@ export default {
             for (let i=0; i<Math.min(this.showImageNodesMax, this.nodes.length); i++) {
                 this.nodes[i].showImage = true;
             }
+
+            // get images
+            await this.getImages();
 
             this.gridCellsInG = this.girdG.selectAll('.'+this.gridCellAttrs['gClass']).data(this.nodes, (d)=>d.index);
             this.lassoNodesInG = this.lassoG.selectAll('.'+this.gridCellAttrs['centerClass']).data(this.nodes, (d)=>d.index);
@@ -182,7 +188,6 @@ export default {
                     .on('mouseenter', function(e, d) {
                         // eslint-disable-next-line no-invalid-this
                         const node = d3.select(this).node();
-                        that.$emit('hoveredNode', [that.labelnames[d.label], that.labelnames[d.pred]]);
                         createPopper(node, that.createTooltip(d), {
                             modifiers: [
                                 {
@@ -195,7 +200,6 @@ export default {
                         });
                     })
                     .on('mouseleave', function() {
-                        that.$emit('hoveredNode', [null, null]);
                         that.removeTooltip();
                     });
 
@@ -222,7 +226,7 @@ export default {
                     .attr('width', that.gridCellAttrs['size']-2*that.gridCellAttrs['imageMargin'])
                     .attr('height', that.gridCellAttrs['size']-2*that.gridCellAttrs['imageMargin'])
                     // eslint-disable-next-line new-cap
-                    .attr('href', (node) => that.URL_GET_IMAGE(node.index));
+                    .attr('href', (node) => node.img);
 
                 that.lassoNodesInG.enter().append('circle')
                     .attr('class', that.gridCellAttrs['centerClass'])
@@ -289,21 +293,29 @@ export default {
                 // compute transform
                 const svgRealWidth = that.$refs.gridsvg.clientWidth;
                 const svgRealHeight = that.$refs.gridsvg.clientHeight;
-                const realSize = Math.min(svgRealWidth, svgRealHeight);
                 let shiftx = 0;
                 let shifty = 0;
-                let scale = 1;
-                if (that.svgWidth > realSize) {
-                    scale = realSize/that.svgWidth;
-                } else {
-                    scale = 1;
-                }
+                const scale = Math.min(1, svgRealWidth/that.svgWidth, svgRealHeight/that.svgHeight);
                 shiftx = (svgRealWidth-scale*that.svgWidth)/2;
-                shifty = (svgRealHeight-scale*that.svgWidth)/2;
+                shifty = (svgRealHeight-scale*that.svgHeight)/2;
                 that.mainG.transition()
                     .duration(that.transformDuration)
                     .attr('transform', `translate(${shiftx} ${shifty}) scale(${scale})`)
                     .on('end', resolve);
+            });
+        },
+        getImages: async function() {
+            const that = this;
+            return new Promise((resolve, reject) => {
+                axios.post(that.URL_GET_IMAGES, {
+                    boxIDs: that.nodes.map((d) => d.index),
+                    show: 'box',
+                }).then((response) => {
+                    for (let i=0; i<that.nodes.length; i++) {
+                        that.nodes[i].img = `data:image/jpeg;base64,${response.data[i]}`;
+                    }
+                    resolve();
+                });
             });
         },
         initlasso: function() {
@@ -383,12 +395,17 @@ export default {
             tooltip.html(`<div class="grid-tooltip-info">ID: ${node.index}</div>
                         <div>${that.labelnames[node.label]} -> ${that.labelnames[node.pred]}</div>
                         <div>confidence: ${Math.round(node.confidence*100000)/100000}</div>
-                    <img class="gird-tooltip-image" src="${getImageGradientURL(node.index)}"/>
+                    <img class="gird-tooltip-image" src="${getImageGradientURL(node.index, 'full')}"/>
                     <div id="grid-tooltip-arrow" data-popper-arrow></div>`);
             return tooltip.node();
         },
         removeTooltip: function() {
             d3.selectAll('.'+this.tooltipClass).remove();
+        },
+        getAspectArtio: function() {
+            const svgRealWidth = this.$refs.gridsvg.clientWidth;
+            const svgRealHeight = this.$refs.gridsvg.clientHeight;
+            return svgRealHeight/svgRealWidth;
         },
     },
     mounted: function() {
@@ -396,6 +413,7 @@ export default {
         axios.post(that.URL_GET_GRID, {
             nodes: [],
             depth: 0,
+            aspectRatio: this.getAspectArtio(),
         }).then(function(response) {
             that.nodes = response.data.nodes;
             that.depth = response.data.depth;
@@ -431,24 +449,6 @@ export default {
     width: 100%;
     height: 100%;
     flex-shrink: 100;
-}
-
-#grid-icons {
-    width: 90%;
-    height: 50px;
-    display: flex;
-    justify-content: flex-start;
-    align-items: center;
-    margin: 0 0 0 25px;
-    flex-shrink: 1;
-    align-self: flex-start;
-}
-
-.grid-icon {
-    width: 20px;
-    height: 20px;
-    margin: 0 5px 0 5px;
-    cursor: pointer;
 }
 
 .lasso-not-possible, .lasso-node {

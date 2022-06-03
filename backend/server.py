@@ -41,12 +41,19 @@ def boxAspectRatioDist():
 @app.route('/api/image', methods=["GET"])
 def imageGradient():
     boxID = int(request.args['boxID'])
-    image_binary = dataCtrler.getImage(boxID).getvalue()
+    showmode = request.args['show']
+    image_binary = dataCtrler.getImage(boxID, showmode).getvalue()
     response = make_response(image_binary)
     response.headers.set('Content-Type', 'image/jpeg')
     response.headers.set(
         'Content-Disposition', 'attachment', filename='%s.jpg' % boxID)
     return response
+
+@app.route('/api/images', methods=["POST"])
+def imagesGradient():
+    boxIDs = request.json['boxIDs']
+    showmode = request.json['show']
+    return jsonify(dataCtrler.getImages(boxIDs, showmode))
 
 @app.route('/api/imagesInCell', methods=["POST"])
 def confusionMatrixCell():
@@ -61,7 +68,10 @@ def grid():
     if 'constraints' in request.json:
         constraints = request.json['constraints']
     depth = request.json['depth']
-    return jsonify(dataCtrler.gridZoomIn(nodes, constraints, depth))
+    aspectRatio = 1
+    if 'aspectRatio' in request.json:
+        aspectRatio = request.json['aspectRatio']
+    return jsonify(dataCtrler.gridZoomIn(nodes, constraints, depth, aspectRatio))
 
 def main():
     parser = argparse.ArgumentParser(description='manual to this script')

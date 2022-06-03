@@ -14,7 +14,7 @@ class GridLayout(object):
         super().__init__()
         self.tsner = IncrementalTSNE(n_components=2, init='pca', method='barnes_hut', perplexity=30, angle=0.3, n_jobs=8, n_iter=1000, random_state = 100)
 
-    def fit(self, X: np.ndarray, labels: np.ndarray = None, constraintX: np.ndarray = None, constraintY: np.ndarray = None, constraintLabels: np.ndarray = None, init = None):
+    def fit(self, X: np.ndarray, labels: np.ndarray = None, constraintX: np.ndarray = None, constraintY: np.ndarray = None, constraintLabels: np.ndarray = None, init = None, aspectRatio = 1):
         """main fit function
 
         Args:
@@ -22,8 +22,8 @@ class GridLayout(object):
             labels (np.ndarray): label of each sample in X
         """        
         X_embedded = self.tsne(X, constraintX = constraintX, constraintY = constraintY, labels = labels, constraintLabels = constraintLabels, init = init)
-        grid_ass, grid_size = self.grid(X_embedded)
-        return X_embedded, grid_ass, grid_size
+        grid_ass, grid_width, grid_height = self.grid(X_embedded, aspectRatio)
+        return X_embedded, grid_ass, grid_width, grid_height
         
     def tsne(self, X: np.ndarray, labels: np.ndarray = None, perplexity: int = 15, learning_rate: int = 3, constraintX: np.ndarray = None, constraintY: np.ndarray = None, constraintLabels: np.ndarray = None, init = None) -> np.ndarray:
         # remove empty labels
@@ -45,25 +45,27 @@ class GridLayout(object):
             alpha = 0.1, labels = labels, label_alpha=0.1)
         return X_embedded
     
-    def grid(self, X_embedded: np.ndarray):
+    def grid(self, X_embedded: np.ndarray, aspectRatio: int = 1):
         X_embedded -= X_embedded.min(axis=0)
         X_embedded /= X_embedded.max(axis=0)
         num = X_embedded.shape[0]
-        square_len = math.ceil(np.sqrt(num))
-        N = square_len * square_len
-        grids = np.dstack(np.meshgrid(np.linspace(0, 1 - 1.0 / square_len, square_len),
-                np.linspace(0, 1 - 1.0 / square_len, square_len))) \
+        k = np.sqrt(num/aspectRatio)
+        width = math.ceil(k)
+        height = math.ceil(k*aspectRatio)
+        N = width * height
+        grids = np.dstack(np.meshgrid(np.linspace(0, 1 - 1.0 / width, width),
+                np.linspace(0, 1 - 1.0 / height, height))) \
                 .reshape(-1, 2)
 
         original_cost_matrix = cdist(grids, X_embedded, "euclidean")
         # knn process
         dummy_points = np.ones((N - original_cost_matrix.shape[1], 2)) * 0.5
         # dummy at [0.5, 0.5]
-        dummy_vertices = (1 - cdist(grids, dummy_points, "euclidean")) * 100
+        dummy_vertices = (1 - cdist(grids, dummy_points, "euclidean")) * 1000
         cost_matrix = np.concatenate((original_cost_matrix, dummy_vertices), axis=1)
         row_asses, col_asses, info = fastlapjv(cost_matrix, k_value=50 if len(cost_matrix)>50 else len(cost_matrix))
         col_asses = col_asses[:num]
-        return col_asses, square_len
+        return col_asses, width, height
         
 if __name__ == "__main__":
     X = np.random.rand(500, 128)

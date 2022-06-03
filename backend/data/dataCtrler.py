@@ -2,13 +2,15 @@ import os
 import json
 import copy
 import bisect
+from tkinter import N
 import numpy as np
-# import data.reorder as reorder
 import pickle
 import torch
 import math
+import io
 from PIL import Image
 import logging
+import base64
 from queue import PriorityQueue
 
 from data.grid.sampling import HierarchySampling
@@ -534,7 +536,7 @@ class DataCtrler(object):
                 labelTransform[i] = childToTop[self.names[i]]
         return labelTransform.astype(int)
         
-    def gridZoomIn(self, nodes, constraints, depth):
+    def gridZoomIn(self, nodes, constraints, depth, aspectRatio):
         allpreds = self.raw_predicts[self.predict_label_pairs[:len(self.raw_predicts),0], 0].astype(np.int32)
         alllabels = self.raw_labels[self.predict_label_pairs[:len(self.raw_predicts),1], 0].astype(np.int32)
         negaLabels = np.where(self.predict_label_pairs[:len(self.raw_predicts),1]==-1)[0]
@@ -676,7 +678,8 @@ class DataCtrler(object):
         # oroginal
         # labelTransform = self.transformBottomLabelToTop([node['name'] for node in self.statistic['confusion']['hierarchy']])       
 
-        tsne, grid, gridsize = self.grider.fit(allfeatures[zoomInNodes], labels = labels, constraintX = zoomInConstraintX,  constraintY = zoomInConstraints, constraintLabels = constraintLabels)
+        tsne, grid, grid_width, grid_height = self.grider.fit(allfeatures[zoomInNodes], labels = labels, constraintX = zoomInConstraintX, 
+                                               constraintY = zoomInConstraints, constraintLabels = constraintLabels, aspectRatio = aspectRatio)
         tsne = tsne.tolist()
         grid = grid.tolist()
         zoomInLabels = zoomInLabels.tolist()
@@ -695,26 +698,82 @@ class DataCtrler(object):
         res = {
             "nodes": nodes,
             "grid": {
-                "width": gridsize,
-                "height": gridsize,
+                "width": grid_width,
+                "height": grid_height,
             },
             "depth": newDepth
         }
         return res
         
-    def getImage(self, boxID: int) -> list:
-        import io
+    def getImage(self, boxID: int, show: str):
         img = Image.open(os.path.join(self.images_path, self.index2image[self.raw_predict2imageid[boxID]]+'.jpg'))
-        anno = Annotator(np.array(img), pil=True, line_width=20)
+        anno = Annotator(np.array(img), pil=True)
         amp = np.array([img.width,img.height,img.width,img.height])
         predictBox, labelBox = self.predict_label_pairs[boxID]
+        predictXYXY = None
         if predictBox != -1:
-            anno.box_label(xywh2xyxy(self.raw_predicts[predictBox, 2:6]*amp).tolist(), color=(255,0,0))
+            predictXYXY = xywh2xyxy(self.raw_predicts[predictBox, 2:6]*amp).tolist()
+            anno.box_label(predictXYXY, color=(255,0,0))
+        labelXYXY = None
         if labelBox != -1:
-            anno.box_label(xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist(), color=(0,255,0))
+            labelXYXY = xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist()
+            anno.box_label(labelXYXY, color=(0,255,0))
         output = io.BytesIO()
-        anno.im.save(output, format="JPEG")
+        if show=='box':
+            self.cropImageByBox(anno.im, predictXYXY, labelXYXY, [img.width, img.height]).save(output, format="JPEG")
+        else:
+            anno.im.save(output, format="JPEG")
         return output
+    
+    def getImages(self, boxIDs: list, show: str):
+        base64Imgs = []
+        for boxID in boxIDs:
+            img = Image.open(os.path.join(self.images_path, self.index2image[self.raw_predict2imageid[boxID]]+'.jpg'))
+            anno = Annotator(np.array(img), pil=True)
+            amp = np.array([img.width,img.height,img.width,img.height])
+            predictBox, labelBox = self.predict_label_pairs[boxID]
+            predictXYXY = None
+            if predictBox != -1:
+                predictXYXY = xywh2xyxy(self.raw_predicts[predictBox, 2:6]*amp).tolist()
+                anno.box_label(predictXYXY, color=(255,0,0))
+            labelXYXY = None
+            if labelBox != -1:
+                labelXYXY = xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist()
+                anno.box_label(labelXYXY, color=(0,255,0))
+            output = io.BytesIO()
+            if show=='box':
+                self.cropImageByBox(anno.im, predictXYXY, labelXYXY, [img.width, img.height]).save(output, format="JPEG")
+            else:
+                anno.im.save(output, format="JPEG")
+            base64Imgs.append(base64.b64encode(output.getvalue()).decode())
+        return base64Imgs
+            
+        
+    
+    def cropImageByBox(self, img, predictBox, labelBox, shape):
+        box = None
+        if predictBox is None:
+            box = labelBox
+        elif labelBox is None:
+            box = predictBox
+        else:        
+            box = [
+                min(predictBox[0], labelBox[0]),
+                min(predictBox[1], labelBox[1]),
+                max(predictBox[2], labelBox[2]),
+                max(predictBox[3], labelBox[3])
+            ]
+        center = [(box[0]+box[2])/2, (box[1]+box[3])/2]
+        size = max((box[2]-box[0])/2, (box[3]-box[1])/2)
+        if (box[2]-box[0])*(box[3]-box[1])<400:
+            size += 10
+        box = [
+            max(center[0]-size, 0),
+            max(center[1]-size, 0),
+            min(center[0]+size, shape[0]),
+            min(center[1]+size, shape[1])
+        ]
+        return img.crop(box)
         
     def getImagesInConsuionMatrixCell(self, labels: list, preds: list) -> list:
         """
