@@ -36,6 +36,7 @@ export default {
             'labelnames',
             'URL_GET_GRID',
             'URL_GET_IMAGE',
+            'URL_GET_IMAGES',
         ]),
         svg: function() {
             return d3.select('#grid-drawer');
@@ -158,6 +159,9 @@ export default {
                 this.nodes[i].showImage = true;
             }
 
+            // get images
+            await this.getImages();
+
             this.gridCellsInG = this.girdG.selectAll('.'+this.gridCellAttrs['gClass']).data(this.nodes, (d)=>d.index);
             this.lassoNodesInG = this.lassoG.selectAll('.'+this.gridCellAttrs['centerClass']).data(this.nodes, (d)=>d.index);
 
@@ -220,7 +224,7 @@ export default {
                     .attr('width', that.gridCellAttrs['size']-2*that.gridCellAttrs['imageMargin'])
                     .attr('height', that.gridCellAttrs['size']-2*that.gridCellAttrs['imageMargin'])
                     // eslint-disable-next-line new-cap
-                    .attr('href', (node) => that.URL_GET_IMAGE(node.index, 'box'));
+                    .attr('href', (node) => node.img);
 
                 that.lassoNodesInG.enter().append('circle')
                     .attr('class', that.gridCellAttrs['centerClass'])
@@ -302,6 +306,20 @@ export default {
                     .duration(that.transformDuration)
                     .attr('transform', `translate(${shiftx} ${shifty}) scale(${scale})`)
                     .on('end', resolve);
+            });
+        },
+        getImages: async function() {
+            const that = this;
+            return new Promise((resolve, reject) => {
+                axios.post(that.URL_GET_IMAGES, {
+                    boxIDs: that.nodes.map((d) => d.index),
+                    show: 'box',
+                }).then((response) => {
+                    for (let i=0; i<that.nodes.length; i++) {
+                        that.nodes[i].img = `data:image/jpeg;base64,${response.data[i]}`;
+                    }
+                    resolve();
+                });
             });
         },
         initlasso: function() {

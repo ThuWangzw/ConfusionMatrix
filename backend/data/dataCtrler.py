@@ -4,12 +4,13 @@ import copy
 import bisect
 from tkinter import N
 import numpy as np
-# import data.reorder as reorder
 import pickle
 import torch
 import math
+import io
 from PIL import Image
 import logging
+import base64
 from queue import PriorityQueue
 
 from data.grid.sampling import HierarchySampling
@@ -703,8 +704,7 @@ class DataCtrler(object):
         }
         return res
         
-    def getImage(self, boxID: int, show: str) -> list:
-        import io
+    def getImage(self, boxID: int, show: str):
         img = Image.open(os.path.join(self.images_path, self.index2image[self.raw_predict2imageid[boxID]]+'.jpg'))
         anno = Annotator(np.array(img), pil=True)
         amp = np.array([img.width,img.height,img.width,img.height])
@@ -723,6 +723,31 @@ class DataCtrler(object):
         else:
             anno.im.save(output, format="JPEG")
         return output
+    
+    def getImages(self, boxIDs: list, show: str):
+        base64Imgs = []
+        for boxID in boxIDs:
+            img = Image.open(os.path.join(self.images_path, self.index2image[self.raw_predict2imageid[boxID]]+'.jpg'))
+            anno = Annotator(np.array(img), pil=True)
+            amp = np.array([img.width,img.height,img.width,img.height])
+            predictBox, labelBox = self.predict_label_pairs[boxID]
+            predictXYXY = None
+            if predictBox != -1:
+                predictXYXY = xywh2xyxy(self.raw_predicts[predictBox, 2:6]*amp).tolist()
+                anno.box_label(predictXYXY, color=(255,0,0))
+            labelXYXY = None
+            if labelBox != -1:
+                labelXYXY = xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist()
+                anno.box_label(labelXYXY, color=(0,255,0))
+            output = io.BytesIO()
+            if show=='box':
+                self.cropImageByBox(anno.im, predictXYXY, labelXYXY, [img.width, img.height]).save(output, format="JPEG")
+            else:
+                anno.im.save(output, format="JPEG")
+            base64Imgs.append(base64.b64encode(output.getvalue()).decode())
+        return base64Imgs
+            
+        
     
     def cropImageByBox(self, img, predictBox, labelBox, shape):
         box = None

@@ -49,6 +49,12 @@ def imageGradient():
         'Content-Disposition', 'attachment', filename='%s.jpg' % boxID)
     return response
 
+@app.route('/api/images', methods=["POST"])
+def imagesGradient():
+    boxIDs = request.json['boxIDs']
+    showmode = request.json['show']
+    return jsonify(dataCtrler.getImages(boxIDs, showmode))
+
 @app.route('/api/imagesInCell', methods=["POST"])
 def confusionMatrixCell():
     labels = request.json['labels']
