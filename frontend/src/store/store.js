@@ -34,7 +34,7 @@ export default new Vuex.Store({
         URL_GET_BOX_ASPECT_RATIO_DIST: (state) => state.APIBASE + '/api/boxAspectRatioDist',
         URL_GET_BOX_SIZE_DIST: (state) => state.APIBASE + '/api/boxSizeDist',
         URL_GET_IMAGE: (state) => {
-            return (boxID) => state.APIBASE + `/api/image?boxID=${boxID}`;
+            return (boxID, showmode) => state.APIBASE + `/api/image?boxID=${boxID}&show=${showmode}`;
         },
         URL_GET_IMAGES_IN_MATRIX_CELL: (state) => state.APIBASE+'/api/imagesInCell',
         URL_GET_GRID: (state) => state.APIBASE + '/api/grid',

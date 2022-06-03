@@ -2,6 +2,7 @@ import os
 import json
 import copy
 import bisect
+from tkinter import N
 import numpy as np
 # import data.reorder as reorder
 import pickle
@@ -702,19 +703,51 @@ class DataCtrler(object):
         }
         return res
         
-    def getImage(self, boxID: int) -> list:
+    def getImage(self, boxID: int, show: str) -> list:
         import io
         img = Image.open(os.path.join(self.images_path, self.index2image[self.raw_predict2imageid[boxID]]+'.jpg'))
-        anno = Annotator(np.array(img), pil=True, line_width=20)
+        anno = Annotator(np.array(img), pil=True)
         amp = np.array([img.width,img.height,img.width,img.height])
         predictBox, labelBox = self.predict_label_pairs[boxID]
+        predictXYXY = None
         if predictBox != -1:
-            anno.box_label(xywh2xyxy(self.raw_predicts[predictBox, 2:6]*amp).tolist(), color=(255,0,0))
+            predictXYXY = xywh2xyxy(self.raw_predicts[predictBox, 2:6]*amp).tolist()
+            anno.box_label(predictXYXY, color=(255,0,0))
+        labelXYXY = None
         if labelBox != -1:
-            anno.box_label(xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist(), color=(0,255,0))
+            labelXYXY = xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist()
+            anno.box_label(labelXYXY, color=(0,255,0))
         output = io.BytesIO()
-        anno.im.save(output, format="JPEG")
+        if show=='box':
+            self.cropImageByBox(anno.im, predictXYXY, labelXYXY, [img.width, img.height]).save(output, format="JPEG")
+        else:
+            anno.im.save(output, format="JPEG")
         return output
+    
+    def cropImageByBox(self, img, predictBox, labelBox, shape):
+        box = None
+        if predictBox is None:
+            box = labelBox
+        elif labelBox is None:
+            box = predictBox
+        else:        
+            box = [
+                min(predictBox[0], labelBox[0]),
+                min(predictBox[1], labelBox[1]),
+                max(predictBox[2], labelBox[2]),
+                max(predictBox[3], labelBox[3])
+            ]
+        center = [(box[0]+box[2])/2, (box[1]+box[3])/2]
+        size = max((box[2]-box[0])/2, (box[3]-box[1])/2)
+        if (box[2]-box[0])*(box[3]-box[1])<400:
+            size += 10
+        box = [
+            max(center[0]-size, 0),
+            max(center[1]-size, 0),
+            min(center[0]+size, shape[0]),
+            min(center[1]+size, shape[1])
+        ]
+        return img.crop(box)
         
     def getImagesInConsuionMatrixCell(self, labels: list, preds: list) -> list:
         """

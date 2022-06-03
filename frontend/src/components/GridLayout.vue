@@ -182,7 +182,6 @@ export default {
                     .on('mouseenter', function(e, d) {
                         // eslint-disable-next-line no-invalid-this
                         const node = d3.select(this).node();
-                        that.$emit('hoveredNode', [that.labelnames[d.label], that.labelnames[d.pred]]);
                         createPopper(node, that.createTooltip(d), {
                             modifiers: [
                                 {
@@ -195,7 +194,6 @@ export default {
                         });
                     })
                     .on('mouseleave', function() {
-                        that.$emit('hoveredNode', [null, null]);
                         that.removeTooltip();
                     });
 
@@ -222,7 +220,7 @@ export default {
                     .attr('width', that.gridCellAttrs['size']-2*that.gridCellAttrs['imageMargin'])
                     .attr('height', that.gridCellAttrs['size']-2*that.gridCellAttrs['imageMargin'])
                     // eslint-disable-next-line new-cap
-                    .attr('href', (node) => that.URL_GET_IMAGE(node.index));
+                    .attr('href', (node) => that.URL_GET_IMAGE(node.index, 'box'));
 
                 that.lassoNodesInG.enter().append('circle')
                     .attr('class', that.gridCellAttrs['centerClass'])
@@ -383,7 +381,7 @@ export default {
             tooltip.html(`<div class="grid-tooltip-info">ID: ${node.index}</div>
                         <div>${that.labelnames[node.label]} -> ${that.labelnames[node.pred]}</div>
                         <div>confidence: ${Math.round(node.confidence*100000)/100000}</div>
-                    <img class="gird-tooltip-image" src="${getImageGradientURL(node.index)}"/>
+                    <img class="gird-tooltip-image" src="${getImageGradientURL(node.index, 'full')}"/>
                     <div id="grid-tooltip-arrow" data-popper-arrow></div>`);
             return tooltip.node();
         },
