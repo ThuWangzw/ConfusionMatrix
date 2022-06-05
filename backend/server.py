@@ -42,7 +42,8 @@ def boxAspectRatioDist():
 def imageGradient():
     boxID = int(request.args['boxID'])
     showmode = request.args['show']
-    image_binary = dataCtrler.getImage(boxID, showmode).getvalue()
+    showall = request.args['showall']
+    image_binary = dataCtrler.getImage(boxID, showmode, showall).getvalue()
     response = make_response(image_binary)
     response.headers.set('Content-Type', 'image/jpeg')
     response.headers.set(

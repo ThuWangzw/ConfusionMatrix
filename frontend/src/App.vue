@@ -69,6 +69,7 @@ html, body, #app {
   font-family: 'Avenir', Helvetica, Arial, sans-serif;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 #navigation {
