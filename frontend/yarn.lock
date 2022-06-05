@@ -11732,6 +11732,11 @@ vue-docgen-cli@^4.41.2:
     prettier "^1.19.1"
     vue-docgen-api "^4.41.2"
 
+vue-draggable-resizable@^2.3.0:
+  version "2.3.0"
+  resolved "https://registry.npmmirror.com/vue-draggable-resizable/-/vue-draggable-resizable-2.3.0.tgz#94c433ca748bc1a4d0959ba1c5c0e1c3536cee5b"
+  integrity sha512-77CLRj1TPwB30pwsjOf3pkd1UzYanCdKXbqhILJ0Oo5QQl50lvBfyQCXxMFzwWwTc3sbBbQH3FfWSV+BkoSElA==
+
 vue-echarts@^6.0.0:
   version "6.0.0"
   resolved "https://registry.nlark.com/vue-echarts/download/vue-echarts-6.0.0.tgz?cache=0&sync_timestamp=1627907508392&other_urls=https%3A%2F%2Fregistry.nlark.com%2Fvue-echarts%2Fdownload%2Fvue-echarts-6.0.0.tgz#480263fc6ed2125b886bb1b7f05bf9273edee552"

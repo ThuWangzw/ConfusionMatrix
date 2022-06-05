@@ -36,6 +36,7 @@
     "react-dev-utils": "11.0.4",
     "strip-ansi": "^7.0.1",
     "vue": "^2.5.2",
+    "vue-draggable-resizable": "^2.3.0",
     "vue-echarts": "^6.0.0",
     "vue-loader": "15.9.3",
     "vue-router": "^3.5.3",

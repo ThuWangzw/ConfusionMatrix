@@ -1,5 +1,6 @@
+/* eslint-disable vue/no-v-for-template-key-on-child */
 <template>
-    <div id="grid-layout">
+    <div id="grid-layout" ref="grid">
         <svg id="grid-drawer" ref="gridsvg">
             <g id="grid-main-g" transform="translate(0,0)">
                 <g id="grid-g"></g>
@@ -8,6 +9,27 @@
             </g>
         </svg>
         <waiting-icon v-if="rendering"></waiting-icon>
+
+        <vue-draggable-resizable class="image-widget" v-for="(node, index) in showImages" :key="index" :lockAspectRatio="true"
+            :handles="['tl','tr','bl','br']" :min-width="150" :x="widgetInitX" :y="widgetInitY" :w="gridWidthInitWidth" :h="gridWidthInitWidth"
+                :onDragStart="disableHover" @dragstop="enableHover()"
+                :onResizeStart="disableHover" @resizestop="enableHover()">
+                <div class="grid-widget-info">
+                    <div class="grid-widget-toolbar">
+                        <img class="grid-widget-icon" :id="'gird-widget-icon-'+node.index" :src="`/static/images/eye-${node.widgetmode}.png`"
+                            @click="changeShowAll(node)"/>
+                        <img class="grid-widget-icon" src="/static/images/close.png" @click="closeImageWidget(node)"/>
+                    </div>
+                    <div>ID: {{ node.index }}</div>
+                    <div>Ground Truth: {{ labelnames[node.label] }}</div>
+                    <div>Prediction: {{ labelnames[node.pred] }}</div>
+                    <div>Confidence: {{ Math.round(node.confidence*100000)/100000 }}</div>
+                    <div class="widget-image-container">
+                        <img class="gird-widget-image" :id="'gird-widget-image-'+node.index"
+                            :src="URL_GET_IMAGE(node.index, 'full', node.widgetmode)"/>
+                    </div>
+                </div>
+        </vue-draggable-resizable>
     </div>
 </template>
 
@@ -21,10 +43,12 @@ import Util from './Util.vue';
 import GlobalVar from './GlovalVar.vue';
 import WaitingIcon from './WaitingIcon.vue';
 import {createPopper} from '@popperjs/core';
+import VueDraggableResizable from 'vue-draggable-resizable';
+import 'vue-draggable-resizable/dist/VueDraggableResizable.css';
 
 export default {
     name: 'GridLayout',
-    components: {WaitingIcon},
+    components: {WaitingIcon, VueDraggableResizable},
     mixins: [Util, GlobalVar],
     computed: {
         ...mapGetters([
@@ -65,6 +89,12 @@ export default {
         highlightG: function() {
             return this.mainG.select('#highlight-g');
         },
+        widgetInitX: function() {
+            return -this.gridWidthInitWidth;
+        },
+        widgetInitY: function() {
+            return -this.$refs.grid.getBoundingClientRect().height+30;
+        },
     },
     watch: {
         // all info was loaded
@@ -102,6 +132,11 @@ export default {
             },
 
             tooltipClass: 'cell-tooltip',
+
+            showImages: [],
+            hoverEnable: true,
+            gridWidthInitWidth: 400,
+            widgetUrl: '//166.111.80.25:5010/api/image?boxID=221887&show=full&showall=single',
         };
     },
     methods: {
@@ -188,19 +223,24 @@ export default {
                     .on('mouseenter', function(e, d) {
                         // eslint-disable-next-line no-invalid-this
                         const node = d3.select(this).node();
-                        createPopper(node, that.createTooltip(d), {
-                            modifiers: [
-                                {
-                                    name: 'offset',
-                                    options: {
-                                        offset: [0, 8],
+                        if (that.hoverEnable) {
+                            createPopper(node, that.createTooltip(d), {
+                                modifiers: [
+                                    {
+                                        name: 'offset',
+                                        options: {
+                                            offset: [0, 8],
+                                        },
                                     },
-                                },
-                            ],
-                        });
+                                ],
+                            });
+                        }
                     })
                     .on('mouseleave', function() {
                         that.removeTooltip();
+                    })
+                    .on('click', function(e, d) {
+                        that.createImageWidget(d);
                     });
 
                 gridCellsInG.transition()
@@ -393,19 +433,49 @@ export default {
             const tooltip = d3.select('#grid-layout').append('div').attr('class', that.tooltipClass).style('display', 'none');
             tooltip.style('display', 'flex');
             tooltip.html(`<div class="grid-tooltip-info">ID: ${node.index}</div>
-                        <div>${that.labelnames[node.label]} -> ${that.labelnames[node.pred]}</div>
-                        <div>confidence: ${Math.round(node.confidence*100000)/100000}</div>
-                    <img class="gird-tooltip-image" src="${getImageGradientURL(node.index, 'full')}"/>
+                        <div>Ground Truth: ${that.labelnames[node.label]}</div>
+                        <div>Prediction: ${that.labelnames[node.pred]}</div>
+                        <div>Confidence: ${Math.round(node.confidence*100000)/100000}</div>
+                    <img class="gird-tooltip-image" src="${getImageGradientURL(node.index, 'full', 'single')}"/>
                     <div id="grid-tooltip-arrow" data-popper-arrow></div>`);
             return tooltip.node();
         },
         removeTooltip: function() {
             d3.selectAll('.'+this.tooltipClass).remove();
         },
+        createImageWidget: function(node) {
+            // eslint-disable-next-line new-cap
+            node.widgetmode = 'single';
+            this.showImages.push(node);
+        },
         getAspectArtio: function() {
             const svgRealWidth = this.$refs.gridsvg.clientWidth;
             const svgRealHeight = this.$refs.gridsvg.clientHeight;
             return svgRealHeight/svgRealWidth;
+        },
+        closeImageWidget: function(node) {
+            this.hoverEnable = true;
+            const index = this.showImages.indexOf(node);
+            if (index>-1) {
+                this.showImages.splice(index, 1);
+            }
+        },
+        disableHover: function() {
+            this.hoverEnable = false;
+        },
+        enableHover: function() {
+            this.hoverEnable = true;
+        },
+        changeShowAll: function(node) {
+            if (node.widgetmode === 'single') {
+                node.widgetmode = 'all';
+            } else if (node.widgetmode === 'all') {
+                node.widgetmode = 'single';
+            }
+            // eslint-disable-next-line new-cap
+            d3.select('#gird-widget-image-'+node.index).attr('src', this.URL_GET_IMAGE(node.index, 'full', node.widgetmode));
+            // eslint-disable-next-line new-cap
+            d3.select('#gird-widget-icon-'+node.index).attr('src', `/static/images/eye-${node.widgetmode}.png`);
         },
     },
     mounted: function() {
@@ -438,10 +508,6 @@ export default {
     height: -o-calc(100% - 20px);
     height: calc(100% - 20px);
     margin: 10px 10px 10px 10px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
     position: relative;
 }
 
@@ -492,7 +558,6 @@ export default {
 
 .gird-tooltip-image {
     width: 100px;
-    height: 100px;
     margin: 10px 0 0 0;
 }
 
@@ -528,5 +593,54 @@ export default {
 
 .cell-tooltip[data-popper-placement^='right'] > #grid-tooltip-arrow {
   left: -4px;
+}
+
+.grid-widget-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: gray;
+    font-weight: bold;
+    font-size: 13px;
+    background: #ffffff;
+    width: 100%;
+    height: 100%;
+    border-radius: 10px;
+}
+
+.widget-image-container {
+    width: 100%;
+    height: 100%;
+    min-height: 10px;
+    margin: 5px 5px 5px 5px
+}
+
+.gird-widget-image {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.image-widget {
+    position: absolute;
+    border-radius: 10px;
+    border: 1px solid grey;
+    box-shadow: grey 5px 5px 8px;
+}
+
+.grid-widget-toolbar {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+    height: 20px;
+    width: 100%;
+}
+
+.grid-widget-icon {
+    cursor: pointer;
+    width: 15px;
+    height: 15px;
+    margin: 0 3px 0 3px;
 }
 </style>

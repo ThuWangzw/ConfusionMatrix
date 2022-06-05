@@ -705,19 +705,26 @@ class DataCtrler(object):
         }
         return res
         
-    def getImage(self, boxID: int, show: str):
+    def getImage(self, boxID: int, show: str, showall: str):
         img = Image.open(os.path.join(self.images_path, self.index2image[self.raw_predict2imageid[boxID]]+'.jpg'))
         anno = Annotator(np.array(img), pil=True)
         amp = np.array([img.width,img.height,img.width,img.height])
-        predictBox, labelBox = self.predict_label_pairs[boxID]
-        predictXYXY = None
-        if predictBox != -1:
-            predictXYXY = xywh2xyxy(self.raw_predicts[predictBox, 2:6]*amp).tolist()
-            anno.box_label(predictXYXY, color=(255,0,0))
-        labelXYXY = None
-        if labelBox != -1:
-            labelXYXY = xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist()
-            anno.box_label(labelXYXY, color=(0,255,0))
+        boxes = []
+        if showall == 'all':
+            imgID = self.raw_predict2imageid[boxID]
+            boxes = self.predict_label_pairs[self.imageid2raw_predict[imgID][0]:self.imageid2raw_predict[imgID][1]]
+        elif showall == 'single':
+            boxes.append(self.predict_label_pairs[boxID])
+        for box in boxes:
+            predictBox, labelBox = box
+            predictXYXY = None
+            if predictBox != -1:
+                predictXYXY = xywh2xyxy(self.raw_predicts[predictBox, 2:6]*amp).tolist()
+                anno.box_label(predictXYXY, color=(255,0,0))
+            labelXYXY = None
+            if labelBox != -1:
+                labelXYXY = xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist()
+                anno.box_label(labelXYXY, color=(0,255,0))
         output = io.BytesIO()
         if show=='box':
             self.cropImageByBox(anno.im, predictXYXY, labelXYXY, [img.width, img.height]).save(output, format="JPEG")
