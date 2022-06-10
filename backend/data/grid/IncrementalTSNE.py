@@ -248,6 +248,8 @@ class IncrementalTSNE:
         X_new : array, shape (n_samples, n_components)
             Embedding of the training data in low-dimensional space.
         """
+        if len(X)==1:
+            return np.array([[0.5]*self.n_components])
         if constraint_X is not None:
             constraint_X = constraint_X.astype(np.float64, copy=True)
         if constraint_Y is not None:

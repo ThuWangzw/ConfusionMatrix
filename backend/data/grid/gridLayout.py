@@ -46,8 +46,10 @@ class GridLayout(object):
         return X_embedded
     
     def grid(self, X_embedded: np.ndarray, aspectRatio: int = 1):
-        X_embedded -= X_embedded.min(axis=0)
-        X_embedded /= X_embedded.max(axis=0)
+        if len(X_embedded)>1:
+            X_embedded -= X_embedded.min()
+        if not np.any(np.isnan(X_embedded / X_embedded.max())):
+            X_embedded /= X_embedded.max()
         num = X_embedded.shape[0]
         k = np.sqrt(num/aspectRatio)
         width = math.ceil(k)
