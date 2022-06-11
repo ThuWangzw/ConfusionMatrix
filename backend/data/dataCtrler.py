@@ -23,7 +23,7 @@ class DataCtrler(object):
     def __init__(self):
         super().__init__()
         self.iou_threshold_localization = 0.5
-        self.iou_threshold_miss = 0.1
+        self.iou_threshold_miss = 0.3
         self.classID2Idx = {}      
         self.hierarchy = {}  
         self.names = []
@@ -194,7 +194,7 @@ class DataCtrler(object):
         self.label_aspect_ratio = self.raw_labels[:,3]/self.raw_labels[:,4]
         self.predict_aspect_ratio = self.raw_predicts[:,4]/self.raw_predicts[:,5]
 
-        # get box aspect ratio distribution in [0,1]
+        # get box aspect ratio distribution
         if os.path.exists(self.box_aspect_ratio_dist_path):
             with open(self.box_aspect_ratio_dist_path, 'rb') as f:
                 self.box_aspect_ratio_dist_map = pickle.load(f)
@@ -234,27 +234,64 @@ class DataCtrler(object):
         }
             
     def compute_label_predict_pair(self):
-        def compute_per_image(detections, labels):
-            # Updated version of https://github.com/kaanakan/object_detection_confusion_matrix
-            iou = box_iou(detections[:, 2:6], labels[:, 1:5])
 
-            x = np.where(iou > self.iou_threshold_miss)
-            if x[0].shape[0]:
-                matches = np.concatenate((np.stack(x, 1), iou[x[0], x[1]][:, None]), 1)
-                if x[0].shape[0] > 1:
-                    matches = matches[matches[:, 2].argsort()[::-1]]
-                    matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
-                    matches = matches[matches[:, 2].argsort()[::-1]]
-                    matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
-            else:
-                matches = np.zeros((0, 3))
+        def compute_per_image(detections, labels):
+
+            num_detections = len(detections)
+            # as we only have the logit related to one class, not all the logits, so here we assume the other as 0
+            out_prob = np.zeros((num_detections, len(self.classID2Idx)-1))  # [num_detections, num_classes]
+            for i in range(num_detections):
+                out_prob[i, int(detections[i, 0])] = detections[i, 1] # without sigmoid here
+            out_bbox = detections[:, 2:6]  # [num_detections, 4]
+
+            # Also concat the target labels and boxes
+            tgt_ids = labels[:, 0].astype(np.int32)
+            tgt_bbox = labels[:, 1:5]
+
+            # Compute the classification cost.
+            alpha = 0.25
+            gamma = 2.0
+            neg_cost_class = (1 - alpha) * (out_prob ** gamma) * (-np.log(1 - out_prob + 1e-8))
+            pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-np.log(out_prob + 1e-8))
+            cost_class = pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]
+
+            # Compute the L1 cost between boxes
+            cost_bbox = torch.cdist(torch.from_numpy(out_bbox), torch.from_numpy(tgt_bbox), p=1)
+
+            # Compute the giou cost betwen boxes
+            # import ipdb; ipdb.set_trace()
+            cost_iou = -box_iou(out_bbox, tgt_bbox)
+
+            # Final cost matrix
+            C = 5.0 * cost_bbox + 2.0 * cost_class + 2.0 * cost_iou
+
+            from scipy.optimize import linear_sum_assignment
+            matches = np.array(linear_sum_assignment(C)).transpose((1, 0))
+            matches = np.concatenate((matches.astype(np.float64), np.array([-cost_iou[matches[i, 0], matches[i, 1]] for i in range(len(matches))]).reshape(-1,1)), axis=1)
+
+            # Updated version of https://github.com/kaanakan/object_detection_confusion_matrix
+            # iou = box_iou(detections[:, 2:6], labels[:, 1:5])
+            # x = np.where(iou > self.iou_threshold_miss)
+            # if x[0].shape[0]:
+            #     matches = np.concatenate((np.stack(x, 1), iou[x[0], x[1]][:, None]), 1)
+            #     if x[0].shape[0] > 1:
+            #         matches = matches[matches[:, 2].argsort()[::-1]]
+            #         matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
+            #         matches = matches[matches[:, 2].argsort()[::-1]]
+            #         matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
+            # else:
+            #     matches = np.zeros((0, 3))
+
             final_match = -1*np.ones((len(detections),2), dtype=np.int32)
             ious = np.zeros(len(detections))
             final_match[:,0] = np.arange(len(detections), dtype=np.int32)
             for match in matches:
+                if match[2] < self.iou_threshold_miss:
+                    continue
                 final_match[int(match[0])] = match[:2].astype(np.int32)
                 ious[int(match[0])] = match[2]
             return final_match, ious
+        
         self.predict_label_pairs = -1*np.ones((len(self.raw_predicts), 2), dtype=np.int32)
         self.predict_label_ious = np.zeros(len(self.raw_predicts))
         for imageidx in range(len(self.image2index)):
