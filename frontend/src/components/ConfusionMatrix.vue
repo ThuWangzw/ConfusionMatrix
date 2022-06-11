@@ -276,10 +276,13 @@ export default {
                         rowNode: nodea,
                         colNode: nodeb,
                     };
+                    if (i === this.showNodes.length-1 || j === this.showNodes.length-1) cell.info.direction = undefined;
                     this.cells.push(cell);
                     if (!this.isHideCell(cell) && (i!=j || this.returnMode!=='count') && i!==this.showNodes.length-1 && j!==this.showNodes.length-1) {
                         this.maxCellValue = Math.max(this.maxCellValue, cell.info.val);
-                        if (cell.info.direction!==undefined) this.maxCellDirection = Math.max(this.maxCellDirection, d3.sum(cell.info.direction));
+                        if (i!=j && cell.info.direction!==undefined) {
+                            this.maxCellDirection = Math.max(this.maxCellDirection, d3.sum(cell.info.direction));
+                        }
                     }
                 }
             }
@@ -450,9 +453,43 @@ export default {
                             predictTarget.push(that.name2index[name]);
                         }
                         that.$emit('hoverConfusion', labelTarget, predictTarget);
+                        if (that.showDirection && d.info.direction !== undefined) {
+                            // eslint-disable-next-line no-invalid-this
+                            d3.select(this).select('circle')
+                                .transition()
+                                .duration(that.updateDuration)
+                                .attr('transform', '');
+                            for (let i = 0; i < 8; ++i) {
+                                // eslint-disable-next-line no-invalid-this
+                                d3.select(this).select('.dir-'+i)
+                                    .transition()
+                                    .duration(that.updateDuration)
+                                    .attr('transform', `rotate(${i*45} ${that.cellAttrs['size']/2} ${that.cellAttrs['size']/2})`);
+                            }
+                        }
                     })
                     .on('mouseout', function(e, d) {
                         that.$emit('hoverConfusion', undefined, undefined);
+                        if (that.showDirection && d.info.direction !== undefined) {
+                            const directionScale = d3.scaleLinear([0, that.maxCellDirection], [0.4, 1]);
+                            // eslint-disable-next-line no-invalid-this
+                            d3.select(this).select('circle')
+                                .transition()
+                                .duration(that.updateDuration)
+                                .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
+                                    scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
+                                    translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})`);
+                            for (let i = 0; i < 8; ++i) {
+                                // eslint-disable-next-line no-invalid-this
+                                d3.select(this).select('.dir-'+i)
+                                    .transition()
+                                    .duration(that.updateDuration)
+                                    .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
+                                        scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
+                                        translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})
+                                        rotate(${i*45} ${that.cellAttrs['size']/2} ${that.cellAttrs['size']/2})`);
+                            }
+                        }
                     });
 
                 matrixCellsinG.transition()
@@ -487,9 +524,9 @@ export default {
                 matrixCellsinG.append('circle')
                     .attr('cx', that.cellAttrs['size']/2)
                     .attr('cy', that.cellAttrs['size']/2)
-                    .attr('r', that.cellAttrs['size']/12)
-                    .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.cellAttrs['direction-color'])
-                    .attr('opacity', (d)=>d.info.direction===undefined?0:d.info.direction[8]/Math.max(1, d3.max(d.info.direction)))
+                    .attr('r', (d)=>d.info.direction===undefined?0:
+                        that.cellAttrs['size']*5/36*d.info.direction[8]/Math.max(1, d3.max(d.info.direction)))
+                    .attr('fill', 'currentColor')
                     .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
                                              scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
                                              translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})`);
@@ -521,7 +558,7 @@ export default {
 
                 if (!that.showDirection) {
                     matrixCellsinG.select('circle')
-                        .attr('fill-opacity', 0);
+                        .attr('r', 0);
                 } else {
                     matrixCellsinG.select('rect')
                         .attr('opacity', 0);
@@ -674,7 +711,7 @@ export default {
                         d3.select(this).select('circle')
                             .transition()
                             .duration(that.updateDuration)
-                            .attr('fill-opacity', 0)
+                            .attr('r', 0)
                             .on('end', resolve);
                         for (let i = 0; i < 8; ++i) {
                             // eslint-disable-next-line no-invalid-this
@@ -699,8 +736,8 @@ export default {
                         d3.select(this).select('circle')
                             .transition()
                             .duration(that.updateDuration)
-                            .attr('opacity', (d)=>d.info.direction[8]/Math.max(1, d3.max(d.info.direction)))
-                            .attr('fill-opacity', 1)
+                            .attr('r', (d)=>d.info.direction===undefined?0:
+                                that.cellAttrs['size']*5/36*d.info.direction[8]/Math.max(1, d3.max(d.info.direction)))
                             .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
                                 scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
                                 translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})`)
