@@ -8,7 +8,7 @@ export default new Vuex.Store({
         labelHierarchy: undefined,
         labelnames: [],
         colors: {},
-        hierarchyColors: undefined,
+        hierarchyColors: {},
     },
     mutations: {
         setMetadata(state, metadata) {

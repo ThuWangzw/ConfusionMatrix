@@ -50,9 +50,9 @@
             </div>
 
             <div id="selection-container">
-                <div class="toolbar-title">Selections</div>
+                <div class="toolbar-title">Colors</div>
                 <div id="selections">
-                    selections
+                    <selection :confusionMatrix="confusionMatrix"></selection>
                 </div>
             </div>
 
@@ -83,6 +83,7 @@
 import Vue from 'vue';
 import ConfusionMatrix from './ConfusionMatrix.vue';
 import ScentedBarchart from './ScentedBarchart.vue';
+import Selection from './Selection.vue';
 import GridLayout from './GridLayout.vue';
 import axios from 'axios';
 import {Select, Option, Icon, Button} from 'element-ui';
@@ -93,7 +94,7 @@ Vue.use(Icon);
 Vue.use(Button);
 
 export default {
-    components: {ConfusionMatrix, ScentedBarchart, GridLayout},
+    components: {ConfusionMatrix, ScentedBarchart, GridLayout, Selection},
     name: 'DataView',
     data() {
         return {
