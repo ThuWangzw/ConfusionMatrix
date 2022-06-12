@@ -224,7 +224,7 @@ class DataCtrler(object):
             self.sampler.load(self.hierarchy_sample_path)
         else:
             labels = self.raw_predicts[:, 0].astype(np.int32)
-            self.sampler.fit(self.features, labels, 0.5, 400)
+            self.sampler.fit(self.features, labels, 400)
             self.sampler.dump(self.hierarchy_sample_path)
           
     def getMetaData(self):
@@ -539,9 +539,6 @@ class DataCtrler(object):
             'predictAspectRatioConfusion': predict_box_aspect_ratio_confusion,
             'aspectRatioSplit': split_aspect_ratio.tolist()
         }        
-
-    def findGridParent(self, children, parents):
-        return self.sampler.findParents(children, parents)
     
     def transformBottomLabelToTop(self, topLabels):
         topLabelChildren = {}
@@ -580,40 +577,20 @@ class DataCtrler(object):
         alllabels[negaLabels] = len(self.names)-1
         allconfidence = self.raw_predicts[self.predict_label_pairs[:,0], 1]
         allfeatures = self.features
-        neighbors, newDepth = self.sampler.zoomin(nodes, depth)
-        if type(neighbors)==dict:
-            while True:
-                newnodes = []
-                for neighbor in neighbors.values():
-                    newnodes += neighbor
-                if len(newnodes) >= 1000 or newDepth==self.sampler.max_depth:
-                    break
-                neighbors, newDepth = self.sampler.zoomin(newnodes, newDepth)
+        neighbors = self.sampler.zoomin(nodes, 400, self.features)
         zoomInConstraints = None
         zoomInConstraintX = None
         if constraints is not None:
             zoomInConstraints = []
             zoomInConstraintX = []
-        zoomInNodes = []
-        if type(neighbors)==list:
-            zoomInNodes = neighbors
-            if constraints is not None:
-                zoomInConstraints = np.array(constraints)
-                nodesset = set(neighbors)
-                for node in nodes:
-                    if node in nodesset:
-                        zoomInConstraintX.append(node)
-                zoomInConstraintX = allfeatures[nodes]
-        else:
-            for children in neighbors.values():
-                for child in children:
-                    if int(child) not in nodes:
-                        zoomInNodes.append(int(child))
-                    # initY.append([constraints[i][0], constraints[i][1]])
-            if constraints is not None:
-                zoomInConstraints = np.array(constraints)
-                zoomInConstraintX = allfeatures[nodes]
-            zoomInNodes = nodes + zoomInNodes
+        zoomInNodes = neighbors
+        if constraints is not None:
+            zoomInConstraints = np.array(constraints)
+            nodesset = set(neighbors)
+            for node in nodes:
+                if node in nodesset:
+                    zoomInConstraintX.append(node)
+            zoomInConstraintX = allfeatures[nodes]
         zoomInLabels = alllabels[zoomInNodes]
         zoomInPreds = allpreds[zoomInNodes]
         zoomInConfidence = allconfidence[zoomInNodes]
@@ -738,7 +715,7 @@ class DataCtrler(object):
                 "width": grid_width,
                 "height": grid_height,
             },
-            "depth": newDepth
+            "depth": 0
         }
         return res
         

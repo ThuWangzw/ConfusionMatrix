@@ -85,25 +85,25 @@ export default {
             return this.showColor?10:0;
         },
         horizonTextG: function() {
-            return d3.select('g#horizon-text-g');
+            return this.svg.select('g#horizon-text-g');
         },
         verticalTextG: function() {
-            return d3.select('g#vertical-text-g');
+            return this.svg.select('g#vertical-text-g');
         },
         matrixCellsG: function() {
-            return d3.select('g#matrix-cells-g');
+            return this.svg.select('g#matrix-cells-g');
         },
         legendG: function() {
-            return d3.select('g#legend-g');
+            return this.svg.select('g#legend-g');
         },
         mainG: function() {
-            return d3.select('g#main-g');
+            return this.svg.select('g#main-g');
         },
         horizonLegend: function() {
-            return d3.select('text#horizon-legend');
+            return this.svg.select('text#horizon-legend');
         },
         verticalLegend: function() {
-            return d3.select('text#vertical-legend');
+            return this.svg.select('text#vertical-legend');
         },
         maxHorizonTextWidth: function() {
             let maxwidth = 0;
@@ -112,7 +112,8 @@ export default {
                     `${this.horizonTextAttrs['font-weight']} ${this.horizonTextAttrs['font-size']}px ${this.horizonTextAttrs['font-family']}`);
                 const arrowIconNum = node.children.length===0?node.depth:node.depth+1;
                 maxwidth = Math.max(maxwidth, this.horizonTextAttrs['leftMargin']*node.depth + textwidth +
-                    arrowIconNum*(this.horizonTextAttrs['font-size'] + this.horizonTextAttrs['iconMargin'])+this.colorCellSize+this.colorCellMargin);
+                    arrowIconNum*(this.horizonTextAttrs['font-size'] + this.horizonTextAttrs['iconMargin'])+
+                    this.colorCellSize+this.colorCellMargin+15);
             }
             return maxwidth;
         },

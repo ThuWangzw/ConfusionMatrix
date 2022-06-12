@@ -122,79 +122,43 @@ class HierarchySampling(object):
     
     def __init__(self):
         super().__init__()
-        self.hierarchy = {}
-        self.max_depth = 0
         self.top_nodes = []
-        self.child2parent = []
+        self.neighbors = None
         
-    def fit(self, data, category, sampling_rate, top_nodes_count):
-        n = data.shape[0]
-        self.hierarchy = [[[]] for i in range(n)]
-        self.max_depth = 1
-            
-        selected_indexes = np.arange(n)
-        while len(selected_indexes)>top_nodes_count:
-            sampling_number = int(max(top_nodes_count, len(selected_indexes)*sampling_rate))
-            logging.info("hierarchy sampling from {} to {}, depth = {}".format(len(selected_indexes), sampling_number, self.max_depth))
-            faiss_sampler = OutlierBiasedBlueNoiseSamplingFAISS(sampling_rate=sampling_number)
-            new_selected_indexes, neighbors = faiss_sampler.fit(data[selected_indexes], category[selected_indexes])
-            new_selected_indexes = selected_indexes[new_selected_indexes].tolist()
-            neighbors = selected_indexes[neighbors].tolist()
-            for new_selected_index in new_selected_indexes:
-                self.hierarchy[new_selected_index].append([])
-            self.max_depth += 1
-            for i in range(len(selected_indexes)):
-                self.hierarchy[neighbors[i]][self.max_depth-1].append(selected_indexes[i])
-            selected_indexes = np.array(new_selected_indexes)
-            
-        self.top_nodes = selected_indexes.tolist()
+    def fit(self, data, category, top_nodes_count):
+        data = np.array(data.tolist(), dtype=np.float32)
+        # get faiss index
+        n, d = data.shape
+        nlist = 50  # how many cells
+        quantizer = faiss.IndexFlatL2(d)
+        indexer = faiss.IndexIVFFlat(quantizer, d, nlist)
+        print("fitting data", len(data))
+        indexer.train(data)
+        indexer.add(data)
+        dis, self.neighbors = indexer.search(data, 100)
+        print("fit done")
         
-    def zoomin(self, indexes, depth):
-        if depth==0:
-            return self.top_nodes, 1
+        # get tops
+        self.top_nodes = np.random.choice(n, size=top_nodes_count, replace=False)
+        
+    def zoomin(self, indexes, maxValue, data):
+        if len(indexes)==0:
+            return self.top_nodes.tolist()
         else:
-            selected_indexes = {}
-            depth += 1
-            if depth>self.max_depth:
-                depth = self.max_depth
-            for index in indexes:
-                selected_indexes[index] = self.hierarchy[index][self.max_depth-depth]
-                if len(selected_indexes[index])==0:
-                    selected_indexes[index].append(index)
-            return selected_indexes, depth
+            k = int(np.ceil(maxValue/len(indexes)))
+            neighbors = self.neighbors[indexes, :k]
+            return np.unique(np.concatenate(neighbors)).tolist()
         
-    def dump(self, path):
-        with open(path, "wb") as file:
+    def dump(self, hierarchy_path):
+        with open(hierarchy_path, "wb") as f:
             pickle.dump({
-                "hierarchy": self.hierarchy,
-                "max_depth": self.max_depth,
+                "neighbors": self.neighbors,
                 "top_nodes": self.top_nodes
-                }, file)
+                }, f)
             
-    def load(self, path):
-        with open(path, "rb") as file:
+    def load(self, hierarchy_path):
+        with open(hierarchy_path, "rb") as file:
             hierarchyInfo = pickle.load(file)
-            self.hierarchy = hierarchyInfo["hierarchy"]
-            self.max_depth = hierarchyInfo["max_depth"]
+            self.neighbors = hierarchyInfo["neighbors"]
             self.top_nodes = hierarchyInfo["top_nodes"]
-            # set child2parent
-            self.child2parent = [[-1]*(self.max_depth-1) for i in range(len(self.hierarchy))]
-            for parentID in range(len(self.hierarchy)):
-                for depth in range(1,len(self.hierarchy[parentID])):
-                    for child in self.hierarchy[parentID][depth]:
-                        self.child2parent[child][depth-1]=parentID
-            for child in range(len(self.hierarchy)):
-                for depth in range(self.max_depth-1):
-                    if self.child2parent[child][depth]==-1:
-                        self.child2parent[child][depth] = self.child2parent[self.child2parent[child][depth-1]][depth]
-            
-    def findParents(self, children: list, parents: list) -> list:
-        remainParents = set()
-        parents = set(parents)
-        
-        for child in children:
-            for childParent in self.child2parent[child]:
-                if childParent in parents:
-                    remainParents.add(childParent)
-        return list(remainParents)
         

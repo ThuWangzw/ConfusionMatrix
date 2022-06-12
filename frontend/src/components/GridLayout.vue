@@ -57,6 +57,7 @@ export default {
             'URL_GET_GRID',
             'URL_GET_IMAGE',
             'URL_GET_IMAGES',
+            'hierarchyColors',
         ]),
         svg: function() {
             return d3.select('#grid-drawer');
@@ -103,6 +104,9 @@ export default {
                 this.render();
             }
         },
+        hierarchyColors() {
+            this.render(true);
+        },
     },
     data: function() {
         return {
@@ -121,7 +125,7 @@ export default {
             gridCellAttrs: {
                 'gClass': 'grid-cell-in-g',
                 'size': 60,
-                'stroke-width': 0.2,
+                'stroke-width': 4,
                 'stroke': 'gray',
                 'rectOpacity': 1,
                 'centerR': 3,
@@ -136,7 +140,7 @@ export default {
             showImages: [],
             hoverEnable: true,
             gridWidthInitWidth: 400,
-            widgetUrl: '//166.111.80.25:5010/api/image?boxID=221887&show=full&showall=single',
+            defaultColor: 'gray',
         };
     },
     methods: {
@@ -187,7 +191,7 @@ export default {
                 that.render();
             });
         },
-        render: async function() {
+        render: async function(changeColor = false) {
             // sort nodes and find most unconfident nodes
             this.nodes.sort(function(a, b) {
                 return a.confidence-b.confidence;
@@ -197,7 +201,9 @@ export default {
             }
 
             // get images
-            await this.getImages();
+            if (!changeColor) {
+                await this.getImages();
+            }
 
             this.gridCellsInG = this.girdG.selectAll('.'+this.gridCellAttrs['gClass']).data(this.nodes, (d)=>d.index);
             this.lassoNodesInG = this.lassoG.selectAll('.'+this.gridCellAttrs['centerClass']).data(this.nodes, (d)=>d.index);
@@ -249,12 +255,14 @@ export default {
                     .on('end', resolve);
 
                 gridCellsInG.append('rect')
+                    .attr('class', 'imgcell')
                     .attr('x', 0)
                     .attr('y', 0)
                     .attr('width', that.gridCellAttrs['size'])
                     .attr('height', that.gridCellAttrs['size'])
-                    .attr('stroke', that.gridCellAttrs['stroke'])
-                    .attr('stroke-width', that.gridCellAttrs['stroke-width'])
+                    .attr('stroke', (d) => that.hierarchyColors[that.labelnames[d.pred]])
+                    .attr('stroke-width', (d) => that.hierarchyColors[that.labelnames[d.pred]]===that.defaultColor?
+                        0.2:that.gridCellAttrs['stroke-width'])
                     .attr('fill', 'rgb(255,255,255)')
                     .attr('opacity', 1);
 
@@ -289,10 +297,13 @@ export default {
                         ${Math.floor(d.grid/that.gridInfo.width)*that.gridCellAttrs['size']})`)
                     .on('end', resolve);
 
-                that.gridCellsInG.selectAll('rect')
+                that.gridCellsInG.selectAll('rect.imgcell')
                     .transition()
                     .duration(that.updateDuration)
                     .attr('fill', 'rgb(255,255,255)')
+                    .attr('stroke', (d) => that.hierarchyColors[that.labelnames[d.pred]])
+                    .attr('stroke-width', (d) => that.hierarchyColors[that.labelnames[d.pred]]===that.defaultColor?
+                        0.2:that.gridCellAttrs['stroke-width'])
                     .attr('opacity', 1)
                     .on('end', resolve);
 
