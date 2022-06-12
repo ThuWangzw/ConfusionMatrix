@@ -43,9 +43,9 @@ export default {
             type: String,
             default: 'count',
         },
-        showDirection: {
-            type: Boolean,
-            default: false,
+        showMode: {
+            type: String,
+            default: 'normal',
         },
     },
     computed: {
@@ -148,7 +148,7 @@ export default {
         confusionMatrix: function() {
             this.getDataAndRender();
         },
-        showDirection: function() {
+        showMode: function() {
             this.getDataAndRender();
         },
     },
@@ -277,7 +277,10 @@ export default {
                         rowNode: nodea,
                         colNode: nodeb,
                     };
-                    if (i === this.showNodes.length-1 || j === this.showNodes.length-1) cell.info.direction = undefined;
+                    if (i === this.showNodes.length-1 || j === this.showNodes.length-1) {
+                        cell.info.direction = undefined;
+                        cell.info.sizeCmp = undefined;
+                    }
                     this.cells.push(cell);
                     if (!this.isHideCell(cell) && (i!=j || this.returnMode!=='count') && i!==this.showNodes.length-1 && j!==this.showNodes.length-1) {
                         this.maxCellValue = Math.max(this.maxCellValue, cell.info.val);
@@ -454,9 +457,9 @@ export default {
                             predictTarget.push(that.name2index[name]);
                         }
                         that.$emit('hoverConfusion', labelTarget, predictTarget);
-                        if (that.showDirection && d.info.direction !== undefined) {
+                        if (that.showMode === 'direction' && d.info.direction !== undefined) {
                             // eslint-disable-next-line no-invalid-this
-                            d3.select(this).select('circle')
+                            d3.select(this).select('.dir-circle')
                                 .transition()
                                 .duration(that.updateDuration)
                                 .attr('transform', '');
@@ -471,10 +474,10 @@ export default {
                     })
                     .on('mouseout', function(e, d) {
                         that.$emit('hoverConfusion', undefined, undefined);
-                        if (that.showDirection && d.info.direction !== undefined) {
+                        if (that.showMode === 'direction' && d.info.direction !== undefined) {
                             const directionScale = d3.scaleLinear([0, that.maxCellDirection], [0.4, 1]);
                             // eslint-disable-next-line no-invalid-this
-                            d3.select(this).select('circle')
+                            d3.select(this).select('.dir-circle')
                                 .transition()
                                 .duration(that.updateDuration)
                                 .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
@@ -520,9 +523,11 @@ export default {
                 //     .attr('fill', that.cellAttrs['text-fill'])
                 //     .text((d) => d.info.val);
 
+                // direction mode: circle and arrows
                 const directionScale = d3.scaleLinear([0, that.maxCellDirection], [0.4, 1]);
 
                 matrixCellsinG.append('circle')
+                    .attr('class', 'dir-circle')
                     .attr('cx', that.cellAttrs['size']/2)
                     .attr('cy', that.cellAttrs['size']/2)
                     .attr('r', (d)=>d.info.direction===undefined?0:
@@ -551,17 +556,41 @@ export default {
                                                  rotate(${i*45} ${that.cellAttrs['size']/2} ${that.cellAttrs['size']/2})`);
                 }
 
+                // sizeComparison mode: two circles
+                matrixCellsinG.filter((d) => d.info.count>0&&d.info.sizeCmp!==undefined).append('circle')
+                    .attr('class', 'size-circle')
+                    .attr('id', 'size-large-circle')
+                    .attr('cx', that.cellAttrs['size']/2)
+                    .attr('cy', that.cellAttrs['size']/2)
+                    .attr('r', that.cellAttrs['size']/3)
+                    .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?'rgb(237,237,237)':d.info.sizeCmp[0]>d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)');
+
+                matrixCellsinG.filter((d) => d.info.count>0&&d.info.sizeCmp!==undefined).append('circle')
+                    .attr('class', 'size-circle')
+                    .attr('id', 'size-small-circle')
+                    .attr('cx', that.cellAttrs['size']/2)
+                    .attr('cy', that.cellAttrs['size']/2)
+                    .attr('r', that.cellAttrs['size']/6)
+                    .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?'rgb(227,227,227)':d.info.sizeCmp[0]<d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)');
+
+
+                // normal mode: sign for empty cells
                 matrixCellsinG.append('path')
                     .attr('d', `M ${that.cellAttrs['size']*0.25} ${that.cellAttrs['size']*0.25} 
                         L ${that.cellAttrs['size']*0.75} ${that.cellAttrs['size']*0.75}`)
                     .attr('stroke', that.cellAttrs['slash-text-stroke'])
-                    .attr('opacity', (d)=>d.info.count===0&&!that.showDirection?1:0);
+                    .attr('opacity', (d)=>d.info.count===0&&that.showMode==='normal'?1:0);
 
-                if (!that.showDirection) {
-                    matrixCellsinG.select('circle')
+                if (that.showMode!=='direction') {
+                    matrixCellsinG.select('.dir-circle')
                         .attr('r', 0);
-                } else {
+                }
+                if (that.showMode!=='normal') {
                     matrixCellsinG.select('rect')
+                        .attr('opacity', 0);
+                }
+                if (that.showMode!=='sizeComparison') {
+                    matrixCellsinG.selectAll('.size-circle')
                         .attr('opacity', 0);
                 }
 
@@ -695,21 +724,14 @@ export default {
                     d3.select(this).select('path')
                         .transition()
                         .duration(that.updateDuration)
-                        .attr('opacity', (d)=>d.info.count===0&&!that.showDirection?1:0)
+                        .attr('opacity', (d)=>d.info.count===0&&that.showMode==='normal'?1:0)
                         .on('end', resolve);
                 });
 
-                if (!that.showDirection) {
+                if (that.showMode!=='direction') {
                     that.matrixCellsinG.each(function(d) {
                         // eslint-disable-next-line no-invalid-this
-                        d3.select(this).select('rect')
-                            .transition()
-                            .duration(that.updateDuration)
-                            .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val))
-                            .attr('opacity', 1)
-                            .on('end', resolve);
-                        // eslint-disable-next-line no-invalid-this
-                        d3.select(this).select('circle')
+                        d3.select(this).select('.dir-circle')
                             .transition()
                             .duration(that.updateDuration)
                             .attr('r', 0)
@@ -723,8 +745,8 @@ export default {
                                 .on('end', resolve);
                         }
                     });
-                } else {
-                    const directionScale = d3.scaleLinear([0, that.maxCellDirection], [0.4, 1]);
+                }
+                if (that.showMode!=='normal') {
                     that.matrixCellsinG.each(function(d) {
                         // eslint-disable-next-line no-invalid-this
                         d3.select(this).select('rect')
@@ -733,8 +755,34 @@ export default {
                             .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val))
                             .attr('opacity', 0)
                             .on('end', resolve);
+                    });
+                }
+                if (that.showMode!=='sizeComparison') {
+                    that.matrixCellsinG.each(function(d) {
                         // eslint-disable-next-line no-invalid-this
-                        d3.select(this).select('circle')
+                        d3.select(this).selectAll('.size-circle')
+                            .transition()
+                            .duration(that.updateDuration)
+                            .attr('opacity', 0)
+                            .on('end', resolve);
+                    });
+                }
+
+                if (that.showMode==='normal') {
+                    that.matrixCellsinG.each(function(d) {
+                        // eslint-disable-next-line no-invalid-this
+                        d3.select(this).select('rect')
+                            .transition()
+                            .duration(that.updateDuration)
+                            .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val))
+                            .attr('opacity', 1)
+                            .on('end', resolve);
+                    });
+                } else if (that.showMode==='direction') {
+                    const directionScale = d3.scaleLinear([0, that.maxCellDirection], [0.4, 1]);
+                    that.matrixCellsinG.each(function(d) {
+                        // eslint-disable-next-line no-invalid-this
+                        d3.select(this).select('.dir-circle')
                             .transition()
                             .duration(that.updateDuration)
                             .attr('r', (d)=>d.info.direction===undefined?0:
@@ -752,14 +800,34 @@ export default {
                                                 ${d.info.direction===undefined?that.cellAttrs['size']/18:
         that.cellAttrs['size']*Math.min(2/9, 1/3-5/18*d.info.direction[i]/Math.max(1, d3.max(d.info.direction)))},
                                                 ${that.cellAttrs['size']/2}`)
-                                .attr('opacity', 1)
-                                // .attr('marker-end', (d)=>`${d.info.direction[i]/Math.max(1, d3.max(d.info.direction))<0.1?'':'url(#arrow)'}`)
+                                .attr('opacity', (d)=>d.info.count===0?0:1)
                                 .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
                                     scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
                                     translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})
                                     rotate(${i*45} ${that.cellAttrs['size']/2} ${that.cellAttrs['size']/2})`)
                                 .on('end', resolve);
                         }
+                    });
+                } else if (that.showMode==='sizeComparison') {
+                    that.matrixCellsinG.each(function(d) {
+                        // eslint-disable-next-line no-invalid-this
+                        d3.select(this).select('#size-small-circle')
+                            .transition()
+                            .duration(that.updateDuration)
+                            .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?'rgb(227,227,227)':d.info.sizeCmp[0]<d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)')
+                            .on('end', resolve);
+                        // eslint-disable-next-line no-invalid-this
+                        d3.select(this).select('#size-large-circle')
+                            .transition()
+                            .duration(that.updateDuration)
+                            .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?'rgb(227,227,227)':d.info.sizeCmp[0]>d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)')
+                            .on('end', resolve);
+                        // eslint-disable-next-line no-invalid-this
+                        d3.select(this).selectAll('.size-circle')
+                            .transition()
+                            .duration(that.updateDuration)
+                            .attr('opacity', (d)=>d.info.count===0?0:1)
+                            .on('end', resolve);
                     });
                 }
             });
@@ -840,8 +908,9 @@ export default {
             const infoMap = {
                 'count': 0,
                 'val': 0,
+                'sizeCmp': [0, 0],
             };
-            if (this.showDirection) {
+            if (this.showMode==='direction') {
                 infoMap['direction'] = [];
                 for (let i = 0; i < 9; ++i) infoMap['direction'].push(0);
             }
@@ -852,13 +921,15 @@ export default {
                         infoMap.val += this.baseMatrix[1][this.name2index[leafa]][this.name2index[leafb]]*
                                        this.baseMatrix[0][this.name2index[leafa]][this.name2index[leafb]];
                     }
-                    if (this.showDirection) {
+                    if (this.showMode==='direction') {
                         for (let i = 0; i < 9; ++i) {
                             infoMap.direction[i] += this.baseMatrix[this.baseMatrix.length-1][this.name2index[leafa]][this.name2index[leafb]][i];
                         }
                     }
+                    infoMap.sizeCmp[0] += this.baseMatrix[this.baseMatrix.length-2][this.name2index[leafa]][this.name2index[leafb]];
                 }
             }
+            infoMap.sizeCmp[1] = infoMap.count - infoMap.sizeCmp[0];
             if (this.returnMode === 'count') infoMap.val = infoMap.count;
             else infoMap.val /= infoMap.count;
             return infoMap;
