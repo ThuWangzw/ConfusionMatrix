@@ -20,10 +20,6 @@
                         <span class="select-label">Display Mode</span>
                         <el-button id="log-linear-button" size="mini" @click="changeDisplayMode">{{displayMode}}</el-button>
                     </div>
-                    <div class="mode-select">
-                        <span class="select-label">Show Direction</span>
-                        <el-button id="direction-button" size="mini" @click="changeShowDirection">{{showDirection}}</el-button>
-                    </div>
                 </div>
             </div>
 
@@ -58,9 +54,16 @@
 
         </div>
         <div id="matrices-container">
-            <div class="toolbar-title">Confusion Matrix</div>
+            <div class="toolbar-title" id="grid-toolbar">
+                <span>Confusion Matrix</span>
+                <div id="grid-icons">
+                    <img id="matrix-normal-icon" class="grid-icon" src="/static/images/square.svg" @click="changeShowNormal">
+                    <img id="matrix-direction-icon" class="grid-icon" src="/static/images/directions.svg" @click="changeShowDirection">
+                    <img id="matrix-size-comparison-icon" class="grid-icon" src="/static/images/circle.png" @click="changeShowSizeComparison">
+                </div>
+            </div>
             <div id="confusion-matrix-container">
-                <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion" :showDirection="showDirection" @clickCell="clickConfusionCell"
+                <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion" :showMode="showMode" @clickCell="clickConfusionCell"
                     :confusionMatrix="confusionMatrix" :returnMode="returnMode"></confusion-matrix>
             </div>
         </div>
@@ -101,7 +104,7 @@ export default {
             displayMode: 'log',
             barNum: 25,
             confusionMatrix: undefined,
-            showDirection: false,
+            showMode: 'normal',
             returnMode: 'count',
             dataMode: [{
                 value: 'count',
@@ -156,8 +159,13 @@ export default {
             document.getElementById('log-linear-button').blur();
         },
         changeShowDirection: function() {
-            this.showDirection = !this.showDirection;
-            document.getElementById('direction-button').blur();
+            this.showMode = 'direction';
+        },
+        changeShowSizeComparison: function() {
+            this.showMode = 'sizeComparison';
+        },
+        changeShowNormal: function() {
+            this.showMode = 'normal';
         },
         setConfusionMatrix: function(query) {
             this.gettingMatrix = true;
@@ -167,6 +175,7 @@ export default {
             }
             const returnList = ['count'];
             if (this.returnMode!=='count') returnList.push(this.returnMode);
+            returnList.push('size_comparison');
             returnList.push('direction');
             query['return'] = returnList;
             const store = this.$store;

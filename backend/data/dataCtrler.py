@@ -373,7 +373,7 @@ class DataCtrler(object):
         
         return filtered, unmatch_predict, unmatch_label
     
-    def getStatisticsMatrixes(self, matrix, query):
+    def getStatisticsMatrices(self, matrix, query):
         """
             matrix: a 3-d list consists of lists of indexes from predict_label_pairs 
         """
@@ -389,7 +389,9 @@ class DataCtrler(object):
                             (self.raw_predicts[self.predict_label_pairs[x,0], 0]==self.raw_labels[self.predict_label_pairs[x,1], 0]).mean(),
             'avg_label_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],1]==-1 else self.label_aspect_ratio[self.predict_label_pairs[x, 1]].mean(),
             'avg_predict_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],0]==-1 else self.predict_aspect_ratio[self.predict_label_pairs[x, 0]].mean(),
-            'direction': lambda x: [int(np.count_nonzero(self.directions[x]==i)) for i in range(9)]
+            'direction': lambda x: [int(np.count_nonzero(self.directions[x]==i)) for i in range(9)],
+            'size_comparison': lambda x: 0 if self.predict_label_pairs[x[0],1]==-1 or self.predict_label_pairs[x[0],0]==-1 else \
+                np.count_nonzero(self.predict_size[self.predict_label_pairs[x, 0]] > self.label_size[self.predict_label_pairs[x, 1]])
         }
         ret_matrixes = []
         for statistics_mode in statistics_modes:
@@ -433,7 +435,7 @@ class DataCtrler(object):
             confusion[i][len(pred_target)] = unmatch_label[self.raw_labels[self.predict_label_pairs[unmatch_label][:, 1], 0]==label_target[i]]
         for j in range(len(pred_target)):
             confusion[len(label_target)][j] = unmatch_predict[self.raw_predicts[self.predict_label_pairs[unmatch_predict][:, 0], 0]==pred_target[j]]
-        return self.getStatisticsMatrixes(confusion, query)
+        return self.getStatisticsMatrices(confusion, query)
    
     def getBoxSizeDistribution(self, query = None):
         """
