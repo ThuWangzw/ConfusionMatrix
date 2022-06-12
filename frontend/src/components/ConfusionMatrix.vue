@@ -563,7 +563,8 @@ export default {
                     .attr('cx', that.cellAttrs['size']/2)
                     .attr('cy', that.cellAttrs['size']/2)
                     .attr('r', that.cellAttrs['size']/3)
-                    .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?'rgb(237,237,237)':d.info.sizeCmp[0]>d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)');
+                    .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?
+                        'rgb(237,237,237)':d.info.sizeCmp[0]>d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)');
 
                 matrixCellsinG.filter((d) => d.info.count>0&&d.info.sizeCmp!==undefined).append('circle')
                     .attr('class', 'size-circle')
@@ -571,7 +572,8 @@ export default {
                     .attr('cx', that.cellAttrs['size']/2)
                     .attr('cy', that.cellAttrs['size']/2)
                     .attr('r', that.cellAttrs['size']/6)
-                    .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?'rgb(227,227,227)':d.info.sizeCmp[0]<d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)');
+                    .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?
+                        'rgb(227,227,227)':d.info.sizeCmp[0]<d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)');
 
 
                 // normal mode: sign for empty cells
@@ -814,13 +816,15 @@ export default {
                         d3.select(this).select('#size-small-circle')
                             .transition()
                             .duration(that.updateDuration)
-                            .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?'rgb(227,227,227)':d.info.sizeCmp[0]<d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)')
+                            .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?
+                                'rgb(227,227,227)':d.info.sizeCmp[0]<d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)')
                             .on('end', resolve);
                         // eslint-disable-next-line no-invalid-this
                         d3.select(this).select('#size-large-circle')
                             .transition()
                             .duration(that.updateDuration)
-                            .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?'rgb(227,227,227)':d.info.sizeCmp[0]>d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)')
+                            .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?
+                                'rgb(237,237,237)':d.info.sizeCmp[0]>d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)')
                             .on('end', resolve);
                         // eslint-disable-next-line no-invalid-this
                         d3.select(this).selectAll('.size-circle')
