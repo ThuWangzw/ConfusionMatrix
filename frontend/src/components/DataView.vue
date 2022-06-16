@@ -101,7 +101,7 @@ export default {
     name: 'DataView',
     data() {
         return {
-            displayMode: 'log',
+            displayMode: 'linear',
             barNum: 25,
             confusionMatrix: undefined,
             showMode: 'normal',
@@ -426,7 +426,7 @@ export default {
 
 #scented-barcharts>svg {
     width: 100%;
-    height: 35px;
+    height: 45px;
 }
 
 #scented-barcharts {

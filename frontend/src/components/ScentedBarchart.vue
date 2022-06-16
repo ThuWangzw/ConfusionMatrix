@@ -41,6 +41,10 @@ export default {
             type: Number,
             default: 10,
         },
+        dataRangeAll: {
+            type: Array,
+            default: undefined,
+        },
     },
     computed: {
         widgetId: function() {
@@ -54,6 +58,9 @@ export default {
         },
         selectDataG: function() {
             return this.mainSvg.select('#select-data-g');
+        },
+        distG: function() {
+            return this.mainSvg.select('#dist-g');
         },
     },
     mounted: function() {
@@ -73,14 +80,12 @@ export default {
     data: function() {
         return {
             globalAttrs: {
-                'marginTop': 10, // top margin, in pixels
+                'marginTop': 15, // top margin, in pixels
                 'marginRight': 0, // right margin, in pixels
-                'marginBottom': 0, // bottom margin, in pixels
-                'marginLeft': 60, // left margin, in pixels
-                'width': 300, // outer width of chart, in pixels
-                'height': 100, // outer height of chart, in pixels
-                'insetLeft': 0.3, // inset left edge of bar
-                'insetRight': 0.3, // inset right edge of bar:
+                'marginBottom': 15, // bottom margin, in pixels
+                'marginLeft': 0, // left margin, in pixels
+                'insetLeft': 0.7, // inset left edge of bar
+                'insetRight': 0.7, // inset right edge of bar:
                 'xType': d3.scaleLinear, // type of x-scale
                 'yType': d3.scaleLinear, // type of y-scale
                 'unselectFill': 'rgb(237,237,237)',
@@ -92,10 +97,15 @@ export default {
             },
             selectDataRectG: null,
             allDataRectG: null,
+            distRectG: null,
             drawAxis: false,
             xScale: undefined,
+            pos2DataRange: undefined,
+            dataRange2Pos: undefined,
             yScale: undefined,
             brush: brushX(),
+            lastSelection: null,
+            dataRangeShow: undefined, // range to show data in bins
         };
     },
     methods: {
@@ -128,6 +138,20 @@ export default {
             const that = this;
             if (this.drawAxis === false) {
                 this.drawAxis = true;
+                if (this.dataRangeShow === undefined) this.dataRangeShow = this.dataRangeAll;
+                this.dataRangeShow = [0, 1]; // TO remove
+                that.mainSvg
+                    .append('text')
+                    .attr('class', 'rangeText')
+                    .attr('x', 75)
+                    .attr('y', 10)
+                    .attr('fill', 'rgb(159,159,159)')
+                    .attr('font-family', that.textAttrs['font-family'])
+                    .attr('font-weight', that.textAttrs['font-weight'])
+                    .attr('font-size', that.textAttrs['font-size'])
+                    .text(`[${this.dataRangeShow[0].toFixed(2)}, ${this.dataRangeShow[1].toFixed(2)}]`);
+                this.pos2DataRange = this.globalAttrs.xType([this.xScale(0), this.xScale(1)], [0, 1]); // TODO: change [0, 1] to rangeall
+                this.dataRange2Pos = this.globalAttrs.xType([0, 1], [this.xScale(0), this.xScale(1)]);
 
                 this.mainSvg
                     .append('line')
@@ -145,9 +169,52 @@ export default {
                     .attr('id', 'select-data-g');
 
                 this.mainSvg
+                    .append('g')
+                    .attr('id', 'dist-g');
+
+                const triangle = d3.symbol().size(40).type(d3.symbolTriangle);
+                const drag = function() {
+                    const dragged = function(e, d) {
+                        // eslint-disable-next-line no-invalid-this
+                        const tmp = d3.select(this);
+                        // eslint-disable-next-line no-invalid-this
+                        if (this.id === 'triangle-left') {
+                            that.dataRangeShow[0] = Math.min(that.dataRangeShow[1],
+                                Math.max(that.pos2DataRange(that.xScale(0)), that.pos2DataRange(e.x)));
+                            tmp.attr('transform', `translate(${that.dataRange2Pos(that.dataRangeShow[0])} ${that.globalAttrs.height})`);
+                        } else {
+                            that.dataRangeShow[1] = Math.min(that.pos2DataRange(that.xScale(1)),
+                                Math.max(that.dataRangeShow[0], that.pos2DataRange(e.x)));
+                            tmp.attr('transform', `translate(${that.dataRange2Pos(that.dataRangeShow[1])} ${that.globalAttrs.height})`);
+                        }
+                        that.mainSvg.select('text.rangeText')
+                            .text(`[${that.dataRangeShow[0].toFixed(2)}, ${that.dataRangeShow[1].toFixed(2)}]`);
+                    };
+                    const dragended = function(e, d) {
+                        // TODO: update
+                    };
+                    return d3.drag().on('drag', dragged).on('end', dragended);
+                };
+                this.mainSvg
+                    .append('path')
+                    .attr('id', 'triangle-left')
+                    .attr('d', triangle)
+                    .attr('transform', `translate(${this.xScale(0)} ${this.globalAttrs.height})`)
+                    .attr('fill', 'currentColor')
+                    .call(drag());
+                this.mainSvg
+                    .append('path')
+                    .attr('id', 'triangle-right')
+                    .attr('d', triangle)
+                    .attr('transform', `translate(${this.xScale(1)} ${this.globalAttrs.height})`)
+                    .attr('fill', 'currentColor')
+                    .call(drag());
+                this.mainSvg
                     .call(this.brush.extent([[this.xScale(0), this.globalAttrs['marginTop']],
                         [this.xScale(1), this.globalAttrs['height'] - this.globalAttrs['marginBottom']]])
                         .on('end', function({selection}) {
+                            if (that.lastSelection === null && selection === null) return;
+                            that.lastSelection = selection;
                             that.createResetBrush();
                             const len = that.xScale(1) - that.xScale(0);
                             let x1 = that.xSplit[0];
@@ -164,7 +231,7 @@ export default {
                 this.mainSvg
                     .append('text')
                     .attr('x', 20)
-                    .attr('y', this.globalAttrs['height']-3)
+                    .attr('y', 10)
                     .attr('fill', 'currentColor')
                     .attr('font-family', that.textAttrs['font-family'])
                     .attr('font-weight', that.textAttrs['font-weight'])
@@ -174,12 +241,13 @@ export default {
                 that.mainSvg
                     .append('circle')
                     .attr('cx', 13)
-                    .attr('cy', this.globalAttrs['height']-6)
+                    .attr('cy', 6)
                     .attr('r', 2)
                     .attr('fill', 'currentColor');
             }
             const selectDataBins = [];
             const allDataBins = [];
+            const distBins = [];
             const rectWidth = 1 / this.barNum;
             for (let i = 0; i < this.allData.length; ++i) {
                 selectDataBins.push({
@@ -193,8 +261,19 @@ export default {
                     'x1': (i+1) * rectWidth,
                 });
             }
+            for (let i = 0; i < 40; ++i) {
+                distBins.push({
+                    'x0': i * 0.0025,
+                });
+            }
+            for (let i = 0; i < 50; ++i) {
+                distBins.push({
+                    'x0': 0.1 + i * 0.018,
+                });
+            }
             this.allDataRectG = this.alldataG.selectAll('g.allDataRect').data(allDataBins);
             this.selectDataRectG = this.selectDataG.selectAll('g.selectDataRect').data(selectDataBins);
+            this.distRectG = this.distG.selectAll('g.distRect').data(distBins);
             await this.remove();
             await this.update();
             await this.transform();
@@ -232,12 +311,28 @@ export default {
                     .on('end', resolve);
 
                 selectDataRectG.append('rect')
-                    .attr('x', (d) => that.xScale(d.x0) + that.globalAttrs['insetLeft'])
+                    .attr('x', (d) => that.xScale(d.x0) + that.globalAttrs.insetLeft)
                     .attr('width', (d) => Math.max(0, that.xScale(d.x1) - that.xScale(d.x0) -
-                                                      that.globalAttrs['insetLeft'] - that.globalAttrs['insetRight']))
+                                                      that.globalAttrs.insetLeft - that.globalAttrs.insetRight))
                     .attr('y', (d, i) => that.yScale(that.cal(d.val)))
                     .attr('height', (d, i) => that.yScale(0) - that.yScale(that.cal(d.val)))
                     .attr('fill', 'steelblue');
+
+                const distRectG = that.distRectG.enter()
+                    .append('g')
+                    .attr('class', 'distRect');
+
+                distRectG.transition()
+                    .duration(that.createDuration)
+                    .attr('opacity', 1)
+                    .on('end', resolve);
+
+                distRectG.append('rect')
+                    .attr('x', (d) => that.xScale(d.x0))
+                    .attr('width', 0.1)
+                    .attr('y', (d, i) => that.globalAttrs['height'] - that.globalAttrs['marginBottom'] + 3)
+                    .attr('height', that.globalAttrs['marginBottom']-10)
+                    .attr('fill', 'rgb(0,0,0)');
 
                 if ((that.selectDataRectG.enter().size() === 0) && (that.allDataRectG.enter().size() === 0)) {
                     resolve();
