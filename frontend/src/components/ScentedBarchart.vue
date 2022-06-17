@@ -222,6 +222,8 @@ export default {
                         [this.xScale(1), this.globalAttrs['height'] - this.globalAttrs['marginBottom']]])
                         .on('end', function({selection}) {
                             if (that.lastSelection === null && selection === null) return;
+                            if (that.lastSelection !== null && selection !== null &&
+                                that.lastSelection[0] === selection[0] && that.lastSelection[1] === selection[1]) return;
                             that.lastSelection = selection;
                             const len = that.xScale(1) - that.xScale(0);
                             let x1 = that.dataRangeAll[0];
@@ -230,6 +232,8 @@ export default {
                                 that.createResetBrush();
                                 x1 = that.xSplit[Math.floor((selection[0] - that.xScale(0))/len*that.barNum)]+(1e-5);
                                 x2 = that.xSplit[Math.ceil((selection[1] - that.xScale(0))/len*that.barNum)];
+                            } else {
+                                that.mainSvg.selectAll('#remove-brush-button').remove();
                             }
                             const query = {};
                             query[that.queryKey] = [x1, x2];
