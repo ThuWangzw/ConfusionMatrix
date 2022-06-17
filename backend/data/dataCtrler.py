@@ -437,6 +437,20 @@ class DataCtrler(object):
             confusion[len(label_target)][j] = unmatch_predict[self.raw_predicts[self.predict_label_pairs[unmatch_predict][:, 0], 0]==pred_target[j]]
         return self.getStatisticsMatrices(confusion, query)
     
+    def getOverallDistribution(self):
+        ret_dict = {}
+        K = 100
+        data_dict = {
+            'labelSize': self.label_size,
+            'predictSize': self.predict_size,
+            'labelAspectRatio': self.label_aspect_ratio,
+            'predictAspectRatio': self.predict_aspect_ratio
+        }
+        for name, data in data_dict.items():
+            tmp = sorted(data)
+            ret_dict[name] = [float(tmp[i*(len(tmp)-1)//(K-1)]) for i in range(K)]
+        return ret_dict
+    
     def getZoomInDistribution(self, query):
         assert "query_key" in query
         target = query["query_key"]
@@ -444,7 +458,6 @@ class DataCtrler(object):
         query[target] = target_range
         K = 25
         split_pos = np.array([target_range[0]+i*(target_range[1]-target_range[0])/K for i in range(K+1)])
-        print(query)
         filtered, unmatch_predict, unmatch_label = self.filterSamples(query)
         label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
         if target == 'label_size':

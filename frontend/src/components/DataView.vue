@@ -27,19 +27,19 @@
                 <div class="toolbar-title">Filters</div>
                 <div id="scented-barcharts">
                     <scented-barchart ref="label-size-hist" :barNum="barNum" :dataRangeAll="labelSizeRange"
-                        :allData="labelSizeAll" :title="'GT_size'" queryKey="label_size"
+                        :allData="labelSizeAll" :title="'GT_size'" queryKey="label_size" :overallDist="labelSizeOverallDist"
                         :selectData="labelSizeSelect" :xSplit="labelSizeSplit" :displayMode="displayMode"
                         @hoverBarchart="hoverBarchart" @selectRange="selectRange"></scented-barchart>
                     <scented-barchart ref="predict-size-hist" :barNum="barNum" :dataRangeAll="predictSizeRange"
-                        :allData="predictSizeAll" :title="'PR_size'" queryKey="predict_size"
+                        :allData="predictSizeAll" :title="'PR_size'" queryKey="predict_size" :overallDist="predictSizeOverallDist"
                         :selectData="predictSizeSelect" :xSplit="predictSizeSplit" :displayMode="displayMode"
                         @hoverBarchart="hoverBarchart" @selectRange="selectRange"></scented-barchart>
                     <scented-barchart ref="label-aspect-ratio-hist" :barNum="barNum" :dataRangeAll="labelAspectRatioRange"
-                        :allData="labelAspectRatioAll" :title="'GT_AR'" queryKey="label_aspect_ratio"
+                        :allData="labelAspectRatioAll" :title="'GT_AR'" queryKey="label_aspect_ratio" :overallDist="labelAspectRatioOverallDist"
                         :selectData="labelAspectRatioSelect" :xSplit="labelAspectRatioSplit" :displayMode="displayMode"
                         @hoverBarchart="hoverBarchart" @selectRange="selectRange"></scented-barchart>
                     <scented-barchart ref="predict-aspect_ratio-hist" :barNum="barNum" :dataRangeAll="predictAspectRatioRange"
-                        :allData="predictAspectRatioAll" :title="'PR_AR'" queryKey="predict_aspect_ratio"
+                        :allData="predictAspectRatioAll" :title="'PR_AR'" queryKey="predict_aspect_ratio" :overallDist="predictAspectRatioOverallDist"
                         :selectData="predictAspectRatioSelect" :xSplit="predictAspectRatioSplit" :displayMode="displayMode"
                         @hoverBarchart="hoverBarchart" @selectRange="selectRange"></scented-barchart>
                 </div>
@@ -160,6 +160,10 @@ export default {
             predictSizeShow: undefined,
             labelAspectRatioShow: undefined,
             predictAspectRatioShow: undefined,
+            labelSizeOverallDist: undefined,
+            predictSizeOverallDist: undefined,
+            labelAspectRatioOverallDist: undefined,
+            predictAspectRatioOverallDist: undefined,
         };
     },
     methods: {
@@ -371,6 +375,17 @@ export default {
                 console.log('query_key error: ' + String(rangeShow));
             }
         },
+        setOverallDist: function() {
+            const store = this.$store;
+            const that = this;
+            axios.post(store.getters.URL_GET_OVERALL_DIST, {})
+                .then(function(response) {
+                    that.labelSizeOverallDist = response.data.labelSize;
+                    that.predictSizeOverallDist = response.data.predictSize;
+                    that.labelAspectRatioOverallDist = response.data.labelAspectRatio;
+                    that.predictAspectRatioOverallDist = response.data.predictAspectRatio;
+                });
+        },
         clickConfusionCell: function(d) {
             const store = this.$store;
             const that = this;
@@ -398,6 +413,7 @@ export default {
         this.setBoxSizeInfo();
         this.setBoxAspectRatioInfo();
         this.setConfusionMatrix();
+        this.setOverallDist();
     },
 };
 </script>

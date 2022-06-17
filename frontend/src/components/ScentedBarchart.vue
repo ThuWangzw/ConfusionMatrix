@@ -45,6 +45,10 @@ export default {
             type: Array,
             default: undefined,
         },
+        overallDist: {
+            type: Array,
+            default: undefined,
+        },
     },
     computed: {
         widgetId: function() {
@@ -74,6 +78,9 @@ export default {
             this.render();
         },
         displayMode: function() {
+            this.render();
+        },
+        overallDist: function() {
             this.render();
         },
     },
@@ -136,7 +143,7 @@ export default {
             this.xScale = this.globalAttrs['xType'](xDomain, xRange);
             this.yScale = this.globalAttrs['yType'](yDomain, yRange);
             const that = this;
-            if (this.drawAxis === false) {
+            if (this.drawAxis === false && this.dataRangeAll !== undefined) {
                 this.drawAxis = true;
                 this.dataRangeShow = [Number(this.dataRangeAll[0].toFixed(2)), Number(this.dataRangeAll[1].toFixed(2))];
                 that.mainSvg
@@ -248,7 +255,6 @@ export default {
             }
             const selectDataBins = [];
             const allDataBins = [];
-            const distBins = [];
             const rectWidth = 1 / this.barNum;
             for (let i = 0; i < this.allData.length; ++i) {
                 selectDataBins.push({
@@ -262,19 +268,17 @@ export default {
                     'x1': (i+1) * rectWidth,
                 });
             }
-            for (let i = 0; i < 40; ++i) {
-                distBins.push({
-                    'x0': i * 0.0025,
-                });
-            }
-            for (let i = 0; i < 50; ++i) {
-                distBins.push({
-                    'x0': 0.1 + i * 0.018,
-                });
-            }
             this.allDataRectG = this.alldataG.selectAll('g.allDataRect').data(allDataBins);
             this.selectDataRectG = this.selectDataG.selectAll('g.selectDataRect').data(selectDataBins);
-            this.distRectG = this.distG.selectAll('g.distRect').data(distBins);
+            if (this.overallDist !== undefined && this.dataRange2Pos !== undefined && this.distRectG === null) {
+                const distBins = [];
+                for (let i = 0; i < this.overallDist.length; ++i) {
+                    distBins.push({
+                        'x0': this.dataRange2Pos(this.overallDist[i]),
+                    });
+                }
+                this.distRectG = this.distG.selectAll('g.distRect').data(distBins);
+            }
             await this.remove();
             await this.update();
             await this.transform();
@@ -319,21 +323,23 @@ export default {
                     .attr('height', (d, i) => that.yScale(0) - that.yScale(that.cal(d.val)))
                     .attr('fill', 'steelblue');
 
-                const distRectG = that.distRectG.enter()
-                    .append('g')
-                    .attr('class', 'distRect');
+                if (that.distRectG !== null) {
+                    const distRectG = that.distRectG.enter()
+                        .append('g')
+                        .attr('class', 'distRect');
 
-                distRectG.transition()
-                    .duration(that.createDuration)
-                    .attr('opacity', 1)
-                    .on('end', resolve);
+                    distRectG.transition()
+                        .duration(that.createDuration)
+                        .attr('opacity', 1)
+                        .on('end', resolve);
 
-                distRectG.append('rect')
-                    .attr('x', (d) => that.xScale(d.x0))
-                    .attr('width', 0.1)
-                    .attr('y', (d, i) => that.globalAttrs['height'] - that.globalAttrs['marginBottom'] + 3)
-                    .attr('height', that.globalAttrs['marginBottom']-10)
-                    .attr('fill', 'rgb(0,0,0)');
+                    distRectG.append('rect')
+                        .attr('x', (d) => d.x0)
+                        .attr('width', 0.1)
+                        .attr('y', that.globalAttrs['height'] - that.globalAttrs['marginBottom'] + 3)
+                        .attr('height', that.globalAttrs['marginBottom']-10)
+                        .attr('fill', 'rgb(0,0,0)');
+                }
 
                 if ((that.selectDataRectG.enter().size() === 0) && (that.allDataRectG.enter().size() === 0)) {
                     resolve();
