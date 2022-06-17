@@ -138,8 +138,7 @@ export default {
             const that = this;
             if (this.drawAxis === false) {
                 this.drawAxis = true;
-                if (this.dataRangeShow === undefined) this.dataRangeShow = this.dataRangeAll;
-                this.dataRangeShow = [0, 1]; // TO remove
+                this.dataRangeShow = [Number(this.dataRangeAll[0].toFixed(2)), Number(this.dataRangeAll[1].toFixed(2))];
                 that.mainSvg
                     .append('text')
                     .attr('class', 'rangeText')
@@ -149,9 +148,9 @@ export default {
                     .attr('font-family', that.textAttrs['font-family'])
                     .attr('font-weight', that.textAttrs['font-weight'])
                     .attr('font-size', that.textAttrs['font-size'])
-                    .text(`[${this.dataRangeShow[0].toFixed(2)}, ${this.dataRangeShow[1].toFixed(2)}]`);
-                this.pos2DataRange = this.globalAttrs.xType([this.xScale(0), this.xScale(1)], [0, 1]); // TODO: change [0, 1] to rangeall
-                this.dataRange2Pos = this.globalAttrs.xType([0, 1], [this.xScale(0), this.xScale(1)]);
+                    .text(`[${this.dataRangeShow[0]}, ${this.dataRangeShow[1]}]`);
+                this.pos2DataRange = this.globalAttrs.xType([this.xScale(0), this.xScale(1)], that.dataRangeAll);
+                this.dataRange2Pos = this.globalAttrs.xType(that.dataRangeAll, [this.xScale(0), this.xScale(1)]);
 
                 this.mainSvg
                     .append('line')
@@ -179,19 +178,21 @@ export default {
                         const tmp = d3.select(this);
                         // eslint-disable-next-line no-invalid-this
                         if (this.id === 'triangle-left') {
-                            that.dataRangeShow[0] = Math.min(that.dataRangeShow[1],
-                                Math.max(that.pos2DataRange(that.xScale(0)), that.pos2DataRange(e.x)));
+                            that.dataRangeShow[0] = Number(Math.min(that.dataRangeShow[1]-0.01,
+                                Math.max(that.pos2DataRange(that.xScale(0)), that.pos2DataRange(e.x))).toFixed(2));
                             tmp.attr('transform', `translate(${that.dataRange2Pos(that.dataRangeShow[0])} ${that.globalAttrs.height})`);
                         } else {
-                            that.dataRangeShow[1] = Math.min(that.pos2DataRange(that.xScale(1)),
-                                Math.max(that.dataRangeShow[0], that.pos2DataRange(e.x)));
+                            that.dataRangeShow[1] = Number(Math.min(that.pos2DataRange(that.xScale(1)),
+                                Math.max(that.dataRangeShow[0]+0.01, that.pos2DataRange(e.x))).toFixed(2));
                             tmp.attr('transform', `translate(${that.dataRange2Pos(that.dataRangeShow[1])} ${that.globalAttrs.height})`);
                         }
                         that.mainSvg.select('text.rangeText')
-                            .text(`[${that.dataRangeShow[0].toFixed(2)}, ${that.dataRangeShow[1].toFixed(2)}]`);
+                            .text(`[${that.dataRangeShow[0]}, ${that.dataRangeShow[1]}]`);
                     };
                     const dragended = function(e, d) {
-                        // TODO: update
+                        that.mainSvg.call(that.brush.move, null);
+                        that.mainSvg.selectAll('#remove-brush-button').remove();
+                        that.$emit('selectRange', that.queryKey, that.dataRangeShow);
                     };
                     return d3.drag().on('drag', dragged).on('end', dragended);
                 };
@@ -215,11 +216,11 @@ export default {
                         .on('end', function({selection}) {
                             if (that.lastSelection === null && selection === null) return;
                             that.lastSelection = selection;
-                            that.createResetBrush();
                             const len = that.xScale(1) - that.xScale(0);
-                            let x1 = that.xSplit[0];
-                            let x2 = that.xSplit[that.xSplit.length-1];
+                            let x1 = that.dataRangeAll[0];
+                            let x2 = that.dataRangeAll[1];
                             if (selection!==null) {
+                                that.createResetBrush();
                                 x1 = that.xSplit[Math.floor((selection[0] - that.xScale(0))/len*that.barNum)]+(1e-5);
                                 x2 = that.xSplit[Math.ceil((selection[1] - that.xScale(0))/len*that.barNum)];
                             }

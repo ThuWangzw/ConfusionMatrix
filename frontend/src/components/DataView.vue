@@ -26,22 +26,22 @@
             <div id="barcharts-container">
                 <div class="toolbar-title">Filters</div>
                 <div id="scented-barcharts">
-                    <scented-barchart ref="label-size-hist" :barNum="barNum"
+                    <scented-barchart ref="label-size-hist" :barNum="barNum" :dataRangeAll="labelSizeRange"
                         :allData="labelSizeAll" :title="'GT_size'" queryKey="label_size"
-                        :selectData="labelSizeSelect" :xSplit="sizeSplit" :displayMode="displayMode"
-                        @hoverBarchart="hoverBarchart"></scented-barchart>
-                    <scented-barchart ref="predict-size-hist" :barNum="barNum"
+                        :selectData="labelSizeSelect" :xSplit="labelSizeSplit" :displayMode="displayMode"
+                        @hoverBarchart="hoverBarchart" @selectRange="selectRange"></scented-barchart>
+                    <scented-barchart ref="predict-size-hist" :barNum="barNum" :dataRangeAll="predictSizeRange"
                         :allData="predictSizeAll" :title="'PR_size'" queryKey="predict_size"
-                        :selectData="predictSizeSelect" :xSplit="sizeSplit" :displayMode="displayMode"
-                        @hoverBarchart="hoverBarchart"></scented-barchart>
-                    <scented-barchart ref="label-aspect-ratio-hist" :barNum="barNum"
+                        :selectData="predictSizeSelect" :xSplit="predictSizeSplit" :displayMode="displayMode"
+                        @hoverBarchart="hoverBarchart" @selectRange="selectRange"></scented-barchart>
+                    <scented-barchart ref="label-aspect-ratio-hist" :barNum="barNum" :dataRangeAll="labelAspectRatioRange"
                         :allData="labelAspectRatioAll" :title="'GT_AR'" queryKey="label_aspect_ratio"
-                        :selectData="labelAspectRatioSelect" :xSplit="aspectRatioSplit" :displayMode="displayMode"
-                        @hoverBarchart="hoverBarchart"></scented-barchart>
-                    <scented-barchart ref="predict-aspect_ratio-hist" :barNum="barNum"
+                        :selectData="labelAspectRatioSelect" :xSplit="labelAspectRatioSplit" :displayMode="displayMode"
+                        @hoverBarchart="hoverBarchart" @selectRange="selectRange"></scented-barchart>
+                    <scented-barchart ref="predict-aspect_ratio-hist" :barNum="barNum" :dataRangeAll="predictAspectRatioRange"
                         :allData="predictAspectRatioAll" :title="'PR_AR'" queryKey="predict_aspect_ratio"
-                        :selectData="predictAspectRatioSelect" :xSplit="aspectRatioSplit" :displayMode="displayMode"
-                        @hoverBarchart="hoverBarchart"></scented-barchart>
+                        :selectData="predictAspectRatioSelect" :xSplit="predictAspectRatioSplit" :displayMode="displayMode"
+                        @hoverBarchart="hoverBarchart" @selectRange="selectRange"></scented-barchart>
                 </div>
             </div>
 
@@ -129,7 +129,8 @@ export default {
                 label: '预测物体框纵横比均值',
             }],
             query: {},
-            sizeSplit: [],
+            labelSizeSplit: [],
+            predictSizeSplit: [],
             labelSizeAll: [],
             predictSizeAll: [],
             labelSizeConfusion: undefined,
@@ -138,7 +139,8 @@ export default {
             predictSizeSelect: [],
             labelSizeSelectBuffer: [],
             predictSizeSelectBuffer: [],
-            aspectRatioSplit: [],
+            labelAspectRatioSplit: [],
+            predictAspectRatioSplit: [],
             labelAspectRatioAll: [],
             predictAspectRatioAll: [],
             labelAspectRatioConfusion: undefined,
@@ -150,6 +152,14 @@ export default {
             gettingMatrix: true,
             gettingSizeBarchart: true,
             gettingAspectRatioBarchart: true,
+            labelSizeRange: undefined,
+            predictSizeRange: undefined,
+            labelAspectRatioRange: undefined,
+            predictAspectRatioRange: undefined,
+            labelSizeShow: undefined,
+            predictSizeShow: undefined,
+            labelAspectRatioShow: undefined,
+            predictAspectRatioShow: undefined,
         };
     },
     methods: {
@@ -192,7 +202,12 @@ export default {
             const that = this;
             axios.post(store.getters.URL_GET_BOX_SIZE_DIST, query===undefined?{}:{query: query})
                 .then(function(response) {
-                    that.sizeSplit = response.data.sizeSplit;
+                    that.labelSizeSplit = response.data.labelSplit;
+                    that.predictSizeSplit = response.data.predictSplit;
+                    that.labelSizeRange = [that.labelSizeSplit[0], that.labelSizeSplit[that.labelSizeSplit.length-1]];
+                    that.labelSizeShow = that.labelSizeRange;
+                    that.predictSizeRange = [that.predictSizeSplit[0], that.predictSizeSplit[that.predictSizeSplit.length-1]];
+                    that.predictSizeShow = that.predictSizeRange;
                     that.labelSizeAll = response.data.labelSizeAll;
                     that.predictSizeAll = response.data.predictSizeAll;
                     that.labelSizeSelectBuffer = that.labelSizeAll;
@@ -201,8 +216,6 @@ export default {
                     that.predictSizeConfusion = response.data.predictSizeConfusion;
                     that.labelSizeSelect = response.data.labelSizeAll;
                     that.predictSizeSelect = response.data.predictSizeAll;
-                    // that.sizeSplit.unshift(0);
-                    // that.sizeSplit.push(1);
                     that.gettingSizeBarchart = false;
                 });
         },
@@ -212,7 +225,14 @@ export default {
             const that = this;
             axios.post(store.getters.URL_GET_BOX_ASPECT_RATIO_DIST, query===undefined?{}:{query: query})
                 .then(function(response) {
-                    that.aspectRatioSplit = response.data.aspectRatioSplit;
+                    that.labelAspectRatioSplit = response.data.labelSplit;
+                    that.predictAspectRatioSplit = response.data.predictSplit;
+                    that.labelAspectRatioRange = [that.labelAspectRatioSplit[0],
+                        that.labelAspectRatioSplit[that.labelAspectRatioSplit.length-1]];
+                    that.labelAspectRatioShow = that.labelAspectRatioRange;
+                    that.predictAspectRatioRange = [that.predictAspectRatioSplit[0],
+                        that.predictAspectRatioSplit[that.predictAspectRatioSplit.length-1]];
+                    that.predictAspectRatioShow = that.predictAspectRatioRange;
                     that.labelAspectRatioAll = response.data.labelAspectRatioAll;
                     that.predictAspectRatioAll = response.data.predictAspectRatioAll;
                     that.labelAspectRatioSelectBuffer = that.labelAspectRatioAll;
@@ -221,8 +241,6 @@ export default {
                     that.predictAspectRatioConfusion = response.data.predictAspectRatioConfusion;
                     that.labelAspectRatioSelect = response.data.labelAspectRatioAll;
                     that.predictAspectRatioSelect = response.data.predictAspectRatioAll;
-                    // that.aspectRatioSplit.unshift(0);
-                    // that.aspectRatioSplit.push(1);
                     that.gettingAspectRatioBarchart = false;
                 });
         },
@@ -272,7 +290,8 @@ export default {
             this.gettingAspectRatioBarchart = true;
             const store = this.$store;
             const that = this;
-            axios.post(store.getters.URL_GET_BOX_SIZE_DIST, query===undefined?{}:{query: this.query})
+            axios.post(store.getters.URL_GET_BOX_SIZE_DIST, {query: {...this.query,
+                'label_range': that.labelSizeShow, 'predict_range': that.predictSizeShow}})
                 .then(function(response) {
                     that.labelSizeSelect = response.data.labelSizeAll;
                     that.predictSizeSelect = response.data.predictSizeAll;
@@ -282,7 +301,8 @@ export default {
                     that.predictSizeSelectBuffer = response.data.predictSizeAll;
                     that.gettingSizeBarchart = false;
                 });
-            axios.post(store.getters.URL_GET_BOX_ASPECT_RATIO_DIST, query===undefined?{}:{query: this.query})
+            axios.post(store.getters.URL_GET_BOX_ASPECT_RATIO_DIST, {query: {...this.query,
+                'label_range': that.labelAspectRatioShow, 'predict_range': that.predictAspectRatioShow}})
                 .then(function(response) {
                     that.labelAspectRatioSelect = response.data.labelAspectRatioAll;
                     that.predictAspectRatioSelect = response.data.predictAspectRatioAll;
@@ -292,6 +312,64 @@ export default {
                     that.predictAspectRatioSelectBuffer = response.data.predictAspectRatioAll;
                     that.gettingAspectRatioBarchart = false;
                 });
+        },
+        selectRange: function(queryKey, rangeShow) {
+            const store = this.$store;
+            const that = this;
+            const query = this.query;
+            query['query_key'] = queryKey;
+            query['range'] = rangeShow;
+            if (queryKey === 'label_size') {
+                that.labelSizeShow = rangeShow;
+                this.gettingSizeBarchart = true;
+                axios.post(store.getters.URL_GET_ZOOM_IN_DIST, {query: query})
+                    .then(function(response) {
+                        that.labelSizeAll = response.data.allDist;
+                        that.labelSizeSelect = response.data.selectDist;
+                        that.labelSizeConfusion = response.data.confusion;
+                        that.labelSizeSplit = response.data.split;
+                        that.labelSizeSelectBuffer = that.labelSizeSelect;
+                        that.gettingSizeBarchart = false;
+                    });
+            } else if (queryKey == 'label_aspect_ratio') {
+                that.labelAspectRatioShow = rangeShow;
+                this.gettingAspectRatioBarchart = true;
+                axios.post(store.getters.URL_GET_ZOOM_IN_DIST, {query: query})
+                    .then(function(response) {
+                        that.labelAspectRatioAll = response.data.allDist;
+                        that.labelAspectRatioSelect = response.data.selectDist;
+                        that.labelAspectRatioConfusion = response.data.confusion;
+                        that.labelAspectRatioSplit = response.data.split;
+                        that.labelAspectRatioSelectBuffer = that.labelAspectRatioSelect;
+                        that.gettingAspectRatioBarchart = false;
+                    });
+            } else if (queryKey == 'predict_size') {
+                that.predictSizeShow = rangeShow;
+                this.gettingSizeBarchart = true;
+                axios.post(store.getters.URL_GET_ZOOM_IN_DIST, {query: query})
+                    .then(function(response) {
+                        that.predictSizeAll = response.data.allDist;
+                        that.predictSizeSelect = response.data.selectDist;
+                        that.predictSizeConfusion = response.data.confusion;
+                        that.predictSizeSplit = response.data.split;
+                        that.predictSizeSelectBuffer = that.predictSizeSelect;
+                        that.gettingSizeBarchart = false;
+                    });
+            } else if (queryKey == 'predict_aspect_ratio') {
+                that.predictAspectRatioShow = rangeShow;
+                this.gettingAspectRatioBarchart = true;
+                axios.post(store.getters.URL_GET_ZOOM_IN_DIST, {query: query})
+                    .then(function(response) {
+                        that.predictAspectRatioAll = response.data.allDist;
+                        that.predictAspectRatioSelect = response.data.selectDist;
+                        that.predictAspectRatioConfusion = response.data.confusion;
+                        that.predictAspectRatioSplit = response.data.split;
+                        that.predictAspectRatioSelectBuffer = that.predictAspectRatioSelect;
+                        that.gettingAspectRatioBarchart = false;
+                    });
+            } else {
+                console.log('query_key error: ' + String(rangeShow));
+            }
         },
         clickConfusionCell: function(d) {
             const store = this.$store;
