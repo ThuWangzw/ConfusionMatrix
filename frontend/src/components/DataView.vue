@@ -20,28 +20,32 @@
                         <span class="select-label">Display Mode</span>
                         <el-button id="log-linear-button" size="mini" @click="changeDisplayMode">{{displayMode}}</el-button>
                     </div>
+                    <div class="mode-select">
+                        <span class="select-label">Hide Unfiltered</span>
+                        <el-button id="hide-unfiltered-button" size="mini" @click="changeHideUnfiltered">{{hideUnfiltered}}</el-button>
+                    </div>
                 </div>
             </div>
 
             <div id="barcharts-container">
                 <div class="toolbar-title">Filters</div>
                 <div id="scented-barcharts">
-                    <scented-barchart ref="label-size-hist" :barNum="barNum" :dataRangeAll="labelSizeRange"
+                    <scented-barchart ref="label-size-hist" :barNum="barNum" :dataRangeAll="labelSizeRange" :hideUnfiltered="hideUnfiltered"
                         :allData="labelSizeAll" :title="'GT_size'" queryKey="label_size" :overallDist="labelSizeOverallDist"
                         :selectData="labelSizeSelect" :xSplit="labelSizeSplit" :displayMode="displayMode"
                         @hoverBarchart="hoverBarchart" @selectRange="selectRange"></scented-barchart>
-                    <scented-barchart ref="predict-size-hist" :barNum="barNum" :dataRangeAll="predictSizeRange"
+                    <scented-barchart ref="predict-size-hist" :barNum="barNum" :dataRangeAll="predictSizeRange" :hideUnfiltered="hideUnfiltered"
                         :allData="predictSizeAll" :title="'PR_size'" queryKey="predict_size" :overallDist="predictSizeOverallDist"
                         :selectData="predictSizeSelect" :xSplit="predictSizeSplit" :displayMode="displayMode"
                         @hoverBarchart="hoverBarchart" @selectRange="selectRange"></scented-barchart>
                     <scented-barchart ref="label-aspect-ratio-hist" :barNum="barNum" :dataRangeAll="labelAspectRatioRange"
                         :allData="labelAspectRatioAll" :title="'GT_AR'" queryKey="label_aspect_ratio" :overallDist="labelAspectRatioOverallDist"
                         :selectData="labelAspectRatioSelect" :xSplit="labelAspectRatioSplit" :displayMode="displayMode"
-                        @hoverBarchart="hoverBarchart" @selectRange="selectRange"></scented-barchart>
+                        @hoverBarchart="hoverBarchart" @selectRange="selectRange" :hideUnfiltered="hideUnfiltered"></scented-barchart>
                     <scented-barchart ref="predict-aspect_ratio-hist" :barNum="barNum" :dataRangeAll="predictAspectRatioRange"
                         :allData="predictAspectRatioAll" :title="'PR_AR'" queryKey="predict_aspect_ratio" :overallDist="predictAspectRatioOverallDist"
                         :selectData="predictAspectRatioSelect" :xSplit="predictAspectRatioSplit" :displayMode="displayMode"
-                        @hoverBarchart="hoverBarchart" @selectRange="selectRange"></scented-barchart>
+                        @hoverBarchart="hoverBarchart" @selectRange="selectRange" :hideUnfiltered="hideUnfiltered"></scented-barchart>
                 </div>
             </div>
 
@@ -164,6 +168,7 @@ export default {
             predictSizeOverallDist: undefined,
             labelAspectRatioOverallDist: undefined,
             predictAspectRatioOverallDist: undefined,
+            hideUnfiltered: false,
         };
     },
     methods: {
@@ -171,6 +176,10 @@ export default {
             if (this.displayMode === 'log') this.displayMode = 'linear';
             else this.displayMode = 'log';
             document.getElementById('log-linear-button').blur();
+        },
+        changeHideUnfiltered: function() {
+            this.hideUnfiltered = !this.hideUnfiltered;
+            document.getElementById('hide-unfiltered-button').blur();
         },
         changeShowDirection: function() {
             this.showMode = 'direction';

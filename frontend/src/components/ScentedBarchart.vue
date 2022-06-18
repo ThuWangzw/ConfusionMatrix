@@ -49,6 +49,10 @@ export default {
             type: Array,
             default: undefined,
         },
+        hideUnfiltered: {
+            type: Boolean,
+            default: false,
+        },
     },
     computed: {
         widgetId: function() {
@@ -81,6 +85,9 @@ export default {
             this.render();
         },
         overallDist: function() {
+            this.render();
+        },
+        hideUnfiltered: function() {
             this.render();
         },
     },
@@ -137,9 +144,12 @@ export default {
         },
         render: async function() {
             const xRange = [this.globalAttrs['marginLeft'], this.globalAttrs['width'] - this.globalAttrs['marginRight']]; // [left, right]
-            const yRange = [this.globalAttrs['height'] - this.globalAttrs['marginBottom'], this.globalAttrs['marginTop']]; // [bottom, top]
+            // add minimum height 1 for non-zero value
+            const yRange = [this.globalAttrs['height'] - this.globalAttrs['marginBottom']-1, this.globalAttrs['marginTop']]; // [bottom, top]
             const xDomain = [-0.05, 1.05];
-            const yDomain = [0, this.cal(d3.max(this.allData))];
+            let yDomain;
+            if (this.hideUnfiltered) yDomain = [0, this.cal(d3.max(this.selectData)+1)+0.01];
+            else yDomain = [0, this.cal(d3.max(this.allData))];
             this.xScale = this.globalAttrs['xType'](xDomain, xRange);
             this.yScale = this.globalAttrs['yType'](yDomain, yRange);
             const that = this;
@@ -161,7 +171,7 @@ export default {
 
                 this.mainSvg
                     .append('line')
-                    .attr('transform', `translate(${this.globalAttrs['marginLeft']},${this.yScale(0)})`)
+                    .attr('transform', `translate(${this.globalAttrs['marginLeft']},${this.getYVal(0)})`)
                     .attr('stroke-opacity', 0.2)
                     .attr('stroke', 'currentColor')
                     .attr('x2', this.globalAttrs['width'] - this.globalAttrs['marginLeft'] - this.globalAttrs['marginRight']);
@@ -267,14 +277,14 @@ export default {
                     'x1': (i+1) * rectWidth,
                 });
                 allDataBins.push({
-                    'val': this.allData[i],
+                    'val': this.hideUnfiltered?0:this.allData[i],
                     'x0': i * rectWidth,
                     'x1': (i+1) * rectWidth,
                 });
             }
             this.allDataRectG = this.alldataG.selectAll('g.allDataRect').data(allDataBins);
             this.selectDataRectG = this.selectDataG.selectAll('g.selectDataRect').data(selectDataBins);
-            if (this.overallDist !== undefined && this.dataRange2Pos !== undefined && this.distRectG === null) {
+            if (this.overallDist !== undefined && this.dataRange2Pos !== undefined) {
                 const distBins = [];
                 for (let i = 0; i < this.overallDist.length; ++i) {
                     distBins.push({
@@ -304,8 +314,8 @@ export default {
                     .attr('x', (d) => that.xScale(d.x0) + that.globalAttrs['insetLeft'])
                     .attr('width', (d) => Math.max(0, that.xScale(d.x1) - that.xScale(d.x0) -
                                                       that.globalAttrs['insetLeft'] - that.globalAttrs['insetRight']))
-                    .attr('y', (d, i) => that.yScale(that.cal(d.val)))
-                    .attr('height', (d, i) => that.yScale(0) - that.yScale(that.cal(d.val)))
+                    .attr('y', (d, i) => that.getYVal(that.cal(d.val)))
+                    .attr('height', (d, i) => that.getYVal(0) - that.getYVal(that.cal(d.val)))
                     .attr('fill', that.globalAttrs['unselectFill'])
                     .append('title')
                     .text((d, i) => [`${d.x0.toFixed(1)} ≤ x < ${d.x1.toFixed(1)}`, `quantity: ${d.val}`].join('\n'));
@@ -323,8 +333,8 @@ export default {
                     .attr('x', (d) => that.xScale(d.x0) + that.globalAttrs.insetLeft)
                     .attr('width', (d) => Math.max(0, that.xScale(d.x1) - that.xScale(d.x0) -
                                                       that.globalAttrs.insetLeft - that.globalAttrs.insetRight))
-                    .attr('y', (d, i) => that.yScale(that.cal(d.val)))
-                    .attr('height', (d, i) => that.yScale(0) - that.yScale(that.cal(d.val)))
+                    .attr('y', (d, i) => that.getYVal(that.cal(d.val)))
+                    .attr('height', (d, i) => that.getYVal(0) - that.getYVal(that.cal(d.val)))
                     .attr('fill', 'steelblue');
 
                 if (that.distRectG !== null) {
@@ -345,7 +355,8 @@ export default {
                         .attr('fill', 'rgb(0,0,0)');
                 }
 
-                if ((that.selectDataRectG.enter().size() === 0) && (that.allDataRectG.enter().size() === 0)) {
+                if ((that.selectDataRectG.enter().size() === 0) && (that.allDataRectG.enter().size() === 0) &&
+                    (that.distRectG === null || that.distRectG.enter().size() === 0)) {
                     resolve();
                 }
             });
@@ -358,8 +369,8 @@ export default {
                     d3.select(this).select('rect')
                         .transition()
                         .duration(that.updateDuration)
-                        .attr('y', that.yScale(that.cal(d.val)))
-                        .attr('height', that.yScale(0) - that.yScale(that.cal(d.val)))
+                        .attr('y', that.getYVal(that.cal(d.val)))
+                        .attr('height', that.getYVal(0) - that.getYVal(that.cal(d.val)))
                         .on('end', resolve);
                 });
                 that.selectDataRectG.each(function(d, i) {
@@ -367,8 +378,8 @@ export default {
                     d3.select(this).select('rect')
                         .transition()
                         .duration(that.updateDuration)
-                        .attr('y', that.yScale(that.cal(d.val)))
-                        .attr('height', that.yScale(0) - that.yScale(that.cal(d.val)))
+                        .attr('y', that.getYVal(that.cal(d.val)))
+                        .attr('height', that.getYVal(0) - that.getYVal(that.cal(d.val)))
                         .on('end', resolve);
                 });
 
@@ -403,6 +414,10 @@ export default {
         cal: function(d) {
             if (this.displayMode === 'log') return Math.log10(Math.max(1, d));
             else if (this.displayMode === 'linear') return d;
+        },
+        getYVal: function(y) {
+            if (y === 0) return this.globalAttrs.height - this.globalAttrs.marginBottom;
+            else return this.yScale(y);
         },
     },
     mounted: function() {
