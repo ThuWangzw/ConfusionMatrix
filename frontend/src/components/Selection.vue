@@ -1,5 +1,5 @@
 <template>
-    <svg id="selection-svg" width="100%" height="100%" ref="svg">
+    <svg class="selection-svg" :id="'selection-svg-'+id" width="95%" height="20" ref="svg" @click="selectSvg">
         <g id="main-g">
             <g id="selection-g" transform="translate(0, 0)"></g>
         </g>
@@ -22,18 +22,21 @@ export default {
             type: Array,
             default: undefined,
         },
+        id: {
+            type: Number,
+            default: 0,
+        },
     },
     computed: {
         ...mapGetters([
             'labelHierarchy',
             'labelnames',
-            'hierarchyColors',
         ]),
         rawHierarchy: function() {
             return this.labelHierarchy;
         },
         svg: function() {
-            return d3.select('#selection-svg');
+            return d3.select('#selection-svg-'+this.id);
         },
         mainG: function() {
             return this.svg.select('#main-g');
@@ -116,12 +119,35 @@ export default {
             baseColors: ['#1b9e77', '#d95f02', '#7570b3', '#e7298a', '#66a61e', '#e6ab02', '#a6761d'],
             defaultColor: 'gray',
             nextColor: 0,
+            coloredNodes: [],
+            hierarchyColors: {},
         };
     },
     methods: {
         ...mapMutations([
             'setHierarchyColors',
         ]),
+        findNodeByName: function(name) {
+            const dfs = function(root) {
+                if (root.name===name) {
+                    return root;
+                }
+                for (const node of root.children) {
+                    const res = dfs(node);
+                    if (res !== null) {
+                        return res;
+                    }
+                }
+                return null;
+            };
+            for (const root of this.hierarchy) {
+                const res = dfs(root);
+                if (res !== null) {
+                    return res;
+                }
+            }
+            return null;
+        },
         initColor: function(root, color) {
             if (typeof(root)==='string') {
                 this.hierarchyColors[root] = color;
@@ -131,6 +157,44 @@ export default {
             for (const child of root.children) {
                 this.initColor(child, color);
             }
+        },
+        setNewColor: function(root, replace=true) {
+            const that = this;
+            if (!replace && that.hierarchyColors[root.name] !== that.defaultColor) {
+                return;
+            }
+            that.initColor(root, that.baseColors[that.nextColor]);
+            that.setHierarchyColors(clone(that.hierarchyColors));
+            that.nextColor++;
+            if (that.nextColor===that.baseColors.length) {
+                that.nextColor = 0;
+            }
+            that.getDataAndRender();
+        },
+        getColoredNodes: function() {
+            this.coloredNodes = [];
+            const that = this;
+            const dfs = function(root) {
+                if (typeof(root)==='string') {
+                    if (that.hierarchyColors[root] != that.defaultColor) {
+                        that.coloredNodes.push(root);
+                    }
+                    return;
+                }
+                if (that.hierarchyColors[root.name] != that.defaultColor) {
+                    that.coloredNodes.push(root);
+                    return;
+                } else {
+                    for (const node of root.children) {
+                        dfs(node);
+                    }
+                }
+            };
+
+            for (const root of this.hierarchy) {
+                dfs(root);
+            }
+            return this.coloredNodes;
         },
         getHierarchy: function(hierarchy) {
             hierarchy = clone(hierarchy);
@@ -181,7 +245,7 @@ export default {
                 return;
             }
             // get nodes to show
-            this.showNodes = this.getShowNodes(this.hierarchy);
+            this.showNodes = this.getShowNodes(this.getColoredNodes());
             this.render();
         },
         render: async function() {
@@ -246,13 +310,7 @@ export default {
                     .attr('height', that.editColorSize)
                     .attr('cursor', 'pointer')
                     .on('click', function(e, d) {
-                        that.initColor(d, that.baseColors[that.nextColor]);
-                        that.setHierarchyColors(clone(that.hierarchyColors));
-                        that.nextColor++;
-                        if (that.nextColor===that.baseColors.length) {
-                            that.nextColor = 0;
-                        }
-                        that.getDataAndRender();
+                        that.setNewColor(d);
                     });
 
                 horizonTextinG.append('rect')
@@ -367,16 +425,14 @@ export default {
                 const svgRealWidth = that.$refs.svg.clientWidth;
                 const svgRealHeight = that.$refs.svg.clientHeight;
                 console.log(svgRealWidth, svgRealHeight);
-                let scale = 1;
-                if (that.svgWidth > svgRealWidth || that.svgHeight > svgRealHeight) {
-                    scale = Math.min(svgRealWidth/that.svgWidth/1.1, svgRealHeight/that.svgHeight/1.1);
-                } else {
-                    scale = 1;
-                }
                 console.log(that.svgWidth);
+                that.svg.transition()
+                    .duration(that.transformDuration)
+                    .attr('height', that.svgHeight+20)
+                    .on('end', resolve);
                 that.mainG.transition()
                     .duration(that.transformDuration)
-                    .attr('transform', `translate(${10} ${10}) scale(${scale})`)
+                    .attr('transform', `translate(${10} ${10}) scale(1)`)
                     .on('end', resolve);
                 that.horizonTextG.transition()
                     .duration(that.transformDuration)
@@ -384,7 +440,35 @@ export default {
                     .on('end', resolve);
             });
         },
+        selectHandle: function() {
+            this.svg.style('border-color', 'cornflowerblue');
+        },
+        unselectHandle: function() {
+            this.svg.style('border-color', '#c1c1c1');
+        },
+        selectSvg: function() {
+            console.log('select svg', this.id);
+            this.$emit('selectSvg', this.id);
+        },
     },
-
+    mounted: function() {
+        if (this.labelHierarchy === undefined) {
+            return;
+        }
+        this.hierarchy = this.getHierarchy(this.labelHierarchy);
+        for (const child of this.hierarchy) {
+            this.initColor(child, this.defaultColor);
+        }
+        this.setHierarchyColors(clone(this.hierarchyColors));
+        this.getDataAndRender();
+    },
 };
 </script>
+
+<style scoped>
+.selection-svg {
+    border: 1px solid #c1c1c1;
+    border-radius: 5px;
+    margin: 5px 0 5px 0;
+}
+</style>

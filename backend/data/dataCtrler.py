@@ -884,8 +884,6 @@ class DataCtrler(object):
             base64Imgs.append(base64.b64encode(output.getvalue()).decode())
         return base64Imgs
             
-        
-    
     def cropImageByBox(self, img, predictBox, labelBox, shape):
         box = None
         if predictBox is None:
