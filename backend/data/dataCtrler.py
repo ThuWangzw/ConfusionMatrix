@@ -436,6 +436,116 @@ class DataCtrler(object):
         for j in range(len(pred_target)):
             confusion[len(label_target)][j] = unmatch_predict[self.raw_predicts[self.predict_label_pairs[unmatch_predict][:, 0], 0]==pred_target[j]]
         return self.getStatisticsMatrices(confusion, query)
+    
+    def getOverallDistribution(self):
+        ret_dict = {}
+        K = 100
+        data_dict = {
+            'labelSize': self.label_size,
+            'predictSize': self.predict_size,
+            'labelAspectRatio': self.label_aspect_ratio,
+            'predictAspectRatio': self.predict_aspect_ratio
+        }
+        for name, data in data_dict.items():
+            tmp = sorted(data)
+            ret_dict[name] = [float(tmp[i*(len(tmp)-1)//(K-1)]) for i in range(K)]
+        return ret_dict
+    
+    def getZoomInDistribution(self, query):
+        assert "query_key" in query
+        target = query["query_key"]
+        target_range = query["range"]
+        query[target] = target_range
+        K = 25
+        split_pos = np.array([target_range[0]+i*(target_range[1]-target_range[0])/K for i in range(K+1)])
+        filtered, unmatch_predict, unmatch_label = self.filterSamples(query)
+        label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
+        if target == 'label_size':
+            all_dist = [0 for _ in range(K)]
+            for i in range(K):
+                last = split_pos[i]
+                cur = split_pos[i+1]
+                all_dist[i] = np.count_nonzero(np.logical_and(self.label_size>last, self.label_size<=cur))
+            match_select = self.label_size[self.predict_label_pairs[filtered,1]]
+            unmatch_select = self.label_size[self.predict_label_pairs[unmatch_label,1]]
+            select_dist = [0 for _ in range(K)]
+            for i in range(K):
+                last = split_pos[i]
+                cur = split_pos[i+1]
+                select_dist[i] = np.count_nonzero(np.logical_and(match_select>last, match_select<=cur)) + \
+                    np.count_nonzero(np.logical_and(unmatch_select>last, unmatch_select<=cur))
+            confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
+            for (pr, gt) in self.predict_label_pairs[filtered]:
+                confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_pos[1:-1], self.label_size[gt])]+=1
+            for (pr, gt) in self.predict_label_pairs[unmatch_label]:
+                confusion[int(self.raw_labels[gt, 0])][len(pred_target)][bisect.bisect_left(split_pos[1:-1], self.label_size[gt])]+=1
+        elif target == 'predict_size':
+            all_dist = [0 for _ in range(K)]
+            for i in range(K):
+                last = split_pos[i]
+                cur = split_pos[i+1]
+                all_dist[i] = np.count_nonzero(np.logical_and(self.predict_size>last, self.predict_size<=cur))
+            match_select = self.predict_size[self.predict_label_pairs[filtered,0]]
+            unmatch_select = self.predict_size[self.predict_label_pairs[unmatch_predict,0]]
+            select_dist = [0 for _ in range(K)]
+            for i in range(K):
+                last = split_pos[i]
+                cur = split_pos[i+1]
+                select_dist[i] = np.count_nonzero(np.logical_and(match_select>last, match_select<=cur)) + \
+                    np.count_nonzero(np.logical_and(unmatch_select>last, unmatch_select<=cur))
+            confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
+            for (pr, gt) in self.predict_label_pairs[filtered]:
+                confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_pos[1:-1], self.predict_size[pr])]+=1
+            for (pr, gt) in self.predict_label_pairs[unmatch_predict]:
+                confusion[len(label_target)][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_pos[1:-1], self.predict_size[pr])]+=1
+        elif target == 'label_aspect_ratio':
+            all_dist = [0 for _ in range(K)]
+            for i in range(K):
+                last = split_pos[i]
+                cur = split_pos[i+1]
+                all_dist[i] = np.count_nonzero(np.logical_and(self.label_aspect_ratio>last, self.label_aspect_ratio<=cur))
+            match_select = self.label_aspect_ratio[self.predict_label_pairs[filtered,1]]
+            unmatch_select = self.label_aspect_ratio[self.predict_label_pairs[unmatch_label,1]]
+            select_dist = [0 for _ in range(K)]
+            for i in range(K):
+                last = split_pos[i]
+                cur = split_pos[i+1]
+                select_dist[i] = np.count_nonzero(np.logical_and(match_select>last, match_select<=cur)) + \
+                    np.count_nonzero(np.logical_and(unmatch_select>last, unmatch_select<=cur))
+            confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
+            for (pr, gt) in self.predict_label_pairs[filtered]:
+                confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_pos[1:-1], self.label_aspect_ratio[gt])]+=1
+            for (pr, gt) in self.predict_label_pairs[unmatch_label]:
+                confusion[int(self.raw_labels[gt, 0])][len(pred_target)][bisect.bisect_left(split_pos[1:-1], self.label_aspect_ratio[gt])]+=1
+        elif target == 'predict_aspect_ratio':
+            all_dist = [0 for _ in range(K)]
+            for i in range(K):
+                last = split_pos[i]
+                cur = split_pos[i+1]
+                all_dist[i] = np.count_nonzero(np.logical_and(self.predict_aspect_ratio>last, self.predict_aspect_ratio<=cur))
+            match_select = self.predict_aspect_ratio[self.predict_label_pairs[filtered,0]]
+            unmatch_select = self.predict_aspect_ratio[self.predict_label_pairs[unmatch_predict,0]]
+            select_dist = [0 for _ in range(K)]
+            for i in range(K):
+                last = split_pos[i]
+                cur = split_pos[i+1]
+                select_dist[i] = np.count_nonzero(np.logical_and(match_select>last, match_select<=cur)) + \
+                    np.count_nonzero(np.logical_and(unmatch_select>last, unmatch_select<=cur))
+            confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
+            for (pr, gt) in self.predict_label_pairs[filtered]:
+                confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_pos[1:-1], self.predict_aspect_ratio[pr])]+=1
+            for (pr, gt) in self.predict_label_pairs[unmatch_predict]:
+                confusion[len(label_target)][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_pos[1:-1], self.predict_aspect_ratio[pr])]+=1
+        else:
+            raise NotImplementedError()
+
+        return {
+            'allDist': all_dist,
+            'selectDist': select_dist,
+            'confusion': confusion,
+            'split': split_pos.tolist()
+        }
+
    
     def getBoxSizeDistribution(self, query = None):
         """
@@ -449,44 +559,46 @@ class DataCtrler(object):
         unmatched_label_size = self.label_size[self.predict_label_pairs[unmatch_label][:,1]]
         unmatched_predict_size = self.predict_size[self.predict_label_pairs[unmatch_predict][:,0]]
         
-        # partition
         K = 25
-        # pred_size_argsort = np.argsort(self.predict_size)
-        # if K not in self.box_size_split_map:
-        #     self.box_size_split_map[K] = get_split_pos(self.predict_label_ious[pred_size_argsort], K)
-        #     with open(self.box_size_split_path, 'wb') as f:
-        #         pickle.dump(self.box_size_split_map, f)
-        # split_pos = self.box_size_split_map[K]
-        # split_size = self.predict_size[pred_size_argsort][split_pos]
-        maximum_val = np.max(np.concatenate((self.label_size, self.predict_size)))
-        split_size = np.array([i*maximum_val/K for i in range(K+1)])
+        if query is not None and 'label_range' in query:
+            label_range = query['label_range']
+            predict_range = query['predict_range']
+        else:
+            maximum_val = np.max(np.concatenate((self.label_size, self.predict_size)))
+            label_range = [0, maximum_val]
+            predict_range = [0, maximum_val]
+        label_split = np.array([label_range[0]+i*(label_range[1]-label_range[0])/K for i in range(K+1)])
+        predict_split = np.array([predict_range[0]+i*(predict_range[1]-predict_range[0])/K for i in range(K+1)])
         
         label_box_size_dist, predict_box_size_dist = [0 for _ in range(K)], [0 for _ in range(K)]
         for i in range(K):
-            last = split_size[i]
-            cur = split_size[i+1]
-            label_box_size_dist[i] = np.count_nonzero(np.logical_and(filtered_label_size>last, filtered_label_size<=cur)) + \
-             np.count_nonzero(np.logical_and(unmatched_label_size>last, unmatched_label_size<=cur))
-            predict_box_size_dist[i] = np.count_nonzero(np.logical_and(filtered_predict_size>last, filtered_predict_size<=cur)) + \
-             np.count_nonzero(np.logical_and(unmatched_predict_size>last, unmatched_predict_size<=cur))
+            label_box_size_dist[i] = np.count_nonzero(np.logical_and(filtered_label_size>label_split[i], filtered_label_size<=label_split[i+1])) + \
+             np.count_nonzero(np.logical_and(unmatched_label_size>label_split[i], unmatched_label_size<=label_split[i+1]))
+            predict_box_size_dist[i] = np.count_nonzero(np.logical_and(filtered_predict_size>predict_split[i], filtered_predict_size<=predict_split[i+1])) + \
+             np.count_nonzero(np.logical_and(unmatched_predict_size>predict_split[i], unmatched_predict_size<=predict_split[i+1]))
             
         label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
         label_box_size_confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
         predict_box_size_confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
         for (pr, gt) in self.predict_label_pairs[filtered]:
-            label_box_size_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_size[1:-1], self.label_size[gt])]+=1
-            predict_box_size_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_size[1:-1], self.predict_size[pr])]+=1
+            if label_range[0] <= self.label_size[gt] <= label_range[1]:
+                label_box_size_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(label_split[1:-1], self.label_size[gt])]+=1
+            if predict_range[0] <= self.predict_size[pr] <= predict_range[1]:
+                predict_box_size_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(predict_split[1:-1], self.predict_size[pr])]+=1
         for (pr, gt) in self.predict_label_pairs[unmatch_label]:
-            label_box_size_confusion[int(self.raw_labels[gt, 0])][len(pred_target)][bisect.bisect_left(split_size[1:-1], self.label_size[gt])]+=1
+            if label_range[0] <= self.label_size[gt] <= label_range[1]:
+                label_box_size_confusion[int(self.raw_labels[gt, 0])][len(pred_target)][bisect.bisect_left(label_split[1:-1], self.label_size[gt])]+=1
         for (pr, gt) in self.predict_label_pairs[unmatch_predict]:
-            predict_box_size_confusion[len(label_target)][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_size[1:-1], self.predict_size[pr])]+=1
+            if predict_range[0] <= self.predict_size[pr] <= predict_range[1]:
+                predict_box_size_confusion[len(label_target)][int(self.raw_predicts[pr, 0])][bisect.bisect_left(predict_split[1:-1], self.predict_size[pr])]+=1
                 
         return {
             'labelSizeAll': label_box_size_dist,
             'predictSizeAll': predict_box_size_dist,
             'labelSizeConfusion': label_box_size_confusion,
             'predictSizeConfusion': predict_box_size_confusion,
-            'sizeSplit': split_size.tolist()
+            'labelSplit': label_split.tolist(),
+            'predictSplit': predict_split.tolist()
         }
     
     def getBoxAspectRatioDistribution(self, query = None):
@@ -501,45 +613,46 @@ class DataCtrler(object):
         unmatched_label_aspect_ratio = self.label_aspect_ratio[self.predict_label_pairs[unmatch_label,1]]
         unmatched_predict_aspect_ratio = self.predict_aspect_ratio[self.predict_label_pairs[unmatch_predict,0]]
         
-        # partition
         K = 25
-        # pred_aspect_ratio_argsort = np.argsort(self.predict_aspect_ratio)
-        # if K not in self.box_aspect_ratio_split_map:
-        #     self.box_aspect_ratio_split_map[K] = get_split_pos(self.predict_label_ious[pred_aspect_ratio_argsort], K)
-        #     with open(self.box_aspect_ratio_split_path, 'wb') as f:
-        #         pickle.dump(self.box_aspect_ratio_split_map, f)
-        # split_pos = self.box_aspect_ratio_split_map[K]
-        # split_aspect_ratio = self.predict_aspect_ratio[pred_aspect_ratio_argsort][split_pos]
-        maximum_val = np.max(np.concatenate((self.label_aspect_ratio, self.predict_aspect_ratio)))
-        # split_aspect_ratio = np.array([i*maximum_val/K for i in range(K+1)])
-        split_aspect_ratio = np.array([i*4.0/(K-1) for i in range(K)]+[maximum_val])
+        if query is not None and 'label_range' in query:
+            label_range = query['label_range']
+            predict_range = query['predict_range']
+        else:
+            maximum_val = np.max(np.concatenate((self.label_aspect_ratio, self.predict_aspect_ratio)))
+            label_range = [0, maximum_val]
+            predict_range = [0, maximum_val]
+        label_split = np.array([label_range[0]+i*(label_range[1]-label_range[0])/K for i in range(K+1)])
+        predict_split = np.array([predict_range[0]+i*(predict_range[1]-predict_range[0])/K for i in range(K+1)])
         
         label_box_aspect_ratio_dist, predict_box_aspect_ratio_dist = [0 for _ in range(K)], [0 for _ in range(K)]
         for i in range(K):
-            last = split_aspect_ratio[i]
-            cur = split_aspect_ratio[i+1]
-            label_box_aspect_ratio_dist[i] = np.count_nonzero(np.logical_and(filtered_label_aspect_ratio>last, filtered_label_aspect_ratio<=cur)) + \
-             np.count_nonzero(np.logical_and(unmatched_label_aspect_ratio>last, unmatched_label_aspect_ratio<=cur))
-            predict_box_aspect_ratio_dist[i] = np.count_nonzero(np.logical_and(filtered_predict_aspect_ratio>last, filtered_predict_aspect_ratio<=cur)) + \
-             np.count_nonzero(np.logical_and(unmatched_predict_aspect_ratio>last, unmatched_predict_aspect_ratio<=cur))
+            label_box_aspect_ratio_dist[i] = np.count_nonzero(np.logical_and(filtered_label_aspect_ratio>label_split[i], filtered_label_aspect_ratio<=label_split[i+1])) + \
+             np.count_nonzero(np.logical_and(unmatched_label_aspect_ratio>label_split[i], unmatched_label_aspect_ratio<=label_split[i+1]))
+            predict_box_aspect_ratio_dist[i] = np.count_nonzero(np.logical_and(filtered_predict_aspect_ratio>predict_split[i], filtered_predict_aspect_ratio<=predict_split[i+1])) + \
+             np.count_nonzero(np.logical_and(unmatched_predict_aspect_ratio>predict_split[i], unmatched_predict_aspect_ratio<=predict_split[i+1]))
             
         label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
         label_box_aspect_ratio_confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
         predict_box_aspect_ratio_confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
         for (pr, gt) in self.predict_label_pairs[filtered]:
-            label_box_aspect_ratio_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_aspect_ratio[1:-1], self.label_aspect_ratio[gt])]+=1
-            predict_box_aspect_ratio_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_aspect_ratio[1:-1], self.predict_aspect_ratio[pr])]+=1
+            if label_range[0] <= self.label_aspect_ratio[gt] <= label_range[1]:
+                label_box_aspect_ratio_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(label_split[1:-1], self.label_aspect_ratio[gt])]+=1
+            if predict_range[0] <= self.predict_aspect_ratio[pr] <= predict_range[1]:
+                predict_box_aspect_ratio_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(predict_split[1:-1], self.predict_aspect_ratio[pr])]+=1
         for (pr, gt) in self.predict_label_pairs[unmatch_label]:
-            label_box_aspect_ratio_confusion[int(self.raw_labels[gt, 0])][len(pred_target)][bisect.bisect_left(split_aspect_ratio[1:-1], self.label_aspect_ratio[gt])]+=1
+            if label_range[0] <= self.label_aspect_ratio[gt] <= label_range[1]:
+                label_box_aspect_ratio_confusion[int(self.raw_labels[gt, 0])][len(pred_target)][bisect.bisect_left(label_split[1:-1], self.label_aspect_ratio[gt])]+=1
         for (pr, gt) in self.predict_label_pairs[unmatch_predict]:
-            predict_box_aspect_ratio_confusion[len(label_target)][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_aspect_ratio[1:-1], self.predict_aspect_ratio[pr])]+=1
+            if predict_range[0] <= self.predict_aspect_ratio[pr] <= predict_range[1]:
+                predict_box_aspect_ratio_confusion[len(label_target)][int(self.raw_predicts[pr, 0])][bisect.bisect_left(predict_split[1:-1], self.predict_aspect_ratio[pr])]+=1
                 
         return {
             'labelAspectRatioAll': label_box_aspect_ratio_dist,
             'predictAspectRatioAll': predict_box_aspect_ratio_dist,
             'labelAspectRatioConfusion': label_box_aspect_ratio_confusion,
             'predictAspectRatioConfusion': predict_box_aspect_ratio_confusion,
-            'aspectRatioSplit': split_aspect_ratio.tolist()
+            'labelSplit': label_split.tolist(),
+            'predictSplit': predict_split.tolist()
         }        
     
     def transformBottomLabelToTop(self, topLabels):

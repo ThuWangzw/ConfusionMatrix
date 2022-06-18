@@ -23,6 +23,16 @@ def confusionMatrix():
         query = request.json['query']
     return jsonify(dataCtrler.getConfusionMatrix(query))
 
+@app.route('/api/overallDist', methods=["POST"])
+def overallDist():
+    return jsonify(dataCtrler.getOverallDistribution())
+
+@app.route('/api/zoomInDist', methods=["POST"])
+def zoomInDist():
+    query = None
+    if 'query' in request.json:
+        query = request.json['query']
+    return jsonify(dataCtrler.getZoomInDistribution(query))
 
 @app.route('/api/boxSizeDist', methods=["POST"])
 def boxSizeDist():
