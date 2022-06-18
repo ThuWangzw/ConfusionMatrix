@@ -3,6 +3,7 @@ import json
 import copy
 import bisect
 from tkinter import N
+from matplotlib.pyplot import box
 import numpy as np
 import pickle
 import torch
@@ -834,7 +835,39 @@ class DataCtrler(object):
         }
         return res
         
-    def getImage(self, boxID: int, show: str, showall: str):
+    def getImagebox(self, boxID: int, showall: str):
+        boxes = []
+        finalBoxes = []
+        img = Image.open(os.path.join(self.images_path, self.index2image[self.raw_predict2imageid[boxID]]+'.jpg'))
+        amp = [img.width,img.height]
+        if showall == 'all':
+            imgID = self.raw_predict2imageid[boxID]
+            boxes = self.predict_label_pairs[self.imageid2raw_predict[imgID][0]:self.imageid2raw_predict[imgID][1]].tolist()
+        elif showall == 'single':
+            boxes.append(self.predict_label_pairs[boxID].tolist())
+        for box in boxes:
+            predictBox, labelBox = box
+            predictXYXY = None
+            if predictBox != -1:
+                predictXYXY = (self.raw_predicts[predictBox, 2:6]).tolist()
+                finalBoxes.append({
+                    "box": predictXYXY,
+                    "type": "pred"
+                })
+            labelXYXY = None
+            if labelBox != -1:
+                labelXYXY = (self.raw_labels[labelBox, 1:5]).tolist()
+                finalBoxes.append({
+                    "box": labelXYXY,
+                    "type": "gt"
+                })
+        return {
+            "boxes": finalBoxes,
+            "image": amp
+        }
+        
+        
+    def getImage(self, boxID: int, show: str, showall: str, hideBox = False):
         img = Image.open(os.path.join(self.images_path, self.index2image[self.raw_predict2imageid[boxID]]+'.jpg'))
         anno = Annotator(np.array(img), pil=True)
         amp = np.array([img.width,img.height,img.width,img.height])
@@ -855,7 +888,9 @@ class DataCtrler(object):
                 labelXYXY = xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist()
                 anno.box_label(labelXYXY, color=(0,255,0))
         output = io.BytesIO()
-        if show=='box':
+        if hideBox:
+            img.save(output, format="JPEG")
+        elif show=='box':
             self.cropImageByBox(anno.im, predictXYXY, labelXYXY, [img.width, img.height]).save(output, format="JPEG")
         else:
             anno.im.save(output, format="JPEG")
