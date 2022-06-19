@@ -686,14 +686,17 @@ class DataCtrler(object):
                 labelTransform[i] = childToTop[self.names[i]]
         return labelTransform.astype(int)
         
-    def gridZoomIn(self, nodes, constraints, depth, aspectRatio):
+    def gridZoomIn(self, nodes, constraints, depth, aspectRatio, zoomin):
         allpreds = self.raw_predicts[self.predict_label_pairs[:len(self.raw_predicts),0], 0].astype(np.int32)
         alllabels = self.raw_labels[self.predict_label_pairs[:len(self.raw_predicts),1], 0].astype(np.int32)
         negaLabels = np.where(self.predict_label_pairs[:len(self.raw_predicts),1]==-1)[0]
         alllabels[negaLabels] = len(self.names)-1
         allconfidence = self.raw_predicts[self.predict_label_pairs[:,0], 1]
         allfeatures = self.features
-        neighbors = self.sampler.zoomin(nodes, 400, self.features)
+        if zoomin:
+            neighbors = self.sampler.zoomin(nodes, 400, self.features)
+        else:
+            neighbors = nodes
         zoomInConstraints = None
         zoomInConstraintX = None
         if constraints is not None:
@@ -944,7 +947,7 @@ class DataCtrler(object):
         ]
         return img.crop(box)
         
-    def getImagesInConsuionMatrixCell(self, labels: list, preds: list) -> list:
+    def getImagesInConsuionMatrixCell(self, labels: list, preds: list, query = None) -> list:
         """
         return images in a cell of confusionmatrix
 
@@ -959,6 +962,10 @@ class DataCtrler(object):
         alllabels = self.raw_labels[self.predict_label_pairs[:len(self.raw_predicts),1], 0].astype(np.int32)
         negaLabels = np.where(self.predict_label_pairs[:len(self.raw_predicts),1]==-1)[0]
         alllabels[negaLabels] = len(self.names)-1
+        filtered , unmatch_predict, unmatch_label = self.filterSamples(query)
+        flags = np.zeros(len(allpreds), dtype=np.int8)
+        flags[filtered] = 1
+        flags[unmatch_predict] = 1
         # convert list of label names to dict
         labelNames = self.names
         name2idx = {}
@@ -976,7 +983,7 @@ class DataCtrler(object):
         if alllabels is not None and allpreds is not None:
             n = len(alllabels)
             for i in range(n):
-                if alllabels[i] in labelSet and allpreds[i] in predSet:
+                if alllabels[i] in labelSet and allpreds[i] in predSet and flags[i] == 1:
                     imageids.append(i)
                     
         # limit length of images

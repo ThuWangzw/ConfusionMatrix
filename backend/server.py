@@ -79,7 +79,10 @@ def imagesGradient():
 def confusionMatrixCell():
     labels = request.json['labels']
     preds = request.json['preds']
-    return jsonify(dataCtrler.getImagesInConsuionMatrixCell(labels, preds))
+    query = None
+    if 'query' in request.json:
+        query = request.json['query']
+    return jsonify(dataCtrler.getImagesInConsuionMatrixCell(labels, preds, query))
 
 @app.route('/api/grid', methods=["POST"])
 def grid():
@@ -91,7 +94,10 @@ def grid():
     aspectRatio = 1
     if 'aspectRatio' in request.json:
         aspectRatio = request.json['aspectRatio']
-    return jsonify(dataCtrler.gridZoomIn(nodes, constraints, depth, aspectRatio))
+    zoomin = True
+    if 'zoomin' in request.json:
+        zoomin = request.json['zoomin']
+    return jsonify(dataCtrler.gridZoomIn(nodes, constraints, depth, aspectRatio, zoomin))
 
 def main():
     parser = argparse.ArgumentParser(description='manual to this script')
