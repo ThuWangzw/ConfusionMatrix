@@ -13,7 +13,7 @@
         <vue-draggable-resizable class="image-widget" v-for="(node, index) in showImages" :key="index" :lockAspectRatio="true"
             :handles="['tl','tr','bl','br']" :min-width="150" :x="widgetInitX" :y="widgetInitY" :w="gridWidthInitWidth" :h="gridWidthInitWidth"
                 :onDragStart="disableHover" @dragstop="enableHover()"
-                :onResizeStart="disableHover" @resizestop="enableHover()">
+                :onResizeStart="disableHover" @resizestop="enableHover()" @resizing="onResizeWidget(node)">
                 <div class="grid-widget-info">
                     <div class="grid-widget-toolbar">
                         <img class="grid-widget-icon" :id="'gird-widget-icon-'+node.index" :src="`/static/images/eye-${node.widgetmode}.png`"
@@ -25,8 +25,10 @@
                     <div>Prediction: {{ labelnames[node.pred] }}</div>
                     <div>Confidence: {{ Math.round(node.confidence*100000)/100000 }}</div>
                     <div class="widget-image-container">
-                        <img class="gird-widget-image" :id="'gird-widget-image-'+node.index"
-                            :src="URL_GET_IMAGE(node.index, 'full', node.widgetmode)"/>
+                        <svg :id="'gird-widget-image-'+node.index" width="95%" height="95%" :ref="'image-'+node.index">
+                            <image class="gird-widget-image" x="0" y="0"
+                            :href="URL_GET_IMAGE(node.index, 'full', node.widgetmode, true)"></image>
+                        </svg>
                     </div>
                 </div>
         </vue-draggable-resizable>
@@ -57,6 +59,7 @@ export default {
             'URL_GET_GRID',
             'URL_GET_IMAGE',
             'URL_GET_IMAGES',
+            'URL_GET_IMAGEBOX',
             'hierarchyColors',
         ]),
         svg: function() {
@@ -458,6 +461,9 @@ export default {
             // eslint-disable-next-line new-cap
             node.widgetmode = 'single';
             this.showImages.push(node);
+            this.$nextTick(()=> {
+                this.drawWidgetBox(node);
+            });
         },
         getAspectArtio: function() {
             const svgRealWidth = this.$refs.gridsvg.clientWidth;
@@ -483,10 +489,61 @@ export default {
             } else if (node.widgetmode === 'all') {
                 node.widgetmode = 'single';
             }
-            // eslint-disable-next-line new-cap
-            d3.select('#gird-widget-image-'+node.index).attr('src', this.URL_GET_IMAGE(node.index, 'full', node.widgetmode));
-            // eslint-disable-next-line new-cap
             d3.select('#gird-widget-icon-'+node.index).attr('src', `/static/images/eye-${node.widgetmode}.png`);
+            this.drawWidgetBox(node);
+        },
+        onResizeWidget: function(node) {
+            this.drawWidgetBox(node);
+        },
+        drawWidgetBox: function(node) {
+            const svg = d3.select('#gird-widget-image-'+node.index);
+            const that = this;
+            const drag = d3.drag()
+                .on('drag', function(e, d) {
+                    // eslint-disable-next-line no-invalid-this
+                    const node = d3.select(this);
+                    const x = parseFloat(node.attr('x'));
+                    const y = parseFloat(node.attr('y'));
+                    node.attr('x', x+e.dx)
+                        .attr('y', y+e.dy);
+                });
+            axios.post(that.URL_GET_IMAGEBOX, {
+                boxID: node.index,
+                showall: node.widgetmode,
+            }).then(function(response) {
+                const boxes = response.data.boxes;
+                const imagesize = response.data.image;
+                const svgsize = that.$refs['image-'+node.index][0].getBoundingClientRect();
+                const scale = Math.min(svgsize.width/imagesize[0], svgsize.height/imagesize[1]);
+                const realwidth = scale*imagesize[0];
+                const realHeight = scale*imagesize[1];
+                const xshift = (svgsize.width-realwidth)/2;
+                const yshift = (svgsize.height-realHeight)/2;
+                const boxesg = svg.selectAll('rect.imagebox').data(boxes);
+                const image = svg.select('image');
+                image.style('width', svgsize.width);
+                image.style('height', svgsize.height);
+                boxesg.enter()
+                    .append('rect')
+                    .attr('class', 'imagebox')
+                    .attr('x', (d) => (d.box[0]-d.box[2]/2)*realwidth+xshift)
+                    .attr('y', (d) => (d.box[1]-d.box[3]/2)*realHeight+yshift)
+                    .attr('width', (d) => d.box[2]*realwidth)
+                    .attr('height', (d) => d.box[3]*realHeight)
+                    .attr('stroke', (d) => d.type==='pred'?'rgb(255,0,0)' : 'rgb(0,255,0)')
+                    .attr('stroke-width', 2)
+                    .attr('fill', 'white')
+                    .attr('fill-opacity', 0)
+                    .call(drag);
+
+                boxesg
+                    .attr('x', (d) => (d.box[0]-d.box[2]/2)*realwidth+xshift)
+                    .attr('y', (d) => (d.box[1]-d.box[3]/2)*realHeight+yshift)
+                    .attr('width', (d) => d.box[2]*realwidth)
+                    .attr('height', (d) => d.box[3]*realHeight);
+
+                boxesg.exit().remove();
+            });
         },
     },
     mounted: function() {
@@ -623,7 +680,9 @@ export default {
     width: 100%;
     height: 100%;
     min-height: 10px;
-    margin: 5px 5px 5px 5px
+    margin: 5px 5px 5px 5px;
+    display: flex;
+    justify-content: center;
 }
 
 .gird-widget-image {

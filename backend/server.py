@@ -48,12 +48,21 @@ def boxAspectRatioDist():
         query = request.json['query']
     return jsonify(dataCtrler.getBoxAspectRatioDistribution(query))
 
+@app.route('/api/imagebox', methods=["POST"])
+def imagebox():
+    boxID = int(request.json['boxID'])
+    showall = request.json['showall']
+    return jsonify(dataCtrler.getImagebox(boxID, showall))
+
 @app.route('/api/image', methods=["GET"])
 def imageGradient():
     boxID = int(request.args['boxID'])
     showmode = request.args['show']
     showall = request.args['showall']
-    image_binary = dataCtrler.getImage(boxID, showmode, showall).getvalue()
+    hideBox = False
+    if 'hidebox' in request.args:
+        hideBox = request.args['hidebox']=='true'
+    image_binary = dataCtrler.getImage(boxID, showmode, showall, hideBox).getvalue()
     response = make_response(image_binary)
     response.headers.set('Content-Type', 'image/jpeg')
     response.headers.set(
