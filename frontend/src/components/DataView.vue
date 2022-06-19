@@ -50,9 +50,13 @@
             </div>
 
             <div id="selection-container">
-                <div class="toolbar-title">Colors</div>
+                <div class="toolbar-title">Selections</div>
                 <div id="selections">
-                    <selection :confusionMatrix="confusionMatrix"></selection>
+                <img id="selection-add-icon" class="grid-icon" src="/static/images/plus.svg" @click="addSelection">
+                    <div v-for="index in selections" :key="index" >
+                        <selection :id="index" :confusionMatrix="confusionMatrix" :ref="'selection'+index"
+                         @selectSvg="setSelections"></selection>
+                    </div>
                 </div>
             </div>
 
@@ -94,6 +98,7 @@ import Selection from './Selection.vue';
 import GridLayout from './GridLayout.vue';
 import axios from 'axios';
 import {Select, Option, Icon, Button} from 'element-ui';
+import clone from 'just-clone';
 
 Vue.use(Select);
 Vue.use(Option);
@@ -169,6 +174,8 @@ export default {
             labelAspectRatioOverallDist: undefined,
             predictAspectRatioOverallDist: undefined,
             hideUnfiltered: false,
+            selections: [],
+            selectedSelection: -1,
         };
     },
     methods: {
@@ -398,6 +405,17 @@ export default {
         clickConfusionCell: function(d) {
             const store = this.$store;
             const that = this;
+            if (this.selections.length>0) {
+                const selection = this.$refs['selection'+that.selectedSelection][0];
+                if (selection.hierarchyColors[d.rowNode.name]===selection.hierarchyColors[d.colNode.name] &&
+                selection.hierarchyColors[d.rowNode.name]!==selection.defaultColor) {
+                    selection.setNewColor(selection.findNodeByName(d.rowNode.name));
+                } else {
+                    selection.setNewColor(selection.findNodeByName(d.rowNode.name), false);
+                    selection.setNewColor(selection.findNodeByName(d.colNode.name), false);
+                }
+            }
+
             axios.post(store.getters.URL_GET_IMAGES_IN_MATRIX_CELL, {
                 labels: d.rowNode.leafs,
                 preds: d.colNode.leafs,
@@ -416,6 +434,33 @@ export default {
         },
         gridLayoutZoomin: function() {
             this.$refs.grid.zoomin();
+        },
+        setSelections: function(id) {
+            if (this.selectedSelection === id) {
+                return;
+            }
+            this.selectedSelection = id;
+            const selected = this.$refs['selection'+this.selectedSelection][0];
+            selected.setHierarchyColors(clone(selected.hierarchyColors));
+            for (const selection of this.selections) {
+                if (selection===id) {
+                    this.$refs['selection'+selection][0].selectHandle();
+                } else {
+                    this.$refs['selection'+selection][0].unselectHandle();
+                }
+            }
+        },
+        addSelection: function() {
+            let newid = 0;
+            if (this.selections.length === 0) {
+                newid = 0;
+            } else {
+                newid = this.selections[0]+1;
+            }
+            this.selections.unshift(newid);
+            this.$nextTick(() => {
+                this.setSelections(newid);
+            });
         },
     },
     mounted: function() {
@@ -486,6 +531,10 @@ export default {
     border: 1px solid #c1c1c1;
     border-radius: 5px;
     flex: 10 1 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
 }
 
 #matrices-container {
@@ -559,5 +608,9 @@ export default {
     flex-direction: row;
     justify-content: flex-start;
     align-items: center;
+}
+
+#selection-add-icon {
+    align-self: flex-end;
 }
 </style>
