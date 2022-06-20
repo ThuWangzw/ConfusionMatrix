@@ -391,8 +391,9 @@ class DataCtrler(object):
             'avg_label_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],1]==-1 else self.label_aspect_ratio[self.predict_label_pairs[x, 1]].mean(),
             'avg_predict_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],0]==-1 else self.predict_aspect_ratio[self.predict_label_pairs[x, 0]].mean(),
             'direction': lambda x: [int(np.count_nonzero(self.directions[x]==i)) for i in range(9)],
-            'size_comparison': lambda x: 0 if self.predict_label_pairs[x[0],1]==-1 or self.predict_label_pairs[x[0],0]==-1 else \
-                np.count_nonzero(self.predict_size[self.predict_label_pairs[x, 0]] > self.label_size[self.predict_label_pairs[x, 1]])
+            'size_comparison': lambda x: [0, 0] if len(x)==0 or self.predict_label_pairs[x[0],1]==-1 or self.predict_label_pairs[x[0],0]==-1 else \
+                [int(np.count_nonzero(self.predict_size[self.predict_label_pairs[x, 0]] > (self.label_size[self.predict_label_pairs[x, 1]]+0.01))),
+                int(np.count_nonzero(self.label_size[self.predict_label_pairs[x, 1]] > (self.predict_size[self.predict_label_pairs[x, 0]]+0.01)))]
         }
         ret_matrixes = []
         for statistics_mode in statistics_modes:
@@ -402,7 +403,7 @@ class DataCtrler(object):
             stat_matrix = np.zeros((len(matrix), len(matrix[0])), dtype=np.float64).tolist()
             for i in range(len(stat_matrix)):
                 for j in range(len(stat_matrix[0])):
-                    if statistics_mode != 'direction' and len(matrix[i][j]) == 0:
+                    if statistics_mode != 'direction' and statistics_mode != 'size_comparison' and len(matrix[i][j]) == 0:
                         continue
                     if statistics_mode == 'direction' and (i == len(stat_matrix)-1 or j == len(stat_matrix[0])-1):
                         stat_matrix[i][j] = [0 for _ in range(9)]
@@ -885,11 +886,11 @@ class DataCtrler(object):
             predictXYXY = None
             if predictBox != -1:
                 predictXYXY = xywh2xyxy(self.raw_predicts[predictBox, 2:6]*amp).tolist()
-                anno.box_label(predictXYXY, color=(255,0,0))
+                anno.box_label(predictXYXY, color=(255,102,0))
             labelXYXY = None
             if labelBox != -1:
                 labelXYXY = xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist()
-                anno.box_label(labelXYXY, color=(0,255,0))
+                anno.box_label(labelXYXY, color=(95,198,181))
         output = io.BytesIO()
         if hideBox:
             img.save(output, format="JPEG")
@@ -909,11 +910,11 @@ class DataCtrler(object):
             predictXYXY = None
             if predictBox != -1:
                 predictXYXY = xywh2xyxy(self.raw_predicts[predictBox, 2:6]*amp).tolist()
-                anno.box_label(predictXYXY, color=(255,0,0))
+                anno.box_label(predictXYXY, color=(255,102,0))
             labelXYXY = None
             if labelBox != -1:
                 labelXYXY = xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist()
-                anno.box_label(labelXYXY, color=(0,255,0))
+                anno.box_label(labelXYXY, color=(95,198,181))
             output = io.BytesIO()
             if show=='box':
                 self.cropImageByBox(anno.im, predictXYXY, labelXYXY, [img.width, img.height]).save(output, format="JPEG")

@@ -203,6 +203,7 @@ export default {
                 'font-size': 15,
                 'cursor': 'pointer',
                 'direction-color': 'currentColor',
+                'size-color': ['rgb(227,227,227)', 'rgb(255,102,0)', 'rgb(95,198,181)'],
             },
             legendExist: false,
             // buffer
@@ -557,27 +558,38 @@ export default {
                 }
 
                 // sizeComparison mode: two circles
-                matrixCellsinG.filter((d) => d.info.count>0&&d.info.sizeCmp!==undefined).append('circle')
-                    .attr('class', 'size-circle')
-                    .attr('id', 'size-large-circle')
-                    .attr('cx', that.cellAttrs['size']/2)
-                    .attr('cy', that.cellAttrs['size']/2)
-                    .attr('r', that.cellAttrs['size']/3)
-                    .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?
-                        'rgb(237,237,237)':d.info.sizeCmp[0]>d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)');
+                // matrixCellsinG.filter((d) => d.info.count>0&&d.info.sizeCmp!==undefined).append('circle')
+                //     .attr('class', 'size-circle')
+                //     .attr('id', 'size-large-circle')
+                //     .attr('cx', that.cellAttrs['size']/2)
+                //     .attr('cy', that.cellAttrs['size']/2)
+                //     .attr('r', that.cellAttrs['size']/3)
+                //     .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?
+                //         'rgb(237,237,237)':d.info.sizeCmp[0]>d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)');
 
-                matrixCellsinG.filter((d) => d.info.count>0&&d.info.sizeCmp!==undefined).append('circle')
-                    .attr('class', 'size-circle')
-                    .attr('id', 'size-small-circle')
-                    .attr('cx', that.cellAttrs['size']/2)
-                    .attr('cy', that.cellAttrs['size']/2)
-                    .attr('r', that.cellAttrs['size']/6)
-                    .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?
-                        'rgb(227,227,227)':d.info.sizeCmp[0]<d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)');
+                // matrixCellsinG.filter((d) => d.info.count>0&&d.info.sizeCmp!==undefined).append('circle')
+                //     .attr('class', 'size-circle')
+                //     .attr('id', 'size-small-circle')
+                //     .attr('cx', that.cellAttrs['size']/2)
+                //     .attr('cy', that.cellAttrs['size']/2)
+                //     .attr('r', that.cellAttrs['size']/6)
+                //     .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?
+                //         'rgb(227,227,227)':d.info.sizeCmp[0]<d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)');
 
+                // sizeComparison mode: piecharts
+                for (let i = 0; i < 3; ++i) {
+                    matrixCellsinG.filter((d) => d.info.count>0&&d.info.sizeCmp!==undefined).append('path')
+                        .attr('class', 'size-circle')
+                        .attr('id', `size-circle-${i}`)
+                        .attr('transform', `translate(${that.cellAttrs.size/2} ${that.cellAttrs.size/2})`)
+                        .attr('fill', that.cellAttrs['size-color'][i])
+                        .attr('d', (d) => d3.arc().innerRadius(0).outerRadius(that.cellAttrs['size']/3)
+                            .startAngle(d.info.sizeCmpAngle[i]).endAngle(d.info.sizeCmpAngle[i+1])());
+                }
 
                 // normal mode: sign for empty cells
                 matrixCellsinG.append('path')
+                    .attr('id', 'empty-line')
                     .attr('d', `M ${that.cellAttrs['size']*0.25} ${that.cellAttrs['size']*0.25} 
                         L ${that.cellAttrs['size']*0.75} ${that.cellAttrs['size']*0.75}`)
                     .attr('stroke', that.cellAttrs['slash-text-stroke'])
@@ -723,7 +735,7 @@ export default {
 
                 that.matrixCellsinG.each(function(d) {
                     // eslint-disable-next-line no-invalid-this
-                    d3.select(this).select('path')
+                    d3.select(this).select('#empty-line')
                         .transition()
                         .duration(that.updateDuration)
                         .attr('opacity', (d)=>d.info.count===0&&that.showMode==='normal'?1:0)
@@ -813,25 +825,39 @@ export default {
                 } else if (that.showMode==='sizeComparison') {
                     that.matrixCellsinG.each(function(d) {
                         // eslint-disable-next-line no-invalid-this
-                        d3.select(this).select('#size-small-circle')
-                            .transition()
-                            .duration(that.updateDuration)
-                            .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?
-                                'rgb(227,227,227)':d.info.sizeCmp[0]<d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)')
-                            .on('end', resolve);
+                        // d3.select(this).select('#size-small-circle')
+                        //     .transition()
+                        //     .duration(that.updateDuration)
+                        //     .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?
+                        //         'rgb(227,227,227)':d.info.sizeCmp[0]<d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)')
+                        //     .on('end', resolve);
                         // eslint-disable-next-line no-invalid-this
-                        d3.select(this).select('#size-large-circle')
-                            .transition()
-                            .duration(that.updateDuration)
-                            .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?
-                                'rgb(237,237,237)':d.info.sizeCmp[0]>d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)')
-                            .on('end', resolve);
+                        // d3.select(this).select('#size-large-circle')
+                        //     .transition()
+                        //     .duration(that.updateDuration)
+                        //     .attr('fill', (d)=>Math.abs(d.info.sizeCmp[0]-d.info.sizeCmp[1])<10?
+                        //         'rgb(237,237,237)':d.info.sizeCmp[0]>d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)')
+                        //     .on('end', resolve);
                         // eslint-disable-next-line no-invalid-this
-                        d3.select(this).selectAll('.size-circle')
-                            .transition()
-                            .duration(that.updateDuration)
-                            .attr('opacity', (d)=>d.info.count===0?0:1)
-                            .on('end', resolve);
+                        // d3.select(this).selectAll('.size-circle')
+                        //     .transition()
+                        //     .duration(that.updateDuration)
+                        //     .attr('opacity', (d)=>d.info.count===0?0:1)
+                        //     .on('end', resolve);
+
+                        // sizeComparison mode: piecharts
+                        for (let i = 0; i < 3; ++i) {
+                            // eslint-disable-next-line no-invalid-this
+                            d3.select(this).select(`#size-circle-${i}`)
+                                .transition()
+                                .duration(that.updateDuration)
+                                .attrTween('d', (d) => d.info.count===0?
+                                    d3.arc().innerRadius(0).outerRadius(that.cellAttrs['size']/3).startAngle(0).endAngle(0):
+                                    d3.arc().innerRadius(0).outerRadius(that.cellAttrs['size']/3).startAngle(d.info.sizeCmpAngle[i])
+                                        .endAngle(d.info.sizeCmpAngle[i+1]))
+                                .attr('opacity', (d)=>d.info.count===0?0:1)
+                                .on('end', resolve);
+                        }
                     });
                 }
             });
@@ -912,7 +938,7 @@ export default {
             const infoMap = {
                 'count': 0,
                 'val': 0,
-                'sizeCmp': [0, 0],
+                'sizeCmp': [0, 0, 0],
             };
             if (this.showMode==='direction') {
                 infoMap['direction'] = [];
@@ -930,10 +956,17 @@ export default {
                             infoMap.direction[i] += this.baseMatrix[this.baseMatrix.length-1][this.name2index[leafa]][this.name2index[leafb]][i];
                         }
                     }
-                    infoMap.sizeCmp[0] += this.baseMatrix[this.baseMatrix.length-2][this.name2index[leafa]][this.name2index[leafb]];
+                    infoMap.sizeCmp[1] += this.baseMatrix[this.baseMatrix.length-2][this.name2index[leafa]][this.name2index[leafb]][0];
+                    infoMap.sizeCmp[2] += this.baseMatrix[this.baseMatrix.length-2][this.name2index[leafa]][this.name2index[leafb]][1];
                 }
             }
-            infoMap.sizeCmp[1] = infoMap.count - infoMap.sizeCmp[0];
+            infoMap.sizeCmp[0] = infoMap.count - infoMap.sizeCmp[1] - infoMap.sizeCmp[2];
+            if (infoMap.count > 0) {
+                infoMap.sizeCmpAngle = [0];
+                for (let i = 0; i < 3; ++i) {
+                    infoMap.sizeCmpAngle.push(infoMap.sizeCmpAngle[i] + infoMap.sizeCmp[i]/infoMap.count * 2 * Math.PI);
+                }
+            }
             if (this.returnMode === 'count') infoMap.val = infoMap.count;
             else infoMap.val /= infoMap.count;
             return infoMap;
