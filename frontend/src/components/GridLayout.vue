@@ -531,7 +531,7 @@ export default {
                     .attr('y', (d) => (d.box[1]-d.box[3]/2)*realHeight+yshift)
                     .attr('width', (d) => d.box[2]*realwidth)
                     .attr('height', (d) => d.box[3]*realHeight)
-                    .attr('stroke', (d) => d.type==='pred'?'rgb(255,0,0)' : 'rgb(0,255,0)')
+                    .attr('stroke', (d) => d.type==='pred'?'rgb(255,102,0)' : 'rgb(95,198,181)')
                     .attr('stroke-width', 2)
                     .attr('fill', 'white')
                     .attr('fill-opacity', 0)
