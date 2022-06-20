@@ -177,7 +177,7 @@ export default {
                     that.render();
                 });
         },
-        showBottomNodes: function(nodes) {
+        showBottomNodes: function(nodes, zoomin=true) {
             this.rendering = true;
             if (nodes.length>0 && typeof(nodes[0])!=='number') {
                 nodes = nodes.map((d) => d.index);
@@ -187,6 +187,7 @@ export default {
                 nodes: nodes,
                 depth: 1000,
                 aspectRatio: this.getAspectArtio(),
+                zoomin: zoomin,
             }).then(function(response) {
                 that.nodes = response.data.nodes;
                 that.depth = response.data.depth;

@@ -419,11 +419,12 @@ export default {
             axios.post(store.getters.URL_GET_IMAGES_IN_MATRIX_CELL, {
                 labels: d.rowNode.leafs,
                 preds: d.colNode.leafs,
+                query: that.query,
             }).then(function(response) {
                 const images = response.data;
                 if (images.length>0) {
                     console.log(images);
-                    that.$refs.grid.showBottomNodes(images);
+                    that.$refs.grid.showBottomNodes(images, false);
                 } else {
                     console.log('no images');
                 }
