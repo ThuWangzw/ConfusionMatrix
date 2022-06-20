@@ -883,11 +883,11 @@ class DataCtrler(object):
             predictXYXY = None
             if predictBox != -1:
                 predictXYXY = xywh2xyxy(self.raw_predicts[predictBox, 2:6]*amp).tolist()
-                anno.box_label(predictXYXY, color=(255,0,0))
+                anno.box_label(predictXYXY, color=(255,102,0))
             labelXYXY = None
             if labelBox != -1:
                 labelXYXY = xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist()
-                anno.box_label(labelXYXY, color=(0,255,0))
+                anno.box_label(labelXYXY, color=(95,198,181))
         output = io.BytesIO()
         if hideBox:
             img.save(output, format="JPEG")
@@ -907,11 +907,11 @@ class DataCtrler(object):
             predictXYXY = None
             if predictBox != -1:
                 predictXYXY = xywh2xyxy(self.raw_predicts[predictBox, 2:6]*amp).tolist()
-                anno.box_label(predictXYXY, color=(255,0,0))
+                anno.box_label(predictXYXY, color=(255,102,0))
             labelXYXY = None
             if labelBox != -1:
                 labelXYXY = xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist()
-                anno.box_label(labelXYXY, color=(0,255,0))
+                anno.box_label(labelXYXY, color=(95,198,181))
             output = io.BytesIO()
             if show=='box':
                 self.cropImageByBox(anno.im, predictXYXY, labelXYXY, [img.width, img.height]).save(output, format="JPEG")

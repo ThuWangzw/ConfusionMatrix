@@ -203,7 +203,7 @@ export default {
                 'font-size': 15,
                 'cursor': 'pointer',
                 'direction-color': 'currentColor',
-                'size-color': ['rgb(227,227,227)', 'rgb(243,158,112)', 'rgb(95,198,181)'],
+                'size-color': ['rgb(227,227,227)', 'rgb(255,102,0)', 'rgb(95,198,181)'],
             },
             legendExist: false,
             // buffer
