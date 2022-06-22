@@ -392,8 +392,8 @@ class DataCtrler(object):
             'avg_predict_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],0]==-1 else self.predict_aspect_ratio[self.predict_label_pairs[x, 0]].mean(),
             'direction': lambda x: [int(np.count_nonzero(self.directions[x]==i)) for i in range(9)],
             'size_comparison': lambda x: [0, 0] if len(x)==0 or self.predict_label_pairs[x[0],1]==-1 or self.predict_label_pairs[x[0],0]==-1 else \
-                [int(np.count_nonzero(self.predict_size[self.predict_label_pairs[x, 0]] > (self.label_size[self.predict_label_pairs[x, 1]]+0.01))),
-                int(np.count_nonzero(self.label_size[self.predict_label_pairs[x, 1]] > (self.predict_size[self.predict_label_pairs[x, 0]]+0.01)))]
+                [int(np.count_nonzero(self.predict_size[self.predict_label_pairs[x, 0]] > (self.label_size[self.predict_label_pairs[x, 1]]*1.15))),
+                int(np.count_nonzero(self.label_size[self.predict_label_pairs[x, 1]] > (self.predict_size[self.predict_label_pairs[x, 0]]*1.15)))]
         }
         ret_matrixes = []
         for statistics_mode in statistics_modes:
@@ -856,6 +856,7 @@ class DataCtrler(object):
                 predictXYXY = (self.raw_predicts[predictBox, 2:6]).tolist()
                 finalBoxes.append({
                     "box": predictXYXY,
+                    "size": float(self.predict_size[predictBox]),
                     "type": "pred"
                 })
             labelXYXY = None
@@ -863,6 +864,7 @@ class DataCtrler(object):
                 labelXYXY = (self.raw_labels[labelBox, 1:5]).tolist()
                 finalBoxes.append({
                     "box": labelXYXY,
+                    "size": float(self.label_size[labelBox]),
                     "type": "gt"
                 })
         return {
