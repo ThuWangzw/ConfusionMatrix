@@ -207,6 +207,7 @@ export default {
             },
             legendExist: false,
             // buffer
+            maxCellCount: 0,
             maxCellValue: 0,
             maxCellDirection: 0,
         };
@@ -266,6 +267,7 @@ export default {
             this.cells = [];
             this.maxCellValue = 0;
             this.maxCellDirection = 0;
+            this.maxCellCount = 0;
             for (let i=0; i<this.showNodes.length; i++) {
                 const nodea = this.showNodes[i];
                 for (let j=0; j<this.showNodes.length; j++) {
@@ -285,6 +287,7 @@ export default {
                     this.cells.push(cell);
                     if (!this.isHideCell(cell) && (i!=j || this.returnMode!=='count') && i!==this.showNodes.length-1 && j!==this.showNodes.length-1) {
                         this.maxCellValue = Math.max(this.maxCellValue, cell.info.val);
+                        this.maxCellCount = Math.max(this.maxCellCount, cell.info.count);
                         if (i!=j && cell.info.direction!==undefined) {
                             this.maxCellDirection = Math.max(this.maxCellDirection, d3.sum(cell.info.direction));
                         }
@@ -471,6 +474,18 @@ export default {
                                     .duration(that.updateDuration)
                                     .attr('transform', `rotate(${i*45} ${that.cellAttrs['size']/2} ${that.cellAttrs['size']/2})`);
                             }
+                        } else if (that.showMode === 'sizeComparison' && d.info.sizeCmp !== undefined) {
+                            const radius = that.cellAttrs['size']/3;
+                            for (let i = 0; i < 3; ++i) {
+                                // eslint-disable-next-line no-invalid-this
+                                d3.select(this).select(`#size-circle-${i}`)
+                                    .transition()
+                                    .duration(that.updateDuration)
+                                    .attrTween('d', (d) => d.info.count===0?
+                                        d3.arc().innerRadius(0).outerRadius(0).startAngle(0).endAngle(0):
+                                        d3.arc().innerRadius(0).outerRadius(radius)
+                                            .startAngle(d.info.sizeCmpAngle[i]).endAngle(d.info.sizeCmpAngle[i+1]));
+                            }
                         }
                     })
                     .on('mouseout', function(e, d) {
@@ -493,6 +508,19 @@ export default {
                                         scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
                                         translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})
                                         rotate(${i*45} ${that.cellAttrs['size']/2} ${that.cellAttrs['size']/2})`);
+                            }
+                        } else if (that.showMode === 'sizeComparison' && d.info.sizeCmp !== undefined) {
+                            const sizeScale = d3.scaleLinear([0, Math.sqrt(that.maxCellCount)], [0.2, 1]);
+                            const radius = that.cellAttrs['size']/3;
+                            for (let i = 0; i < 3; ++i) {
+                                // eslint-disable-next-line no-invalid-this
+                                d3.select(this).select(`#size-circle-${i}`)
+                                    .transition()
+                                    .duration(that.updateDuration)
+                                    .attrTween('d', (d) => d.info.count===0?
+                                        d3.arc().innerRadius(0).outerRadius(0).startAngle(0).endAngle(0):
+                                        d3.arc().innerRadius(0).outerRadius(Math.min(1, sizeScale(Math.sqrt(d.info.count)))*radius)
+                                            .startAngle(d.info.sizeCmpAngle[i]).endAngle(d.info.sizeCmpAngle[i+1]));
                             }
                         }
                     });
@@ -577,13 +605,15 @@ export default {
                 //         'rgb(227,227,227)':d.info.sizeCmp[0]<d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)');
 
                 // sizeComparison mode: piecharts
+                const sizeScale = d3.scaleLinear([0, Math.sqrt(that.maxCellCount)], [0.2, 1]);
+                const radius = that.cellAttrs['size']/3;
                 for (let i = 0; i < 3; ++i) {
                     matrixCellsinG.filter((d) => d.info.count>0&&d.info.sizeCmp!==undefined).append('path')
                         .attr('class', 'size-circle')
                         .attr('id', `size-circle-${i}`)
                         .attr('transform', `translate(${that.cellAttrs.size/2} ${that.cellAttrs.size/2})`)
                         .attr('fill', that.cellAttrs['size-color'][i])
-                        .attr('d', (d) => d3.arc().innerRadius(0).outerRadius(that.cellAttrs['size']/3)
+                        .attr('d', (d) => d3.arc().innerRadius(0).outerRadius(Math.min(1, sizeScale(Math.sqrt(d.info.count)))*radius)
                             .startAngle(d.info.sizeCmpAngle[i]).endAngle(d.info.sizeCmpAngle[i+1])());
                 }
 
@@ -823,6 +853,8 @@ export default {
                         }
                     });
                 } else if (that.showMode==='sizeComparison') {
+                    const sizeScale = d3.scaleLinear([0, Math.sqrt(that.maxCellCount)], [0.2, 1]);
+                    const radius = that.cellAttrs['size']/3;
                     that.matrixCellsinG.each(function(d) {
                         // eslint-disable-next-line no-invalid-this
                         // d3.select(this).select('#size-small-circle')
@@ -852,9 +884,9 @@ export default {
                                 .transition()
                                 .duration(that.updateDuration)
                                 .attrTween('d', (d) => d.info.count===0?
-                                    d3.arc().innerRadius(0).outerRadius(that.cellAttrs['size']/3).startAngle(0).endAngle(0):
-                                    d3.arc().innerRadius(0).outerRadius(that.cellAttrs['size']/3).startAngle(d.info.sizeCmpAngle[i])
-                                        .endAngle(d.info.sizeCmpAngle[i+1]))
+                                    d3.arc().innerRadius(0).outerRadius(0).startAngle(0).endAngle(0):
+                                    d3.arc().innerRadius(0).outerRadius(Math.min(1, sizeScale(Math.sqrt(d.info.count)))*radius)
+                                        .startAngle(d.info.sizeCmpAngle[i]).endAngle(d.info.sizeCmpAngle[i+1]))
                                 .attr('opacity', (d)=>d.info.count===0?0:1)
                                 .on('end', resolve);
                         }
