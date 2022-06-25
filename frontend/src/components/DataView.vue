@@ -174,7 +174,7 @@ export default {
             labelAspectRatioOverallDist: undefined,
             predictAspectRatioOverallDist: undefined,
             hideUnfiltered: false,
-            selections: [],
+            selections: [0],
             selectedSelection: -1,
         };
     },
@@ -469,6 +469,7 @@ export default {
         this.setBoxAspectRatioInfo();
         this.setConfusionMatrix();
         this.setOverallDist();
+        this.setSelections(0);
     },
 };
 </script>
@@ -612,6 +613,7 @@ export default {
 }
 
 #selection-add-icon {
+    margin: 5px 20px 0 0;
     align-self: flex-end;
 }
 </style>

@@ -694,10 +694,7 @@ class DataCtrler(object):
         alllabels[negaLabels] = len(self.names)-1
         allconfidence = self.raw_predicts[self.predict_label_pairs[:,0], 1]
         allfeatures = self.features
-        if zoomin:
-            neighbors = self.sampler.zoomin(nodes, 400, self.features)
-        else:
-            neighbors = nodes
+        neighbors = self.sampler.zoomin(nodes, 225, self.features)
         zoomInConstraints = None
         zoomInConstraintX = None
         if constraints is not None:
