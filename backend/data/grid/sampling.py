@@ -1,6 +1,7 @@
 import numpy as np
 import pickle
 import random
+import math
 import faiss
 import logging
 from sklearn.neighbors import NearestNeighbors
@@ -39,6 +40,32 @@ class ListDict(object):
     def choose_random_item(self):
         return random.choice(self.items)
 
+class DensityBiasedSampling():
+    def __init__(self, alpha=1.0, beta=1.0) -> None:
+        self.alpha = alpha
+        self.beta = beta
+    
+    def sample(self, data, sample_num, prob_ext = None):
+        k = 50
+        X = np.array(data.tolist(), dtype=np.float64)
+        n, d = X.shape
+        m = sample_num
+        if k + 1 > n:
+            k = int((n - 1) / 2)
+        neighbor, dist = Knn(X, n, d, k + 1, 1, 1, n)
+        radius_of_k_neighbor = dist[:, -1]
+        for i in range(len(radius_of_k_neighbor)):
+            radius_of_k_neighbor[i] = math.sqrt(radius_of_k_neighbor[i])
+        maxD = np.max(radius_of_k_neighbor)
+        minD = np.min(radius_of_k_neighbor)
+        for i in range(len(radius_of_k_neighbor)):
+            radius_of_k_neighbor[i] = ((radius_of_k_neighbor[i] - minD) * 1.0 / (maxD - minD)) * 0.5 + 0.5
+        if prob_ext is None:
+            prob_ext = np.zeros(len(data))
+        prob = self.alpha * radius_of_k_neighbor + self.beta * prob_ext
+        prob = prob / prob.sum()
+        selected_indexes = np.random.choice(n, m, replace=False, p=prob)
+        return selected_indexes
 class OutlierBiasedBlueNoiseSamplingFAISS():
     def __init__(self, sampling_rate, outlier_score=None, fail_rate=0.1):
         self.sampling_rate = sampling_rate
@@ -145,9 +172,19 @@ class HierarchySampling(object):
         if len(indexes)==0:
             return self.top_nodes.tolist()
         else:
-            k = int(np.ceil(maxValue/len(indexes)))
-            neighbors = self.neighbors[indexes, :k]
-            return np.unique(np.concatenate(neighbors)).tolist()
+            neighbors = np.unique(np.concatenate(self.neighbors[indexes, :10])).tolist()
+            if len(neighbors)<=maxValue:
+                return neighbors
+            neighbors_data = data[neighbors]
+            sampler = DensityBiasedSampling(alpha=1, beta=4)
+            top_prob = np.zeros(len(neighbors_data))
+            isTop = {}
+            for index in indexes:
+                isTop[index]=True
+            for i in range(len(neighbors)):
+                if neighbors[i] in isTop:
+                    top_prob[i] = 1
+            return sampler.sample(neighbors_data, maxValue, top_prob).tolist()
         
     def dump(self, hierarchy_path):
         with open(hierarchy_path, "wb") as f:

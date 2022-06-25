@@ -1,7 +1,10 @@
 <template>
-    <svg class="selection-svg" :id="'selection-svg-'+id" width="95%" height="20" ref="svg" @click="selectSvg">
+    <svg class="selection-svg" :id="'selection-svg-'+id" width="95%" height="40" ref="svg" @click="selectSvg">
+    <text x="20" y="0" dy="22.5" text-anchor="start" font-size="15" font-weight="normal" font-family="Comic Sans MS">Color Set {{id}}:</text>
+    <text v-if="showNodes.length === 0" x="120" y="0" dy="22.5"
+        text-anchor="start" font-size="15" font-weight="normal" font-family="Comic Sans MS">Empty</text>
         <g id="main-g">
-            <g id="selection-g" transform="translate(0, 0)"></g>
+            <g id="selection-g" transform="translate(10, 30)"></g>
         </g>
     </svg>
 </template>
@@ -51,7 +54,7 @@ export default {
             return this.leftCornerSize;
         },
         svgHeight: function() {
-            return this.showNodes.length * this.linesize;
+            return this.showNodes.length * this.linesize+40;
         },
         maxHorizonTextWidth: function() {
             let maxwidth = 0;
@@ -151,7 +154,7 @@ export default {
         initColor: function(root, color) {
             if (typeof(root)==='string') {
                 this.hierarchyColors[root] = color;
-                return;
+                return color;
             }
             this.hierarchyColors[root.name] = color;
             for (const child of root.children) {
@@ -159,11 +162,31 @@ export default {
             }
         },
         setNewColor: function(root, replace=true) {
+            const nodename = root.name;
             const that = this;
+            const dfs = function(root, nodename) {
+                if (root.name === nodename) {
+                    that.initColor(root, that.baseColors[that.nextColor]);
+                    that.nextColor++;
+                    if (that.nextColor===that.baseColors.length) {
+                        that.nextColor = 0;
+                    }
+                    return true;
+                }
+                for (const child of root.children) {
+                    if (dfs(child, nodename)) {
+                        that.hierarchyColors[root.name] = that.hierarchyColors[child.name];
+                        return true;
+                    }
+                }
+                return false;
+            };
             if (!replace && that.hierarchyColors[root.name] !== that.defaultColor) {
                 return;
             }
-            that.initColor(root, that.baseColors[that.nextColor]);
+            for (const root of this.hierarchy) {
+                dfs(root, nodename);
+            }
             that.setHierarchyColors(clone(that.hierarchyColors));
             that.nextColor++;
             if (that.nextColor===that.baseColors.length) {
@@ -428,11 +451,11 @@ export default {
                 console.log(that.svgWidth);
                 that.svg.transition()
                     .duration(that.transformDuration)
-                    .attr('height', that.svgHeight+20)
+                    .attr('height', that.svgHeight)
                     .on('end', resolve);
                 that.mainG.transition()
                     .duration(that.transformDuration)
-                    .attr('transform', `translate(${10} ${10}) scale(1)`)
+                    .attr('transform', `translate(${10} ${30}) scale(1)`)
                     .on('end', resolve);
                 that.horizonTextG.transition()
                     .duration(that.transformDuration)
