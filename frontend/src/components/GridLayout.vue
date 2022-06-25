@@ -16,6 +16,7 @@
                 :onResizeStart="disableHover" @resizestop="enableHover()" @resizing="onResizeWidget(node)">
                 <div class="grid-widget-info">
                     <div class="grid-widget-toolbar">
+                        <img class="grid-widget-icon" src="/static/images/save.png"/>
                         <img class="grid-widget-icon" :id="'gird-widget-icon-'+node.index" :src="`/static/images/eye-${node.widgetmode}.png`"
                             @click="changeShowAll(node)"/>
                         <img class="grid-widget-icon" src="/static/images/close.png" @click="closeImageWidget(node)"/>
@@ -499,20 +500,12 @@ export default {
         drawWidgetBox: function(node) {
             const svg = d3.select('#gird-widget-image-'+node.index);
             const that = this;
-            const drag = d3.drag()
-                .on('drag', function(e, d) {
-                    // eslint-disable-next-line no-invalid-this
-                    const node = d3.select(this);
-                    const x = parseFloat(node.attr('x'));
-                    const y = parseFloat(node.attr('y'));
-                    node.attr('x', x+e.dx)
-                        .attr('y', y+e.dy);
-                });
+
             axios.post(that.URL_GET_IMAGEBOX, {
                 boxID: node.index,
                 showall: node.widgetmode,
             }).then(function(response) {
-                const boxes = response.data.boxes;
+                let boxes = response.data.boxes;
                 const imagesize = response.data.image;
                 const svgsize = that.$refs['image-'+node.index][0].getBoundingClientRect();
                 const scale = Math.min(svgsize.width/imagesize[0], svgsize.height/imagesize[1]);
@@ -520,30 +513,210 @@ export default {
                 const realHeight = scale*imagesize[1];
                 const xshift = (svgsize.width-realwidth)/2;
                 const yshift = (svgsize.height-realHeight)/2;
-                const boxesg = svg.selectAll('rect.imagebox').data(boxes);
+                const MAP_HEIGHT = 2500;
+                const MAP_WIDTH = MAP_HEIGHT * Math.sqrt(2);
+
+                const MAX_TRANSLATE_X = MAP_WIDTH / 2;
+                const MIN_TRANSLATE_X = -MAX_TRANSLATE_X;
+
+                const MAX_TRANSLATE_Y = MAP_HEIGHT / 2;
+                const MIN_TRANSLATE_Y = -MAX_TRANSLATE_Y;
+
+                const MIN_RECT_WIDTH = 10;
+                const MIN_RECT_HEIGHT = 10;
+
+                const HANDLE_R = 2;
+                const HANDLE_R_ACTIVE = 5;
+                boxes = boxes.map(function(d, i) {
+                    return {
+                        id: i,
+                        x: (d.box[0]-d.box[2]/2)*realwidth+xshift,
+                        y: (d.box[1]-d.box[3]/2)*realHeight+yshift,
+                        width: d.box[2]*realwidth,
+                        height: d.box[3]*realHeight,
+                        ispred: d.type==='pred',
+                    };
+                });
+                svg.selectAll('g.imagebox').remove();
+                let rects = svg.selectAll('g.imagebox').data(boxes);
                 const image = svg.select('image');
                 image.style('width', svgsize.width);
                 image.style('height', svgsize.height);
-                boxesg.enter()
-                    .append('rect')
-                    .attr('class', 'imagebox')
-                    .attr('x', (d) => (d.box[0]-d.box[2]/2)*realwidth+xshift)
-                    .attr('y', (d) => (d.box[1]-d.box[3]/2)*realHeight+yshift)
-                    .attr('width', (d) => d.box[2]*realwidth)
-                    .attr('height', (d) => d.box[3]*realHeight)
-                    .attr('stroke', (d) => d.type==='pred'?'rgb(255,102,0)' : 'rgb(95,198,181)')
-                    .attr('stroke-width', 2)
-                    .attr('fill', 'white')
-                    .attr('fill-opacity', 0)
-                    .call(drag);
 
-                boxesg
-                    .attr('x', (d) => (d.box[0]-d.box[2]/2)*realwidth+xshift)
-                    .attr('y', (d) => (d.box[1]-d.box[3]/2)*realHeight+yshift)
-                    .attr('width', (d) => d.box[2]*realwidth)
-                    .attr('height', (d) => d.box[3]*realHeight);
+                const resizerHover = function(e, d) {
+                    // eslint-disable-next-line no-invalid-this
+                    const el = d3.select(this); const isEntering = e.type === 'mouseenter';
+                    el
+                        .classed('hovering', isEntering)
+                        .attr(
+                            'r',
+                            isEntering || el.classed('resizing') ?
+                                HANDLE_R_ACTIVE : HANDLE_R,
+                        );
+                };
 
-                boxesg.exit().remove();
+                const rectHover = function(e, d) {
+                    // eslint-disable-next-line no-invalid-this
+                    const el = d3.select(this);
+                    const isEntering = e.type === 'mouseenter';
+                    el
+                        .classed('hovering', isEntering)
+                        .attr(
+                            'stroke-width',
+                            isEntering || el.classed('resizing') ?
+                                5 : 2,
+                        );
+                };
+
+                const rectResizeStartEnd = function(e) {
+                    // eslint-disable-next-line no-invalid-this
+                    const el = d3.select(this);
+                    const isStarting = e.type === 'start';
+                    // eslint-disable-next-line no-invalid-this
+                    d3.select(this)
+                        .classed('resizing', isStarting)
+                        .attr(
+                            'r',
+                            isStarting || el.classed('hovering') ?
+                                HANDLE_R_ACTIVE : HANDLE_R,
+                        );
+                };
+
+                const rectResizing = function(e, d) {
+                    const dragX = Math.max(
+                        Math.min(e.x, MAX_TRANSLATE_X),
+                        MIN_TRANSLATE_X,
+                    );
+
+                    const dragY = Math.max(
+                        Math.min(e.y, MAX_TRANSLATE_Y),
+                        MIN_TRANSLATE_Y,
+                    );
+
+                    // eslint-disable-next-line no-invalid-this
+                    if (d3.select(this).classed('topleft')) {
+                        const newWidth = Math.max(d.width + d.x - dragX, MIN_RECT_WIDTH);
+
+                        d.x += d.width - newWidth;
+                        d.width = newWidth;
+
+                        const newHeight = Math.max(d.height + d.y - dragY, MIN_RECT_HEIGHT);
+
+                        d.y += d.height - newHeight;
+                        d.height = newHeight;
+                    } else {
+                        d.width = Math.max(dragX - d.x, MIN_RECT_WIDTH);
+                        d.height = Math.max(dragY - d.y, MIN_RECT_HEIGHT);
+                    }
+
+                    update();
+                };
+
+                const rectMoveStartEnd = function(e, d) {
+                    // eslint-disable-next-line no-invalid-this
+                    d3.select(this).classed('moving', e.type === 'start');
+                };
+
+                const rectMoving = function(e, d) {
+                    const dragX = Math.max(
+                        Math.min(e.x, MAX_TRANSLATE_X - d.width),
+                        MIN_TRANSLATE_X,
+                    );
+
+                    const dragY = Math.max(
+                        Math.min(e.y, MAX_TRANSLATE_Y - d.height),
+                        MIN_TRANSLATE_Y,
+                    );
+
+                    d.x = dragX;
+                    d.y = dragY;
+
+                    update();
+                };
+
+                const update = function() {
+                    rects = svg.selectAll('g.imagebox').data(boxes, (d) => d.id);
+                    rects.exit().remove();
+
+                    const newRects = rects.enter()
+                        .append('g')
+                        .classed('imagebox', true);
+
+                    newRects
+                        .append('rect')
+                        .classed('bg', true)
+                        .attr('fill', 'none')
+                        .attr('stroke', (d) => d.ispred?'rgb(255,102,0)':'rgb(95,198,181)')
+                        .attr('stroke-width', 2)
+                        .on('mouseenter mouseleave', rectHover)
+                        .call(d3.drag()
+                            .container(svg.node())
+                            .on('start end', rectMoveStartEnd)
+                            .on('drag', rectMoving),
+                        );
+
+                    newRects
+                        .append('g')
+                        .classed('circles', true)
+                        .each(function(d) {
+                            // eslint-disable-next-line no-invalid-this
+                            const circleG = d3.select(this);
+
+                            circleG
+                                .append('circle')
+                                .classed('topleft', true)
+                                .attr('r', HANDLE_R)
+                                .on('mouseenter mouseleave', resizerHover)
+                                .call(d3.drag()
+                                    .container(svg.node())
+                                    .subject(function(e) {
+                                        return {x: e.x, y: e.y};
+                                    })
+                                    .on('start end', rectResizeStartEnd)
+                                    .on('drag', rectResizing),
+                                );
+
+                            circleG
+                                .append('circle')
+                                .classed('bottomright', true)
+                                .attr('r', HANDLE_R)
+                                .on('mouseenter mouseleave', resizerHover)
+                                .call(d3.drag()
+                                    .container(svg.node())
+                                    .subject(function(e) {
+                                        return {x: e.x, y: e.y};
+                                    })
+                                    .on('start end', rectResizeStartEnd)
+                                    .on('drag', rectResizing),
+                                );
+                        });
+
+                    const allRects = newRects.merge(rects);
+
+                    allRects
+                        .attr('transform', function(d) {
+                            return 'translate(' + d.x + ',' + d.y + ')';
+                        });
+
+                    allRects
+                        .select('rect.bg')
+                        .attr('height', function(d) {
+                            return d.height;
+                        })
+                        .attr('width', function(d) {
+                            return d.width;
+                        });
+
+                    allRects
+                        .select('circle.bottomright')
+                        .attr('cx', function(d) {
+                            return d.width;
+                        })
+                        .attr('cy', function(d) {
+                            return d.height;
+                        });
+                };
+                update();
             });
         },
     },
