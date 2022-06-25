@@ -260,8 +260,7 @@ class DataCtrler(object):
             cost_bbox = torch.cdist(torch.from_numpy(out_bbox), torch.from_numpy(tgt_bbox), p=1)
 
             # Compute the giou cost betwen boxes
-            # import ipdb; ipdb.set_trace()
-            cost_iou = -box_iou(out_bbox, tgt_bbox)
+            cost_iou = -generalized_box_iou(out_bbox, tgt_bbox)
 
             # Final cost matrix
             C = 5.0 * cost_bbox + 2.0 * cost_class + 2.0 * cost_iou
@@ -1025,12 +1024,37 @@ def box_iou(box1, box2):
             IoU values for every element in boxes1 and boxes2
     """
     # inter(N,M) = (rb(N,M,2) - lt(N,M,2)).clamp(0).prod(2)
-    box1, box2 = xywh2xyxy(box1), xywh2xyxy(box2)
     (a1, a2), (b1, b2) = np.array_split(box1[:, None],2,axis=2), np.array_split(box2, 2, axis=1)
     inter = (np.minimum(a2, b2) - np.maximum(a1, b1)).clip(0).prod(2)
-    
-    # # IoU = inter / (area1 + area2 - inter)
-    return inter / (box_area(box1.T)[:, None] + box_area(box2.T) - inter)
+    union = (box_area(box1.T)[:, None] + box_area(box2.T) - inter)
+    # IoU = inter / (area1 + area2 - inter)
+    return inter / (union + 1e-6), union
+
+def generalized_box_iou(box1, box2):
+    """
+    Generalized IoU from https://giou.stanford.edu/
+
+    The boxes should be in [x0, y0, x1, y1] format
+
+    Returns a [N, M] pairwise matrix, where N = len(boxes1)
+    and M = len(boxes2)
+    """
+    box1, box2 = xywh2xyxy(box1), xywh2xyxy(box2)
+    # degenerate boxes gives inf / nan results
+    # so do an early check
+    assert (box1[:, 2:] >= box1[:, :2]).all()
+    assert (box2[:, 2:] >= box2[:, :2]).all()
+
+    iou, union = box_iou(box1, box2)
+    box1, box2 = torch.from_numpy(box1), torch.from_numpy(box2)
+
+    lt = torch.min(box1[:, None, :2], box2[:, :2])
+    rb = torch.max(box1[:, None, 2:], box2[:, 2:])
+
+    wh = (rb - lt).clamp(min=0)  # [N,M,2]
+    area = np.array(wh[:, :, 0] * wh[:, :, 1])
+
+    return iou - (area - union) / (area + 1e-6)
 
 dataCtrler = DataCtrler()
 
