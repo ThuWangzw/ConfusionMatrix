@@ -390,7 +390,9 @@ class DataCtrler(object):
             'avg_label_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],1]==-1 else self.label_aspect_ratio[self.predict_label_pairs[x, 1]].mean(),
             'avg_predict_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],0]==-1 else self.predict_aspect_ratio[self.predict_label_pairs[x, 0]].mean(),
             'direction': lambda x: [int(np.count_nonzero(self.directions[x]==i)) for i in range(9)],
-            'size_comparison': lambda x: [0, 0] if len(x)==0 or self.predict_label_pairs[x[0],1]==-1 or self.predict_label_pairs[x[0],0]==-1 else \
+            'size_comparison': lambda x: [0, 0] if len(x)==0 \
+                else np.bincount((self.predict_size[self.predict_label_pairs[x, 0]]*5).tolist()).tolist() if self.predict_label_pairs[x[0],1]==-1 \
+                else np.bincount((self.label_size[self.predict_label_pairs[x, 1]]*5).tolist()).tolist() if self.predict_label_pairs[x[0],0]==-1 else \
                 [int(np.count_nonzero(self.predict_size[self.predict_label_pairs[x, 0]] > (self.label_size[self.predict_label_pairs[x, 1]]*1.15))),
                 int(np.count_nonzero(self.label_size[self.predict_label_pairs[x, 1]] > (self.predict_size[self.predict_label_pairs[x, 0]]*1.15)))]
         }
@@ -408,7 +410,13 @@ class DataCtrler(object):
                         stat_matrix[i][j] = [0 for _ in range(9)]
                     else:
                         stat_matrix[i][j] = map_func(matrix[i][j])
-            ret_matrixes.append(np.array(stat_matrix).tolist())
+                        if statistics_mode == 'size_comparison':
+                            if len(stat_matrix[i][j]) > 5:
+                                stat_matrix[i][j][4] += stat_matrix[i][j][5]
+                                stat_matrix[i][j] = stat_matrix[i][j][:5]
+                            # elif len(stat_matrix[i][j]) < 25:
+                            #     stat_matrix[i][j] += [0] * (25 - len(stat_matrix[i][j]))
+            ret_matrixes.append(stat_matrix)
         return ret_matrixes
 
     def getConfusionMatrix(self, query = None):
@@ -1066,6 +1074,6 @@ if __name__ == "__main__":
         "direction": [0,1,2,3,4,5,6,7,8],
         "label": np.arange(80),
         "predict": np.arange(80),
-        "return": ['count', 'direction'],
+        "return": ['size_comparison'],
         "split": 10
     })
