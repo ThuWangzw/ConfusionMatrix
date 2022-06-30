@@ -213,6 +213,7 @@ export default {
             axios.post(store.getters.URL_GET_CONFUSION_MATRIX, query===undefined?{}:{query: query})
                 .then(function(response) {
                     that.confusionMatrix = response.data;
+                    console.log(response.data);
                     that.gettingMatrix = false;
                 });
         },
@@ -468,7 +469,7 @@ export default {
         this.setBoxSizeInfo();
         this.setBoxAspectRatioInfo();
         this.setConfusionMatrix();
-        this.setOverallDist();
+        // this.setOverallDist();
     },
 };
 </script>
