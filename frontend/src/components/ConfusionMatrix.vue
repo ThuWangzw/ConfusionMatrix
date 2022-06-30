@@ -880,7 +880,7 @@ export default {
                                                 ${d.info.direction===undefined?that.cellAttrs['size']/18:
         that.cellAttrs['size']*Math.min(2/9, 1/3-5/18*d.info.direction[i]/Math.max(1, d3.max(d.info.direction)))},
                                                 ${that.cellAttrs['size']/2}`)
-                                .attr('opacity', (d)=>d.info.count===0?0:1)
+                                .attr('opacity', (d)=>d.info.count===0||d.info.direction===undefined||d.info.direction[i]===0?0:1)
                                 .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
                                     scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
                                     translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})
@@ -928,6 +928,9 @@ export default {
                         }
                         for (let i = 0; i < 5; ++i) {
                             // eslint-disable-next-line no-invalid-this
+                            d3.select(this).selectAll('.dist')
+                                .attr('opacity', 1);
+                            // eslint-disable-next-line no-invalid-this
                             d3.select(this).select(`#distRect-${i}`)
                                 .transition()
                                 .duration(that.updateDuration)
@@ -939,12 +942,6 @@ export default {
                                 .transition()
                                 .duration(that.updateDuration)
                                 .attr('stroke-width', (d) => d.info.sizeDist[i]>=1000?0.5+Math.log10(d.info.sizeDist[i]/1000):0)
-                                .on('end', resolve);
-                            // eslint-disable-next-line no-invalid-this
-                            d3.select(this).selectAll('.dist')
-                                .transition()
-                                .duration(that.updateDuration)
-                                .attr('opacity', 1)
                                 .on('end', resolve);
                         }
                     });
