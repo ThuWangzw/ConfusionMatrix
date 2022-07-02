@@ -109,7 +109,9 @@ export default {
             }
         },
         hierarchyColors() {
-            this.render(true);
+            if (!this.rendering) {
+                this.render(true);
+            }
         },
     },
     data: function() {
@@ -220,7 +222,9 @@ export default {
 
             this.gridCellsInG = this.girdG.selectAll('.'+this.gridCellAttrs['gClass']);
             this.lassoNodesInG = this.lassoG.selectAll('.'+this.gridCellAttrs['centerClass']);
-            this.rendering = false;
+            if (!changeColor) {
+                this.rendering = false;
+            }
         },
         create: async function() {
             const that = this;

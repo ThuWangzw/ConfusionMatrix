@@ -1000,7 +1000,7 @@ class DataCtrler(object):
                     imageids.append(i)
                     
         # limit length of images
-        return imageids[:225]
+        return imageids
     
 def box_area(box):
     # box = xyxy(4,n)

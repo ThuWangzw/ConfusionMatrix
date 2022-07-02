@@ -172,11 +172,11 @@ class HierarchySampling(object):
         if len(indexes)==0:
             return self.top_nodes.tolist()
         else:
-            neighbors = np.unique(np.concatenate(self.neighbors[indexes, :10])).tolist()
+            neighbors = np.unique(np.concatenate(self.neighbors[indexes, :10]))
             if len(neighbors)<=maxValue:
-                return neighbors
+                return neighbors.tolist()
             neighbors_data = data[neighbors]
-            sampler = DensityBiasedSampling(alpha=1, beta=4)
+            sampler = DensityBiasedSampling(alpha=1, beta=20)
             top_prob = np.zeros(len(neighbors_data))
             isTop = {}
             for index in indexes:
@@ -184,7 +184,7 @@ class HierarchySampling(object):
             for i in range(len(neighbors)):
                 if neighbors[i] in isTop:
                     top_prob[i] = 1
-            return sampler.sample(neighbors_data, maxValue, top_prob).tolist()
+            return neighbors[sampler.sample(neighbors_data, maxValue, top_prob)].tolist()
         
     def dump(self, hierarchy_path):
         with open(hierarchy_path, "wb") as f:
