@@ -49,14 +49,16 @@ class DataCtrler(object):
             os.makedirs(self.features_path)
         if not os.path.exists(bufferPath):
             os.makedirs(bufferPath)
-        self.raw_data_path = os.path.join(bufferPath, "{}_raw_data.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
-        self.label_predict_iou_path = os.path.join(bufferPath, "{}_predict_label_iou.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
-        self.box_size_split_path = os.path.join(bufferPath, "{}_box_size_split.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
-        self.box_size_dist_path = os.path.join(bufferPath, "{}_box_size_dist.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
-        self.box_aspect_ratio_split_path = os.path.join(bufferPath, "{}_box_aspect_ratio_split.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
-        self.box_aspect_ratio_dist_path = os.path.join(bufferPath, "{}_box_aspect_ratio_dist.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
-        self.hierarchy_sample_path = os.path.join(bufferPath, "{}_hierarchy_samples.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
-        self.all_features_path = os.path.join(bufferPath, "{}_features.npy".format(os.path.basename(os.path.normpath(rawDataPath))))
+        setting_name = os.path.basename(os.path.normpath(bufferPath))
+        # setting_name = os.path.basename(os.path.normpath(rawDataPath))
+        self.raw_data_path = os.path.join(bufferPath, "{}_raw_data.pkl".format(setting_name))
+        self.label_predict_iou_path = os.path.join(bufferPath, "{}_predict_label_iou.pkl".format(setting_name))
+        self.box_size_split_path = os.path.join(bufferPath, "{}_box_size_split.pkl".format(setting_name))
+        self.box_size_dist_path = os.path.join(bufferPath, "{}_box_size_dist.pkl".format(setting_name))
+        self.box_aspect_ratio_split_path = os.path.join(bufferPath, "{}_box_aspect_ratio_split.pkl".format(setting_name))
+        self.box_aspect_ratio_dist_path = os.path.join(bufferPath, "{}_box_aspect_ratio_dist.pkl".format(setting_name))
+        self.hierarchy_sample_path = os.path.join(bufferPath, "{}_hierarchy_samples.pkl".format(setting_name))
+        self.all_features_path = os.path.join(bufferPath, "{}_features.npy".format(setting_name))
         
         self.logger = logging.getLogger('dataCtrler')
 
@@ -215,7 +217,11 @@ class DataCtrler(object):
             directions[np.logical_and(directionCos>directionSplits[i-1], directionCos<=directionSplits[i])] = i-1
         negaYs = np.logical_and(directionVectors[:,1]<0, directions!=0)
         directions[negaYs] = 8-directions[negaYs]
-        directions[directionNorm<0.05] = 8
+        # use box w, h to define min_shift, with a maximum value of 0.05
+        min_shift = (self.raw_labels[self.predict_label_pairs[directionIdxes, 1], 3] + \
+            self.raw_labels[self.predict_label_pairs[directionIdxes, 1], 4]).squeeze() / 10
+        min_shift[min_shift > 0.05] = 0.05
+        directions[directionNorm<min_shift] = 8
         self.directions = -1*np.ones(self.predict_label_pairs.shape[0], dtype=np.int32)
         self.directions[directionIdxes] = directions
         
@@ -260,8 +266,7 @@ class DataCtrler(object):
             cost_bbox = torch.cdist(torch.from_numpy(out_bbox), torch.from_numpy(tgt_bbox), p=1)
 
             # Compute the giou cost betwen boxes
-            # import ipdb; ipdb.set_trace()
-            cost_iou = -box_iou(out_bbox, tgt_bbox)
+            cost_iou = -generalized_box_iou(out_bbox, tgt_bbox)
 
             # Final cost matrix
             C = 5.0 * cost_bbox + 2.0 * cost_class + 2.0 * cost_iou
@@ -391,9 +396,11 @@ class DataCtrler(object):
             'avg_label_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],1]==-1 else self.label_aspect_ratio[self.predict_label_pairs[x, 1]].mean(),
             'avg_predict_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],0]==-1 else self.predict_aspect_ratio[self.predict_label_pairs[x, 0]].mean(),
             'direction': lambda x: [int(np.count_nonzero(self.directions[x]==i)) for i in range(9)],
-            'size_comparison': lambda x: [0, 0] if len(x)==0 or self.predict_label_pairs[x[0],1]==-1 or self.predict_label_pairs[x[0],0]==-1 else \
-                [int(np.count_nonzero(self.predict_size[self.predict_label_pairs[x, 0]] > (self.label_size[self.predict_label_pairs[x, 1]]+0.01))),
-                int(np.count_nonzero(self.label_size[self.predict_label_pairs[x, 1]] > (self.predict_size[self.predict_label_pairs[x, 0]]+0.01)))]
+            'size_comparison': lambda x: [0, 0] if len(x)==0 \
+                else np.bincount((self.predict_size[self.predict_label_pairs[x, 0]]*5).tolist()).tolist() if self.predict_label_pairs[x[0],1]==-1 \
+                else np.bincount((self.label_size[self.predict_label_pairs[x, 1]]*5).tolist()).tolist() if self.predict_label_pairs[x[0],0]==-1 else \
+                [int(np.count_nonzero(self.predict_size[self.predict_label_pairs[x, 0]] > (self.label_size[self.predict_label_pairs[x, 1]]*1.15))),
+                int(np.count_nonzero(self.label_size[self.predict_label_pairs[x, 1]] > (self.predict_size[self.predict_label_pairs[x, 0]]*1.15)))]
         }
         ret_matrixes = []
         for statistics_mode in statistics_modes:
@@ -409,7 +416,13 @@ class DataCtrler(object):
                         stat_matrix[i][j] = [0 for _ in range(9)]
                     else:
                         stat_matrix[i][j] = map_func(matrix[i][j])
-            ret_matrixes.append(np.array(stat_matrix).tolist())
+                        if statistics_mode == 'size_comparison':
+                            if len(stat_matrix[i][j]) > 5:
+                                stat_matrix[i][j][4] += stat_matrix[i][j][5]
+                                stat_matrix[i][j] = stat_matrix[i][j][:5]
+                            # elif len(stat_matrix[i][j]) < 25:
+                            #     stat_matrix[i][j] += [0] * (25 - len(stat_matrix[i][j]))
+            ret_matrixes.append(stat_matrix)
         return ret_matrixes
 
     def getConfusionMatrix(self, query = None):
@@ -853,6 +866,7 @@ class DataCtrler(object):
                 predictXYXY = (self.raw_predicts[predictBox, 2:6]).tolist()
                 finalBoxes.append({
                     "box": predictXYXY,
+                    "size": float(self.predict_size[predictBox]),
                     "type": "pred"
                 })
             labelXYXY = None
@@ -860,6 +874,7 @@ class DataCtrler(object):
                 labelXYXY = (self.raw_labels[labelBox, 1:5]).tolist()
                 finalBoxes.append({
                     "box": labelXYXY,
+                    "size": float(self.label_size[labelBox]),
                     "type": "gt"
                 })
         return {
@@ -1020,12 +1035,37 @@ def box_iou(box1, box2):
             IoU values for every element in boxes1 and boxes2
     """
     # inter(N,M) = (rb(N,M,2) - lt(N,M,2)).clamp(0).prod(2)
-    box1, box2 = xywh2xyxy(box1), xywh2xyxy(box2)
     (a1, a2), (b1, b2) = np.array_split(box1[:, None],2,axis=2), np.array_split(box2, 2, axis=1)
     inter = (np.minimum(a2, b2) - np.maximum(a1, b1)).clip(0).prod(2)
-    
-    # # IoU = inter / (area1 + area2 - inter)
-    return inter / (box_area(box1.T)[:, None] + box_area(box2.T) - inter)
+    union = (box_area(box1.T)[:, None] + box_area(box2.T) - inter)
+    # IoU = inter / (area1 + area2 - inter)
+    return inter / (union + 1e-6), union
+
+def generalized_box_iou(box1, box2):
+    """
+    Generalized IoU from https://giou.stanford.edu/
+
+    The boxes should be in [x0, y0, x1, y1] format
+
+    Returns a [N, M] pairwise matrix, where N = len(boxes1)
+    and M = len(boxes2)
+    """
+    box1, box2 = xywh2xyxy(box1), xywh2xyxy(box2)
+    # degenerate boxes gives inf / nan results
+    # so do an early check
+    assert (box1[:, 2:] >= box1[:, :2]).all()
+    assert (box2[:, 2:] >= box2[:, :2]).all()
+
+    iou, union = box_iou(box1, box2)
+    box1, box2 = torch.from_numpy(box1), torch.from_numpy(box2)
+
+    lt = torch.min(box1[:, None, :2], box2[:, :2])
+    rb = torch.max(box1[:, None, 2:], box2[:, 2:])
+
+    wh = (rb - lt).clamp(min=0)  # [N,M,2]
+    area = np.array(wh[:, :, 0] * wh[:, :, 1])
+
+    return iou - (area - union) / (area + 1e-6)
 
 dataCtrler = DataCtrler()
 
@@ -1040,6 +1080,6 @@ if __name__ == "__main__":
         "direction": [0,1,2,3,4,5,6,7,8],
         "label": np.arange(80),
         "predict": np.arange(80),
-        "return": ['count', 'direction'],
+        "return": ['size_comparison'],
         "split": 10
     })

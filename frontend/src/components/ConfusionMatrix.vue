@@ -207,6 +207,7 @@ export default {
             },
             legendExist: false,
             // buffer
+            maxCellCount: 0,
             maxCellValue: 0,
             maxCellDirection: 0,
         };
@@ -266,6 +267,7 @@ export default {
             this.cells = [];
             this.maxCellValue = 0;
             this.maxCellDirection = 0;
+            this.maxCellCount = 0;
             for (let i=0; i<this.showNodes.length; i++) {
                 const nodea = this.showNodes[i];
                 for (let j=0; j<this.showNodes.length; j++) {
@@ -281,10 +283,12 @@ export default {
                     if (i === this.showNodes.length-1 || j === this.showNodes.length-1) {
                         cell.info.direction = undefined;
                         cell.info.sizeCmp = undefined;
-                    }
+                        if (i === this.showNodes.length-1 && j === this.showNodes.length-1) cell.info.sizeDist = undefined;
+                    } else cell.info.sizeDist = undefined;
                     this.cells.push(cell);
                     if (!this.isHideCell(cell) && (i!=j || this.returnMode!=='count') && i!==this.showNodes.length-1 && j!==this.showNodes.length-1) {
                         this.maxCellValue = Math.max(this.maxCellValue, cell.info.val);
+                        this.maxCellCount = Math.max(this.maxCellCount, cell.info.count);
                         if (i!=j && cell.info.direction!==undefined) {
                             this.maxCellDirection = Math.max(this.maxCellDirection, d3.sum(cell.info.direction));
                         }
@@ -471,6 +475,18 @@ export default {
                                     .duration(that.updateDuration)
                                     .attr('transform', `rotate(${i*45} ${that.cellAttrs['size']/2} ${that.cellAttrs['size']/2})`);
                             }
+                        } else if (that.showMode === 'sizeComparison' && d.info.sizeCmp !== undefined) {
+                            const radius = that.cellAttrs['size']/3;
+                            for (let i = 0; i < 3; ++i) {
+                                // eslint-disable-next-line no-invalid-this
+                                d3.select(this).select(`#size-circle-${i}`)
+                                    .transition()
+                                    .duration(that.updateDuration)
+                                    .attrTween('d', (d) => d.info.count===0?
+                                        d3.arc().innerRadius(0).outerRadius(0).startAngle(0).endAngle(0):
+                                        d3.arc().innerRadius(0).outerRadius(radius)
+                                            .startAngle(d.info.sizeCmpAngle[i]).endAngle(d.info.sizeCmpAngle[i+1]));
+                            }
                         }
                     })
                     .on('mouseout', function(e, d) {
@@ -494,6 +510,19 @@ export default {
                                         translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})
                                         rotate(${i*45} ${that.cellAttrs['size']/2} ${that.cellAttrs['size']/2})`);
                             }
+                        } else if (that.showMode === 'sizeComparison' && d.info.sizeCmp !== undefined) {
+                            const sizeScale = d3.scaleLinear([0, Math.sqrt(that.maxCellCount)], [0.2, 1]);
+                            const radius = that.cellAttrs['size']/3;
+                            for (let i = 0; i < 3; ++i) {
+                                // eslint-disable-next-line no-invalid-this
+                                d3.select(this).select(`#size-circle-${i}`)
+                                    .transition()
+                                    .duration(that.updateDuration)
+                                    .attrTween('d', (d) => d.info.count===0?
+                                        d3.arc().innerRadius(0).outerRadius(0).startAngle(0).endAngle(0):
+                                        d3.arc().innerRadius(0).outerRadius(Math.min(1, sizeScale(Math.sqrt(d.info.count)))*radius)
+                                            .startAngle(d.info.sizeCmpAngle[i]).endAngle(d.info.sizeCmpAngle[i+1]));
+                            }
                         }
                     });
 
@@ -511,6 +540,33 @@ export default {
                     .attr('stroke-width', that.cellAttrs['stroke-width'])
                     .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val));
 
+                for (let i = 0; i < 5; ++i) {
+                    matrixCellsinG.filter((d) => d.info.sizeDist!==undefined)
+                        .append('rect')
+                        .attr('class', 'dist')
+                        .attr('id', 'distRect-' + i)
+                        .attr('x', 2.5+5*i)
+                        .attr('width', 5)
+                        .attr('height', (d) => that.getDistHeight(d.info.sizeDist[i]))
+                        .attr('y', (d) => that.cellAttrs.size - 1 - that.getDistHeight(d.info.sizeDist[i]))
+                        .attr('fill', 'rgb(150,150,150)');
+                    matrixCellsinG.filter((d) => d.info.sizeDist!==undefined)
+                        .append('polyline')
+                        .attr('class', 'dist')
+                        .attr('id', 'distPolyline-' + i)
+                        .attr('stroke-width', (d) => d.info.sizeDist[i]>=1000?0.5+Math.log10(d.info.sizeDist[i]/1000):0)
+                        .attr('stroke', 'rgb(75,75,75)')
+                        .attr('fill', 'rgb(255,255,255)')
+                        .attr('points', `${3+5*i},4 ${5+5*i},2 ${7+5*i},4`);
+                }
+                matrixCellsinG.filter((d) => d.info.sizeDist!==undefined)
+                    .append('line')
+                    .attr('class', 'dist')
+                    .attr('stroke', 'rgb(75,75,75)')
+                    .attr('x1', 2)
+                    .attr('x2', 28)
+                    .attr('y1', 29.5)
+                    .attr('y2', 29.5);
 
                 // matrixCellsinG.filter((d) => d.info.val>0)
                 //     .append('text')
@@ -577,13 +633,15 @@ export default {
                 //         'rgb(227,227,227)':d.info.sizeCmp[0]<d.info.sizeCmp[1]?'rgb(243,158,112)':'rgb(95,198,181)');
 
                 // sizeComparison mode: piecharts
+                const sizeScale = d3.scaleLinear([0, Math.sqrt(that.maxCellCount)], [0.2, 1]);
+                const radius = that.cellAttrs['size']/3;
                 for (let i = 0; i < 3; ++i) {
                     matrixCellsinG.filter((d) => d.info.count>0&&d.info.sizeCmp!==undefined).append('path')
                         .attr('class', 'size-circle')
                         .attr('id', `size-circle-${i}`)
                         .attr('transform', `translate(${that.cellAttrs.size/2} ${that.cellAttrs.size/2})`)
                         .attr('fill', that.cellAttrs['size-color'][i])
-                        .attr('d', (d) => d3.arc().innerRadius(0).outerRadius(that.cellAttrs['size']/3)
+                        .attr('d', (d) => d3.arc().innerRadius(0).outerRadius(Math.min(1, sizeScale(Math.sqrt(d.info.count)))*radius)
                             .startAngle(d.info.sizeCmpAngle[i]).endAngle(d.info.sizeCmpAngle[i+1])());
                 }
 
@@ -605,6 +663,8 @@ export default {
                 }
                 if (that.showMode!=='sizeComparison') {
                     matrixCellsinG.selectAll('.size-circle')
+                        .attr('opacity', 0);
+                    matrixCellsinG.selectAll('.dist')
                         .attr('opacity', 0);
                 }
 
@@ -779,6 +839,12 @@ export default {
                             .duration(that.updateDuration)
                             .attr('opacity', 0)
                             .on('end', resolve);
+                        // eslint-disable-next-line no-invalid-this
+                        d3.select(this).selectAll('.dist')
+                            .transition()
+                            .duration(that.updateDuration)
+                            .attr('opacity', 0)
+                            .on('end', resolve);
                     });
                 }
 
@@ -814,7 +880,7 @@ export default {
                                                 ${d.info.direction===undefined?that.cellAttrs['size']/18:
         that.cellAttrs['size']*Math.min(2/9, 1/3-5/18*d.info.direction[i]/Math.max(1, d3.max(d.info.direction)))},
                                                 ${that.cellAttrs['size']/2}`)
-                                .attr('opacity', (d)=>d.info.count===0?0:1)
+                                .attr('opacity', (d)=>d.info.count===0||d.info.direction===undefined||d.info.direction[i]===0?0:1)
                                 .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
                                     scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
                                     translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})
@@ -823,6 +889,8 @@ export default {
                         }
                     });
                 } else if (that.showMode==='sizeComparison') {
+                    const sizeScale = d3.scaleLinear([0, Math.sqrt(that.maxCellCount)], [0.2, 1]);
+                    const radius = that.cellAttrs['size']/3;
                     that.matrixCellsinG.each(function(d) {
                         // eslint-disable-next-line no-invalid-this
                         // d3.select(this).select('#size-small-circle')
@@ -852,10 +920,28 @@ export default {
                                 .transition()
                                 .duration(that.updateDuration)
                                 .attrTween('d', (d) => d.info.count===0?
-                                    d3.arc().innerRadius(0).outerRadius(that.cellAttrs['size']/3).startAngle(0).endAngle(0):
-                                    d3.arc().innerRadius(0).outerRadius(that.cellAttrs['size']/3).startAngle(d.info.sizeCmpAngle[i])
-                                        .endAngle(d.info.sizeCmpAngle[i+1]))
+                                    d3.arc().innerRadius(0).outerRadius(0).startAngle(0).endAngle(0):
+                                    d3.arc().innerRadius(0).outerRadius(Math.min(1, sizeScale(Math.sqrt(d.info.count)))*radius)
+                                        .startAngle(d.info.sizeCmpAngle[i]).endAngle(d.info.sizeCmpAngle[i+1]))
                                 .attr('opacity', (d)=>d.info.count===0?0:1)
+                                .on('end', resolve);
+                        }
+                        for (let i = 0; i < 5; ++i) {
+                            // eslint-disable-next-line no-invalid-this
+                            d3.select(this).selectAll('.dist')
+                                .attr('opacity', 1);
+                            // eslint-disable-next-line no-invalid-this
+                            d3.select(this).select(`#distRect-${i}`)
+                                .transition()
+                                .duration(that.updateDuration)
+                                .attr('height', (d) => that.getDistHeight(d.info.sizeDist[i]))
+                                .attr('y', (d) => that.cellAttrs.size - 1 - that.getDistHeight(d.info.sizeDist[i]))
+                                .on('end', resolve);
+                            // eslint-disable-next-line no-invalid-this
+                            d3.select(this).select(`#distPolyline-${i}`)
+                                .transition()
+                                .duration(that.updateDuration)
+                                .attr('stroke-width', (d) => d.info.sizeDist[i]>=1000?0.5+Math.log10(d.info.sizeDist[i]/1000):0)
                                 .on('end', resolve);
                         }
                     });
@@ -939,6 +1025,7 @@ export default {
                 'count': 0,
                 'val': 0,
                 'sizeCmp': [0, 0, 0],
+                'sizeDist': [0, 0, 0, 0, 0],
             };
             if (this.showMode==='direction') {
                 infoMap['direction'] = [];
@@ -956,8 +1043,15 @@ export default {
                             infoMap.direction[i] += this.baseMatrix[this.baseMatrix.length-1][this.name2index[leafa]][this.name2index[leafb]][i];
                         }
                     }
-                    infoMap.sizeCmp[1] += this.baseMatrix[this.baseMatrix.length-2][this.name2index[leafa]][this.name2index[leafb]][0];
-                    infoMap.sizeCmp[2] += this.baseMatrix[this.baseMatrix.length-2][this.name2index[leafa]][this.name2index[leafb]][1];
+                    if (leafa === 'background' || leafb === 'background') {
+                        for (let i = 0; i < 5 &&
+                            i < this.baseMatrix[this.baseMatrix.length-2][this.name2index[leafa]][this.name2index[leafb]].length; ++i) {
+                            infoMap.sizeDist[i] += this.baseMatrix[this.baseMatrix.length-2][this.name2index[leafa]][this.name2index[leafb]][i];
+                        }
+                    } else {
+                        infoMap.sizeCmp[1] += this.baseMatrix[this.baseMatrix.length-2][this.name2index[leafa]][this.name2index[leafb]][0];
+                        infoMap.sizeCmp[2] += this.baseMatrix[this.baseMatrix.length-2][this.name2index[leafa]][this.name2index[leafb]][1];
+                    }
                 }
             }
             infoMap.sizeCmp[0] = infoMap.count - infoMap.sizeCmp[1] - infoMap.sizeCmp[2];
@@ -1064,6 +1158,10 @@ export default {
                 return node.expand===true && node.children.length>0;
             };
             return isHideNode(this.showNodes[cell.row]) || isHideNode(this.showNodes[cell.column]);
+        },
+        getDistHeight: function(y) {
+            if (y===0) return 0;
+            return d3.scaleLinear([0, 1000], [2, this.cellAttrs.size-6])(Math.min(y, 1000));
         },
     },
 };
