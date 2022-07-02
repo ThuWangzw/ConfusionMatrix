@@ -49,14 +49,16 @@ class DataCtrler(object):
             os.makedirs(self.features_path)
         if not os.path.exists(bufferPath):
             os.makedirs(bufferPath)
-        self.raw_data_path = os.path.join(bufferPath, "{}_raw_data.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
-        self.label_predict_iou_path = os.path.join(bufferPath, "{}_predict_label_iou.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
-        self.box_size_split_path = os.path.join(bufferPath, "{}_box_size_split.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
-        self.box_size_dist_path = os.path.join(bufferPath, "{}_box_size_dist.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
-        self.box_aspect_ratio_split_path = os.path.join(bufferPath, "{}_box_aspect_ratio_split.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
-        self.box_aspect_ratio_dist_path = os.path.join(bufferPath, "{}_box_aspect_ratio_dist.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
-        self.hierarchy_sample_path = os.path.join(bufferPath, "{}_hierarchy_samples.pkl".format(os.path.basename(os.path.normpath(rawDataPath))))
-        self.all_features_path = os.path.join(bufferPath, "{}_features.npy".format(os.path.basename(os.path.normpath(rawDataPath))))
+        setting_name = os.path.basename(os.path.normpath(bufferPath))
+        # setting_name = os.path.basename(os.path.normpath(rawDataPath))
+        self.raw_data_path = os.path.join(bufferPath, "{}_raw_data.pkl".format(setting_name))
+        self.label_predict_iou_path = os.path.join(bufferPath, "{}_predict_label_iou.pkl".format(setting_name))
+        self.box_size_split_path = os.path.join(bufferPath, "{}_box_size_split.pkl".format(setting_name))
+        self.box_size_dist_path = os.path.join(bufferPath, "{}_box_size_dist.pkl".format(setting_name))
+        self.box_aspect_ratio_split_path = os.path.join(bufferPath, "{}_box_aspect_ratio_split.pkl".format(setting_name))
+        self.box_aspect_ratio_dist_path = os.path.join(bufferPath, "{}_box_aspect_ratio_dist.pkl".format(setting_name))
+        self.hierarchy_sample_path = os.path.join(bufferPath, "{}_hierarchy_samples.pkl".format(setting_name))
+        self.all_features_path = os.path.join(bufferPath, "{}_features.npy".format(setting_name))
         
         self.logger = logging.getLogger('dataCtrler')
 
@@ -215,7 +217,11 @@ class DataCtrler(object):
             directions[np.logical_and(directionCos>directionSplits[i-1], directionCos<=directionSplits[i])] = i-1
         negaYs = np.logical_and(directionVectors[:,1]<0, directions!=0)
         directions[negaYs] = 8-directions[negaYs]
-        directions[directionNorm<0.05] = 8
+        # use box w, h to define min_shift, with a maximum value of 0.05
+        min_shift = (self.raw_labels[self.predict_label_pairs[directionIdxes, 1], 3] + \
+            self.raw_labels[self.predict_label_pairs[directionIdxes, 1], 4]).squeeze() / 10
+        min_shift[min_shift > 0.05] = 0.05
+        directions[directionNorm<min_shift] = 8
         self.directions = -1*np.ones(self.predict_label_pairs.shape[0], dtype=np.int32)
         self.directions[directionIdxes] = directions
         
