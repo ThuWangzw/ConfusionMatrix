@@ -61,6 +61,7 @@ class DataCtrler(object):
         self.box_aspect_ratio_dist_path = os.path.join(bufferPath, "{}_box_aspect_ratio_dist.pkl".format(setting_name))
         self.hierarchy_sample_path = os.path.join(bufferPath, "{}_hierarchy_samples.pkl".format(setting_name))
         self.all_features_path = os.path.join(bufferPath, "{}_features.npy".format(setting_name))
+        self.eval_data = torch.load(os.path.join(rawDataPath, 'eval.pth'))
         
         
         self.logger = logging.getLogger('dataCtrler')
@@ -1039,6 +1040,50 @@ class DataCtrler(object):
                     
         # limit length of images
         return imageids
+    
+    def getClassStatistics(self, query = None):
+        """
+            area: [0, 1, 2, 3] => [all, small, medium, large]
+            mdets: [0, 1, 2] => [1, 10, 100]
+            ap: 1 / 0 => precision / recall
+            iouThr: None / 0.50 / 0.75
+        """
+        iouThrs = np.array([i*0.05+0.5 for i in range(10)])
+        default_query = {
+            "area": 0,
+            "maxDets": 2,
+            "ap": 1
+        }
+        if query is not None:
+            query = {**default_query, **query}
+        area = query['area']
+        mDets = query['maxDets']
+        ap = query['ap']
+        if 'iouThr' in query:
+            iouThr = query['iouThr']
+        else:
+            iouThr = None
+        if ap == 1:
+            # dimension of precision: [TxRxKxAxM]
+            s = self.eval_data['precision']
+            # IoU
+            if iouThr is not None:
+                t = np.where(iouThr == iouThrs)[0]
+                s = s[t]
+            s = s[:,:,:,area,mDets]
+        else:
+            # dimension of recall: [TxKxAxM]
+            s = self.eval_data['recall']
+            if iouThr is not None:
+                t = np.where(iouThr == iouThrs)[0]
+                s = s[t]
+            s = s[:,:,area,mDets]
+        # mean_s = np.mean(s[s>-1])
+        # cacluate AP/AR for all categories
+        if ap == 1:
+            return [float(np.mean(s[:,:,i][s[:,:,i]>-1])) for i in range(80)]
+        else:
+            return [float(np.mean(s[:,i][s[:,i]>-1])) for i in range(80)]
     
 def box_area(box):
     # box = xyxy(4,n)

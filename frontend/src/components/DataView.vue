@@ -17,6 +17,17 @@
                         <i v-if="gettingMatrix||gettingSizeBarchart||gettingAspectRatioBarchart" class="el-icon-loading"></i>
                     </div>
                     <div class="mode-select">
+                        <span class="select-label">Statistics</span>
+                        <el-select v-model="statisticsMode" @change="changeStatisticsMode" size="mini">
+                            <el-option
+                                v-for="item in prMode"
+                                :key="item.value"
+                                :label="item.label"
+                                :value="item.value">
+                            </el-option>
+                        </el-select>
+                    </div>
+                    <div class="mode-select">
                         <span class="select-label">Display Mode</span>
                         <el-button id="log-linear-button" size="mini" @click="changeDisplayMode">{{displayMode}}</el-button>
                     </div>
@@ -72,7 +83,7 @@
             </div>
             <div id="confusion-matrix-container">
                 <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion" :showMode="showMode" @clickCell="clickConfusionCell"
-                    :confusionMatrix="confusionMatrix" :returnMode="returnMode"></confusion-matrix>
+                    :confusionMatrix="confusionMatrix" :returnMode="returnMode" :classStatistics="classStatistics"></confusion-matrix>
             </div>
         </div>
         <div id="grid-view-container">
@@ -115,6 +126,7 @@ export default {
             confusionMatrix: undefined,
             showMode: 'normal',
             returnMode: 'count',
+            statisticsMode: 'mAP',
             dataMode: [{
                 value: 'count',
                 label: '数量',
@@ -136,6 +148,43 @@ export default {
             }, {
                 value: 'avg_predict_aspect_ratio',
                 label: '预测物体框纵横比均值',
+            }],
+            prMode: [{
+                value: 'mAP',
+                label: 'average precision (IoU=.50:.95)',
+            }, {
+                value: 'AP50',
+                label: 'average precision (IoU=.50)',
+            }, {
+                value: 'AP75',
+                label: 'average precision (IoU=.75)',
+            }, {
+                value: 'APS',
+                label: 'average precision (area=small)',
+            }, {
+                value: 'APM',
+                label: 'average precision (area=medium)',
+            }, {
+                value: 'APL',
+                label: 'average precision (area=large)',
+            }, {
+                value: 'AR1',
+                label: 'average recall (maxDet=1)',
+            }, {
+                value: 'AR10',
+                label: 'average recall (maxDet=10)',
+            }, {
+                value: 'AR100',
+                label: 'average recall (maxDet=100)',
+            }, {
+                value: 'ARS',
+                label: 'average recall (area=small)',
+            }, {
+                value: 'ARM',
+                label: 'average recall (area=medium)',
+            }, {
+                value: 'ARL',
+                label: 'average recall (area=large)',
             }],
             query: {},
             labelSizeSplit: [],
@@ -176,6 +225,7 @@ export default {
             hideUnfiltered: false,
             selections: [0],
             selectedSelection: -1,
+            classStatistics: undefined,
         };
     },
     methods: {
@@ -267,6 +317,46 @@ export default {
         },
         changeDataMode: function() {
             this.setConfusionMatrix();
+        },
+        changeStatisticsMode: function() {
+            this.setClassStatistics();
+        },
+        setClassStatistics: function() {
+            const store = this.$store;
+            const that = this;
+            const query = {};
+            if (this.statisticsMode === 'AP50') {
+                query['iouThr'] = 0.5;
+            } else if (this.statisticsMode === 'AP75') {
+                query['iouThr'] = 0.75;
+            } else if (this.statisticsMode === 'APS') {
+                query['area'] = 1;
+            } else if (this.statisticsMode === 'APM') {
+                query['area'] = 2;
+            } else if (this.statisticsMode === 'APL') {
+                query['area'] = 3;
+            } else if (this.statisticsMode === 'AR1') {
+                query['ap'] = 0;
+                query['maxDets'] = 0;
+            } else if (this.statisticsMode === 'AR10') {
+                query['ap'] = 0;
+                query['maxDets'] = 1;
+            } else if (this.statisticsMode === 'AR100') {
+                query['ap'] = 0;
+            } else if (this.statisticsMode === 'ARS') {
+                query['ap'] = 0;
+                query['area'] = 1;
+            } else if (this.statisticsMode === 'ARM') {
+                query['ap'] = 0;
+                query['area'] = 2;
+            } else if (this.statisticsMode === 'ARL') {
+                query['ap'] = 0;
+                query['area'] = 3;
+            }
+            axios.post(store.getters.URL_GET_CLASS_STATISTICS, {query: query})
+                .then(function(response) {
+                    that.classStatistics = response.data;
+                });
         },
         hoverConfusion: function(labelClasses, predictClasses) {
             if (labelClasses === undefined) {
@@ -468,6 +558,7 @@ export default {
     mounted: function() {
         this.setBoxSizeInfo();
         this.setBoxAspectRatioInfo();
+        this.setClassStatistics();
         this.setConfusionMatrix();
         this.setSelections(0);
         // this.setOverallDist();
