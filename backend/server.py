@@ -99,6 +99,13 @@ def grid():
         zoomin = request.json['zoomin']
     return jsonify(dataCtrler.gridZoomIn(nodes, constraints, depth, aspectRatio, zoomin))
 
+@app.route('/api/classStatistics', methods=["POST"])
+def classStatistics():
+    query = None
+    if 'query' in request.json:
+        query = request.json['query']
+    return jsonify(dataCtrler.getClassStatistics(query))
+
 def main():
     parser = argparse.ArgumentParser(description='manual to this script')
     parser.add_argument("--rawDataPath", type=str, default='/data/yukai/UnifiedConfusionMatrix/datasets/coco/')
