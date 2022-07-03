@@ -194,6 +194,42 @@ export default {
             }
             that.getDataAndRender();
         },
+        removeColor: function(root) {
+            const nodename = root.name;
+            const that = this;
+            const dfs = function(root, nodename) {
+                if (root.name === nodename) {
+                    that.initColor(root, that.defaultColor);
+                    return true;
+                }
+                for (const child of root.children) {
+                    if (dfs(child, nodename)) {
+                        let nocolor = true;
+                        for (const child of root.children) {
+                            if (that.hierarchyColors[child.name] != that.defaultColor) {
+                                nocolor = false;
+                                that.hierarchyColors[root.name] = that.hierarchyColors[child.name];
+                                break;
+                            }
+                        }
+                        if (nocolor) {
+                            that.hierarchyColors[root.name] = that.defaultColor;
+                        }
+
+                        return true;
+                    }
+                }
+                return false;
+            };
+            for (const root of this.hierarchy) {
+                dfs(root, nodename);
+            }
+            that.setHierarchyColors(clone(that.hierarchyColors));
+            if (that.nextColor===that.baseColors.length) {
+                that.nextColor = 0;
+            }
+            that.getDataAndRender();
+        },
         getColoredNodes: function() {
             this.coloredNodes = [];
             const that = this;
@@ -296,7 +332,8 @@ export default {
 
                 horizonTextinG.append('text')
                     .attr('x', (d) => (d.children.length===0?0:that.horizonTextAttrs['font-size'] +
-                        that.horizonTextAttrs['iconMargin'])+that.colorCellSize + that.colorCellMargin*2+that.editColorSize)
+                        that.horizonTextAttrs['iconMargin'])+that.colorCellSize + that.colorCellMargin*2+that.editColorSize+
+                        that.horizonTextAttrs['font-size'] +that.horizonTextAttrs['iconMargin'])
                     .attr('y', 0)
                     .attr('dy', that.linesize/2+that.horizonTextAttrs['font-size']/2)
                     .attr('text-anchor', that.horizonTextAttrs['text-anchor'])
@@ -325,9 +362,10 @@ export default {
 
                 horizonTextinG
                     .append('image')
+                    .attr('class', 'wrench')
                     .attr('xlink:href', (d) => '/static/images/wrench.svg')
-                    .attr('x', (d) => d.children.length===0?0:that.horizonTextAttrs['font-size'] +
-                        that.horizonTextAttrs['iconMargin'])
+                    .attr('x', (d) => (d.children.length===0?0:that.horizonTextAttrs['font-size'] +
+                        that.horizonTextAttrs['iconMargin'])+that.horizonTextAttrs['font-size'] +that.horizonTextAttrs['iconMargin'])
                     .attr('y', (that.linesize-that.editColorSize)/2+that.horizonTextAttrs['iconDy'])
                     .attr('width', that.editColorSize)
                     .attr('height', that.editColorSize)
@@ -336,9 +374,24 @@ export default {
                         that.setNewColor(d);
                     });
 
+                horizonTextinG
+                    .append('image')
+                    .attr('class', 'close')
+                    .attr('xlink:href', (d) => '/static/images/close.png')
+                    .attr('x', (d) => d.children.length===0?0:that.horizonTextAttrs['font-size'] +
+                        that.horizonTextAttrs['iconMargin'])
+                    .attr('y', (that.linesize-that.editColorSize)/2+that.horizonTextAttrs['iconDy'])
+                    .attr('width', that.editColorSize)
+                    .attr('height', that.editColorSize)
+                    .attr('cursor', 'pointer')
+                    .on('click', function(e, d) {
+                        that.removeColor(d);
+                    });
+
                 horizonTextinG.append('rect')
                     .attr('x', (d) => (d.children.length===0?0:that.horizonTextAttrs['font-size'] +
-                        that.horizonTextAttrs['iconMargin'])+that.editColorSize+that.colorCellMargin)
+                        that.horizonTextAttrs['iconMargin'])+that.editColorSize+that.colorCellMargin+
+                        that.horizonTextAttrs['font-size'] +that.horizonTextAttrs['iconMargin'])
                     .attr('y', (that.linesize-that.colorCellSize)/2+that.horizonTextAttrs['iconDy'])
                     .attr('width', that.colorCellSize)
                     .attr('height', that.colorCellSize)
