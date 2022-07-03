@@ -453,6 +453,9 @@ export default {
                     })
                     .on('mouseover', function(e, d) {
                         if (that.isHideCell(d)) return;
+                        // eslint-disable-next-line no-invalid-this
+                        const cell = d3.select(this);
+                        cell.select('rect').attr('stroke-width', '3px');
                         const labelTarget = [];
                         const predictTarget = [];
                         for (const name of d.rowNode.leafs) {
@@ -491,6 +494,9 @@ export default {
                     })
                     .on('mouseout', function(e, d) {
                         that.$emit('hoverConfusion', undefined, undefined);
+                        // eslint-disable-next-line no-invalid-this
+                        const cell = d3.select(this);
+                        cell.select('rect').attr('stroke-width', that.cellAttrs['stroke-width']);
                         if (that.showMode === 'direction' && d.info.direction !== undefined) {
                             const directionScale = d3.scaleLinear([0, that.maxCellDirection], [0.4, 1]);
                             // eslint-disable-next-line no-invalid-this
