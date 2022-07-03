@@ -19,6 +19,7 @@
                     text-anchor="middle" font-size="15" font-family="Comic Sans MS" font-weight="normal">Prediction</text>
             </g>
             <g id="matrix-cells-g" transform="translate(0, 0)"></g>
+            <g id="class-statistics-g" transform="translate(0, 0)"></g>
         </g>
     </svg>
 </template>
@@ -46,6 +47,10 @@ export default {
         showMode: {
             type: String,
             default: 'normal',
+        },
+        classStatistics: {
+            type: Array,
+            default: undefined,
         },
     },
     computed: {
@@ -99,6 +104,9 @@ export default {
         mainG: function() {
             return this.svg.select('g#main-g');
         },
+        statG: function() {
+            return this.svg.select('g#class-statistics-g');
+        },
         horizonLegend: function() {
             return this.svg.select('text#horizon-legend');
         },
@@ -151,6 +159,9 @@ export default {
         showMode: function() {
             this.getDataAndRender();
         },
+        classStatistics: function() {
+            this.getDataAndRender();
+        },
     },
     data: function() {
         return {
@@ -161,10 +172,12 @@ export default {
             textMatrixMargin: 10,
             showNodes: [],
             cells: [],
+            classStatShow: [],
             // layout elements
             horizonTextinG: null,
             verticalTextinG: null,
             matrixCellsinG: null,
+            classStatinG: null,
             // render attrs
             horizonTextAttrs: {
                 'gClass': 'horizon-one-line-g',
@@ -204,6 +217,16 @@ export default {
                 'cursor': 'pointer',
                 'direction-color': 'currentColor',
                 'size-color': ['rgb(227,227,227)', 'rgb(255,102,0)', 'rgb(95,198,181)'],
+            },
+            statAttrs: {
+                'gClass': 'class-stat-g',
+                'width': 50,
+                'height': 5,
+                'font-family': 'Comic Sans MS',
+                'font-weight': 'normal',
+                'font-size': 13,
+                'bg-color': 'rgb(227,227,227)',
+                'color': 'steelblue',
             },
             legendExist: false,
             // buffer
@@ -258,18 +281,35 @@ export default {
             return showNodes;
         },
         getDataAndRender: function() {
-            if (this.confusionMatrix===undefined || this.labelHierarchy===undefined) {
+            if (this.confusionMatrix===undefined || this.labelHierarchy===undefined || this.classStatistics === undefined) {
                 return;
             }
             // get nodes to show
             this.showNodes = this.getShowNodes(this.hierarchy);
             // get cells to render
             this.cells = [];
+            this.classStatShow = [];
+            this.classStatShow.push({
+                val: d3.mean(this.classStatistics),
+                row: -1,
+                key: 'all',
+            });
             this.maxCellValue = 0;
             this.maxCellDirection = 0;
             this.maxCellCount = 0;
             for (let i=0; i<this.showNodes.length; i++) {
                 const nodea = this.showNodes[i];
+                if (i < this.showNodes.length - 1) {
+                    let tmp = 0;
+                    for (const leaf of nodea.leafs) {
+                        tmp += this.classStatistics[this.name2index[leaf]];
+                    }
+                    this.classStatShow.push({
+                        val: tmp / nodea.leafs.length,
+                        row: i,
+                        key: nodea.name,
+                    });
+                }
                 for (let j=0; j<this.showNodes.length; j++) {
                     const nodeb = this.showNodes[j];
                     const cell = {
@@ -301,6 +341,7 @@ export default {
             this.horizonTextinG = this.horizonTextG.selectAll('g.'+this.horizonTextAttrs['gClass']).data(this.showNodes, (d)=>d.name);
             this.verticalTextinG = this.verticalTextG.selectAll('g.'+this.verticalTextAttrs['gClass']).data(this.showNodes, (d)=>d.name);
             this.matrixCellsinG = this.matrixCellsG.selectAll('g.'+this.cellAttrs['gClass']).data(this.cells, (d)=>d.key);
+            this.classStatinG = this.statG.selectAll('g.'+this.statAttrs['gClass']).data(this.classStatShow, (d)=>d.key);
             if (!this.legendExist) {
                 this.drawLegend();
                 this.legendExist = true;
@@ -659,6 +700,9 @@ export default {
                     .attr('stroke', that.cellAttrs['slash-text-stroke'])
                     .attr('opacity', (d)=>d.info.count===0&&that.showMode==='normal'?1:0);
 
+                matrixCellsinG.append('title')
+                    .text((d)=>`count: ${d.info.count}`);
+
                 if (that.showMode!=='direction') {
                     matrixCellsinG.select('.dir-circle')
                         .attr('r', 0);
@@ -689,9 +733,39 @@ export default {
                         .on('end', resolve);
                 }
 
+                const classStatinG = that.classStatinG.enter()
+                    .append('g')
+                    .attr('opacity', 0)
+                    .attr('class', that.statAttrs['gClass']);
+                classStatinG.transition()
+                    .duration(that.createDuration)
+                    .attr('opacity', 1)
+                    .on('end', resolve);
+                classStatinG.append('rect')
+                    .attr('class', 'statBgRect')
+                    .attr('x', 0)
+                    .attr('y', (d)=>that.cellAttrs.size*d.row+that.cellAttrs.size-that.statAttrs.height)
+                    .attr('width', that.statAttrs.width)
+                    .attr('height', that.statAttrs.height)
+                    .attr('fill', that.statAttrs['bg-color']);
+                classStatinG.append('rect')
+                    .attr('class', 'statRect')
+                    .attr('x', 0)
+                    .attr('y', (d)=>that.cellAttrs.size*d.row+that.cellAttrs.size-that.statAttrs.height)
+                    .attr('width', (d)=>that.statAttrs.width*d.val)
+                    .attr('height', that.statAttrs.height)
+                    .attr('fill', that.statAttrs['color']);
+                classStatinG.append('text')
+                    .text((d)=>d.val.toFixed(3))
+                    .attr('y', (d)=>that.cellAttrs.size*d.row+that.cellAttrs.size-that.statAttrs.height-3)
+                    .attr('x', 0)
+                    .attr('font-size', that.statAttrs['font-size'])
+                    .attr('font-weight', that.statAttrs['font-weight'])
+                    .attr('font-family', that.statAttrs['font-family']);
+
 
                 if ((that.horizonTextinG.enter().size() === 0) && (that.verticalTextinG.enter().size() === 0) &&
-                    (that.matrixCellsinG.enter().size() === 0)) {
+                    (that.matrixCellsinG.enter().size() === 0) && (that.classStatinG.enter().size() === 0)) {
                     resolve();
                 }
             });
@@ -806,6 +880,9 @@ export default {
                         .duration(that.updateDuration)
                         .attr('opacity', (d)=>d.info.count===0&&that.showMode==='normal'?1:0)
                         .on('end', resolve);
+                    // eslint-disable-next-line no-invalid-this
+                    d3.select(this).select('title')
+                        .text((d)=>`count: ${d.info.count}`);
                 });
 
                 if (that.showMode!=='direction') {
@@ -952,6 +1029,28 @@ export default {
                         }
                     });
                 }
+                that.classStatinG.each(function(d) {
+                    // eslint-disable-next-line no-invalid-this
+                    d3.select(this).select('.statBgRect')
+                        .transition()
+                        .duration(that.updateDuration)
+                        .attr('y', (d)=>that.cellAttrs.size*d.row+that.cellAttrs.size-that.statAttrs.height)
+                        .on('end', resolve);
+                    // eslint-disable-next-line no-invalid-this
+                    d3.select(this).select('.statRect')
+                        .transition()
+                        .duration(that.updateDuration)
+                        .attr('width', (d)=>that.statAttrs.width*d.val)
+                        .attr('y', (d)=>that.cellAttrs.size*d.row+that.cellAttrs.size-that.statAttrs.height)
+                        .on('end', resolve);
+                    // eslint-disable-next-line no-invalid-this
+                    d3.select(this).select('text')
+                        .transition()
+                        .duration(that.updateDuration)
+                        .text((d)=>d.val.toFixed(3))
+                        .attr('y', (d)=>that.cellAttrs.size*d.row+that.cellAttrs.size-that.statAttrs.height-3)
+                        .on('end', resolve);
+                });
             });
         },
         remove: async function() {
@@ -978,8 +1077,15 @@ export default {
                     .remove()
                     .on('end', resolve);
 
+                that.classStatinG.exit()
+                    .transition()
+                    .duration(that.removeDuration)
+                    .attr('opacity', 0)
+                    .remove()
+                    .on('end', resolve);
+
                 if ((that.horizonTextinG.exit().size() === 0) && (that.verticalTextinG.exit().size() === 0) &&
-                    (that.matrixCellsinG.exit().size() === 0)) {
+                    (that.matrixCellsinG.exit().size() === 0) && (that.classStatinG.exit().size() === 0)) {
                     resolve();
                 }
             });
@@ -995,7 +1101,7 @@ export default {
                 let shiftx = 0;
                 let shifty = 0;
                 let scale = 1;
-                if (that.svgWidth > realSize) {
+                if (that.svgWidth*1.1 > realSize) {
                     scale = realSize/that.svgWidth/1.1;
                 } else {
                     scale = 1;
@@ -1018,6 +1124,11 @@ export default {
                 that.matrixCellsG.transition()
                     .duration(that.transformDuration)
                     .attr('transform', `translate(${that.leftCornerSize+that.textMatrixMargin}, ${that.leftCornerSize+that.textMatrixMargin})`)
+                    .on('end', resolve);
+                that.statG.transition()
+                    .duration(that.transformDuration)
+                    .attr('transform', `translate(${that.leftCornerSize+that.textMatrixMargin+that.matrixWidth+10}, 
+                        ${that.leftCornerSize+that.textMatrixMargin})`)
                     .on('end', resolve);
                 that.legendG.transition()
                     .duration(that.transformDuration)
