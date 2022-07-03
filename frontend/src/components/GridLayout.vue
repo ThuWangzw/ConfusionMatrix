@@ -269,8 +269,8 @@ export default {
                     .attr('y', 0)
                     .attr('width', that.gridCellAttrs['size'])
                     .attr('height', that.gridCellAttrs['size'])
-                    .attr('stroke', (d) => that.hierarchyColors[that.labelnames[d.pred]])
-                    .attr('stroke-width', (d) => that.hierarchyColors[that.labelnames[d.pred]]===that.defaultColor?
+                    .attr('stroke', (d) => that.hierarchyColors[that.labelnames[d.label]])
+                    .attr('stroke-width', (d) => that.hierarchyColors[that.labelnames[d.label]]===that.defaultColor?
                         0.2:that.gridCellAttrs['stroke-width'])
                     .attr('fill', 'rgb(255,255,255)')
                     .attr('opacity', 1);
@@ -310,8 +310,8 @@ export default {
                     .transition()
                     .duration(that.updateDuration)
                     .attr('fill', 'rgb(255,255,255)')
-                    .attr('stroke', (d) => that.hierarchyColors[that.labelnames[d.pred]])
-                    .attr('stroke-width', (d) => that.hierarchyColors[that.labelnames[d.pred]]===that.defaultColor?
+                    .attr('stroke', (d) => that.hierarchyColors[that.labelnames[d.label]])
+                    .attr('stroke-width', (d) => that.hierarchyColors[that.labelnames[d.label]]===that.defaultColor?
                         0.2:that.gridCellAttrs['stroke-width'])
                     .attr('opacity', 1)
                     .on('end', resolve);

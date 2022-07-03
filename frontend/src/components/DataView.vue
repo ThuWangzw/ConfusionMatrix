@@ -82,6 +82,12 @@
                     <img id="grid-zoomin-icon" class="grid-icon" src="/static/images/zoomin.svg" @click="initGridLayoutLasso">
                     <img id="grid-home-icon" class="grid-icon" src="/static/images/home.png" @click="gridLayoutZoomin()">
                 </div>
+                <div id="color-legends">
+                    <img class="color-legend-rect" src="/static/images/gt_rectangle.svg"/>
+                    <span class="color-legend-text">Ground Truth</span>
+                    <img class="color-legend-rect" src="/static/images/pred_rectangle.svg"/>
+                    <span class="color-legend-text">Prediction</span>
+                </div>
             </div>
             <div id="grid-layout-container">
                 <grid-layout ref="grid"></grid-layout>
@@ -616,5 +622,23 @@ export default {
 #selection-add-icon {
     margin: 5px 20px 0 0;
     align-self: flex-end;
+}
+
+#color-legends {
+    display: flex;
+    font-weight: normal;
+    font-size: 10px;
+    margin: 0 0 0 80px;
+    align-items: center;
+}
+
+.color-legend-rect {
+    width: 10px;
+    height: 10px;
+    margin: 0 0 0 15px;
+}
+
+.color-legend-text {
+    margin: 0 0 0 3px;
 }
 </style>
