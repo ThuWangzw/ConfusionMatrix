@@ -44,13 +44,15 @@ class DataCtrler(object):
         self.labels_path = os.path.join(self.root_path, "labels")
         self.predicts_path = os.path.join(self.root_path, "predicts")
         self.meta_path = os.path.join(self.root_path, "meta.json")
-        self.features_path = os.path.join(self.root_path, "features")
+        self.features_path = os.path.join(self.root_path, "pr_features")
+        self.gt_features_path = os.path.join(self.root_path, "gt_features")
         if not os.path.exists(self.features_path):
             os.makedirs(self.features_path)
+        if not os.path.exists(self.gt_features_path):
+            os.makedirs(self.gt_features_path)
         if not os.path.exists(bufferPath):
             os.makedirs(bufferPath)
-        setting_name = os.path.basename(os.path.normpath(bufferPath))
-        # setting_name = os.path.basename(os.path.normpath(rawDataPath))
+        setting_name = os.path.basename(os.path.normpath(rawDataPath))
         self.raw_data_path = os.path.join(bufferPath, "{}_raw_data.pkl".format(setting_name))
         self.label_predict_iou_path = os.path.join(bufferPath, "{}_predict_label_iou.pkl".format(setting_name))
         self.box_size_split_path = os.path.join(bufferPath, "{}_box_size_split.pkl".format(setting_name))
@@ -59,6 +61,7 @@ class DataCtrler(object):
         self.box_aspect_ratio_dist_path = os.path.join(bufferPath, "{}_box_aspect_ratio_dist.pkl".format(setting_name))
         self.hierarchy_sample_path = os.path.join(bufferPath, "{}_hierarchy_samples.pkl".format(setting_name))
         self.all_features_path = os.path.join(bufferPath, "{}_features.npy".format(setting_name))
+        
         
         self.logger = logging.getLogger('dataCtrler')
 
@@ -117,23 +120,6 @@ class DataCtrler(object):
         self.index2image = ['']*len(self.image2index)
         for image, index in self.image2index.items():
             self.index2image[index] = image
-        
-        # read feature data
-        if os.path.exists(self.all_features_path):
-            self.features = np.load(self.all_features_path)
-        else:
-            self.features = np.zeros((self.raw_predicts.shape[0], 256))
-            for name in os.listdir(self.images_path):
-                feature_path = os.path.join(self.features_path, name.split('.')[0]+'.npy')
-                imageid = self.image2index[name.split('.')[0]]
-                boxCount = self.imageid2raw_predict[imageid][1]-self.imageid2raw_predict[imageid][0]
-                if not os.path.exists(feature_path):
-                    # WARNING
-                    self.logger.warning("can't find feature: %s" % feature_path)
-                    self.features[self.imageid2raw_predict[imageid][0]:self.imageid2raw_predict[imageid][1]] = np.random.rand(boxCount, 256)
-                else:
-                    self.features[self.imageid2raw_predict[imageid][0]:self.imageid2raw_predict[imageid][1]] = np.load(feature_path)
-            np.save(self.all_features_path, self.features)
         
         ## init meta data
         with open(self.meta_path) as f:
@@ -225,12 +211,45 @@ class DataCtrler(object):
         self.directions = -1*np.ones(self.predict_label_pairs.shape[0], dtype=np.int32)
         self.directions[directionIdxes] = directions
         
+        # read feature data
+        if os.path.exists(self.all_features_path):
+            self.features = np.load(self.all_features_path)
+        else:
+            self.features = np.zeros((self.predict_label_pairs.shape[0], 256))
+            for name in os.listdir(self.images_path):
+                feature_path = os.path.join(self.features_path, name.split('.')[0]+'.npy')
+                imageid = self.image2index[name.split('.')[0]]
+                boxCount = self.imageid2raw_predict[imageid][1]-self.imageid2raw_predict[imageid][0]
+                if not os.path.exists(feature_path):
+                    # WARNING
+                    self.logger.warning("can't find feature: %s" % feature_path)
+                    self.features[self.imageid2raw_predict[imageid][0]:self.imageid2raw_predict[imageid][1]] = np.random.rand(boxCount, 256)
+                else:
+                    self.features[self.imageid2raw_predict[imageid][0]:self.imageid2raw_predict[imageid][1]] = np.load(feature_path)
+            
+            self.gt_features = np.zeros((self.raw_labels.shape[0], 256))
+            for name in os.listdir(self.images_path):
+                feature_path = os.path.join(self.gt_features_path, name.split('.')[0]+'.npy')
+                imageid = self.image2index[name.split('.')[0]]
+                boxCount = self.imageid2raw_label[imageid][1]-self.imageid2raw_label[imageid][0]
+                if not os.path.exists(feature_path):
+                    # WARNING
+                    self.logger.warning("can't find feature: %s" % feature_path)
+                    self.gt_features[self.imageid2raw_label[imageid][0]:self.imageid2raw_label[imageid][1]] = np.random.rand(boxCount, 256)
+                else:
+                    self.gt_features[self.imageid2raw_label[imageid][0]:self.imageid2raw_label[imageid][1]] = np.load(feature_path)
+            unmatch_gt_features = self.gt_features[self.predict_label_pairs[len(self.raw_predicts):,1]]
+            self.features[len(self.raw_predicts):] = unmatch_gt_features
+            np.save(self.all_features_path, self.features)
+        
         # hierarchy sampling
         self.sampler = HierarchySampling()
         if os.path.exists(self.hierarchy_sample_path):
             self.sampler.load(self.hierarchy_sample_path)
         else:
             labels = self.raw_predicts[:, 0].astype(np.int32)
+            unmatch_labels = self.raw_labels[self.predict_label_pairs[len(self.raw_predicts):,1], 0].astype(np.int32)
+            labels = np.concatenate((labels, unmatch_labels), axis=0)
             self.sampler.fit(self.features, labels, 400)
             self.sampler.dump(self.hierarchy_sample_path)
           
@@ -701,13 +720,15 @@ class DataCtrler(object):
         return labelTransform.astype(int)
         
     def gridZoomIn(self, nodes, constraints, depth, aspectRatio, zoomin):
-        allpreds = self.raw_predicts[self.predict_label_pairs[:len(self.raw_predicts),0], 0].astype(np.int32)
-        alllabels = self.raw_labels[self.predict_label_pairs[:len(self.raw_predicts),1], 0].astype(np.int32)
+        allpreds = self.raw_predicts[self.predict_label_pairs[:,0], 0].astype(np.int32)
+        allpreds[len(self.raw_predicts):] = len(self.names)-1
+        alllabels = self.raw_labels[self.predict_label_pairs[:,1], 0].astype(np.int32)
         negaLabels = np.where(self.predict_label_pairs[:len(self.raw_predicts),1]==-1)[0]
         alllabels[negaLabels] = len(self.names)-1
         allconfidence = self.raw_predicts[self.predict_label_pairs[:,0], 1]
+        allconfidence[self.predict_label_pairs[len(self.raw_predicts):,0]] = 0
         allfeatures = self.features
-        neighbors = self.sampler.zoomin(nodes, 225, self.features)
+        neighbors = self.sampler.zoomin(nodes, 225, allfeatures)
         zoomInConstraints = None
         zoomInConstraintX = None
         if constraints is not None:
@@ -849,13 +870,18 @@ class DataCtrler(object):
         }
         return res
         
+    def pairIDtoImageID(self, boxID: int):
+        if boxID>=len(self.raw_predicts):
+            return self.raw_label2imageid[self.predict_label_pairs[boxID,1]]
+        return self.raw_predict2imageid[boxID]
+        
     def getImagebox(self, boxID: int, showall: str):
         boxes = []
         finalBoxes = []
-        img = Image.open(os.path.join(self.images_path, self.index2image[self.raw_predict2imageid[boxID]]+'.jpg'))
+        img = Image.open(os.path.join(self.images_path, self.index2image[self.pairIDtoImageID(boxID)]+'.jpg'))
         amp = [img.width,img.height]
         if showall == 'all':
-            imgID = self.raw_predict2imageid[boxID]
+            imgID = self.pairIDtoImageID(boxID)
             boxes = self.predict_label_pairs[self.imageid2raw_predict[imgID][0]:self.imageid2raw_predict[imgID][1]].tolist()
         elif showall == 'single':
             boxes.append(self.predict_label_pairs[boxID].tolist())
@@ -884,12 +910,12 @@ class DataCtrler(object):
         
         
     def getImage(self, boxID: int, show: str, showall: str, hideBox = False):
-        img = Image.open(os.path.join(self.images_path, self.index2image[self.raw_predict2imageid[boxID]]+'.jpg'))
+        img = Image.open(os.path.join(self.images_path, self.index2image[self.pairIDtoImageID(boxID)]+'.jpg'))
         anno = Annotator(np.array(img), pil=True)
         amp = np.array([img.width,img.height,img.width,img.height])
         boxes = []
         if showall == 'all':
-            imgID = self.raw_predict2imageid[boxID]
+            imgID = self.pairIDtoImageID(boxID)
             boxes = self.predict_label_pairs[self.imageid2raw_predict[imgID][0]:self.imageid2raw_predict[imgID][1]]
         elif showall == 'single':
             boxes.append(self.predict_label_pairs[boxID])
@@ -915,7 +941,7 @@ class DataCtrler(object):
     def getImages(self, boxIDs: list, show: str):
         base64Imgs = []
         for boxID in boxIDs:
-            img = Image.open(os.path.join(self.images_path, self.index2image[self.raw_predict2imageid[boxID]]+'.jpg'))
+            img = Image.open(os.path.join(self.images_path, self.index2image[self.pairIDtoImageID(boxID)]+'.jpg'))
             anno = Annotator(np.array(img), pil=True)
             amp = np.array([img.width,img.height,img.width,img.height])
             predictBox, labelBox = self.predict_label_pairs[boxID]
@@ -971,14 +997,12 @@ class DataCtrler(object):
         Returns:
             list: images id
         """ 
-        allpreds = self.raw_predicts[self.predict_label_pairs[:len(self.raw_predicts),0], 0].astype(np.int32)
-        alllabels = self.raw_labels[self.predict_label_pairs[:len(self.raw_predicts),1], 0].astype(np.int32)
+        allpreds = self.raw_predicts[self.predict_label_pairs[:,0], 0].astype(np.int32)
+        allpreds[len(self.raw_predicts):] = len(self.names)-1
+        alllabels = self.raw_labels[self.predict_label_pairs[:,1], 0].astype(np.int32)
         negaLabels = np.where(self.predict_label_pairs[:len(self.raw_predicts),1]==-1)[0]
         alllabels[negaLabels] = len(self.names)-1
         filtered , unmatch_predict, unmatch_label = self.filterSamples(query)
-        flags = np.zeros(len(allpreds), dtype=np.int8)
-        flags[filtered] = 1
-        flags[unmatch_predict] = 1
         # convert list of label names to dict
         labelNames = self.names
         name2idx = {}
@@ -996,7 +1020,7 @@ class DataCtrler(object):
         if alllabels is not None and allpreds is not None:
             n = len(alllabels)
             for i in range(n):
-                if alllabels[i] in labelSet and allpreds[i] in predSet and flags[i] == 1:
+                if alllabels[i] in labelSet and allpreds[i] in predSet:
                     imageids.append(i)
                     
         # limit length of images
