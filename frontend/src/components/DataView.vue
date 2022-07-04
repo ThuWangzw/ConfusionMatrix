@@ -1,14 +1,14 @@
 <template>
     <div id="data-content">
         <div id="left-widgets">
-            <div id="toolbox-container">
+            <!-- <div id="toolbox-container">
                 <div class="toolbar-title">Settings</div>
                 <div class="toolbox">
                     <div class="mode-select">
                         <span class="select-label">Matrix Encoding</span>
                         <el-select v-model="returnMode" @change="changeDataMode" size="mini">
                             <el-option
-                                v-for="item in dataMode"
+                                v-for="item in dataModes"
                                 :key="item.value"
                                 :label="item.value"
                                 :value="item.value">
@@ -20,7 +20,7 @@
                         <span class="select-label">Statistics</span>
                         <el-select v-model="statisticsMode" @change="changeStatisticsMode" size="mini">
                             <el-option
-                                v-for="item in prMode"
+                                v-for="item in prModes"
                                 :key="item.value"
                                 :label="item.label"
                                 :value="item.value">
@@ -36,10 +36,28 @@
                         <el-button id="hide-unfiltered-button" size="mini" @click="changeHideUnfiltered">{{hideUnfiltered}}</el-button>
                     </div>
                 </div>
-            </div>
+            </div> -->
 
             <div id="barcharts-container">
-                <div class="toolbar-title">Filters</div>
+                <div class="toolbar-title">
+                    <span>Filters</span>
+                    <select v-model="displayMode" @change="changeDisplayMode" style="margin-left: 15px; height: 17px; font-size: 10px">
+                        <option
+                            v-for="item in displayModes"
+                            :key="item.value"
+                            :label="item.label"
+                            :value="item.value">
+                        </option>
+                    </select>
+                    <select v-model="hideUnfiltered" @change="changeHideUnfiltered" style="margin-left: 15px; height: 17px; font-size: 10px">
+                        <option
+                            v-for="item in filterModes"
+                            :key="item.value"
+                            :label="item.label"
+                            :value="item.value">
+                        </option>
+                    </select>
+                </div>
                 <div id="scented-barcharts">
                     <scented-barchart ref="label-size-hist" :barNum="barNum" :dataRangeAll="labelSizeRange" :hideUnfiltered="hideUnfiltered"
                         :allData="labelSizeAll" :title="'GT_size'" queryKey="label_size" :overallDist="labelSizeOverallDist"
@@ -63,7 +81,7 @@
             <div id="selection-container">
                 <div class="toolbar-title">Selections</div>
                 <div id="selections">
-                <img id="selection-add-icon" class="grid-icon" src="/static/images/plus.svg" @click="addSelection">
+                    <img id="selection-add-icon" class="grid-icon" src="/static/images/plus.svg" @click="addSelection">
                     <div v-for="index in selections" :key="index" >
                         <selection :id="index" :confusionMatrix="confusionMatrix" :ref="'selection'+index"
                          @selectSvg="setSelections"></selection>
@@ -80,6 +98,22 @@
                     <img id="matrix-direction-icon" class="grid-icon" src="/static/images/directions.svg" @click="changeShowDirection">
                     <img id="matrix-size-comparison-icon" class="grid-icon" src="/static/images/circle.png" @click="changeShowSizeComparison">
                 </div>
+                <select v-model="returnMode" @change="changeDataMode" style="margin-left: 15px; height: 17px; font-size: 10px">
+                    <option
+                        v-for="item in dataModes"
+                        :key="item.value"
+                        :label="item.value"
+                        :value="item.value">
+                    </option>
+                </select>
+                <select v-model="statisticsMode" @change="changeStatisticsMode" style="margin-left: 15px; height: 17px; font-size: 10px">
+                    <option
+                        v-for="item in prModes"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value">
+                    </option>
+                </select>
             </div>
             <div id="confusion-matrix-container">
                 <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion" :showMode="showMode" @clickCell="clickConfusionCell"
@@ -133,7 +167,7 @@ export default {
             showMode: 'normal',
             returnMode: 'count',
             statisticsMode: 'mAP',
-            dataMode: [{
+            dataModes: [{
                 value: 'count',
                 label: '数量',
             }, {
@@ -155,7 +189,7 @@ export default {
                 value: 'avg_predict_aspect_ratio',
                 label: '预测物体框纵横比均值',
             }],
-            prMode: [{
+            prModes: [{
                 value: 'mAP',
                 label: 'average precision (IoU=.50:.95)',
             }, {
@@ -191,6 +225,20 @@ export default {
             }, {
                 value: 'ARL',
                 label: 'average recall (area=large)',
+            }],
+            displayModes: [{
+                value: 'linear',
+                label: 'linear',
+            }, {
+                value: 'log',
+                label: 'log',
+            }],
+            filterModes: [{
+                value: false,
+                label: 'show unfiltered',
+            }, {
+                value: true,
+                label: 'hide unfiltered',
             }],
             query: {},
             labelSizeSplit: [],
@@ -236,13 +284,13 @@ export default {
     },
     methods: {
         changeDisplayMode: function() {
-            if (this.displayMode === 'log') this.displayMode = 'linear';
-            else this.displayMode = 'log';
-            document.getElementById('log-linear-button').blur();
+            // if (this.displayMode === 'log') this.displayMode = 'linear';
+            // else this.displayMode = 'log';
+            // document.getElementById('log-linear-button').blur();
         },
         changeHideUnfiltered: function() {
-            this.hideUnfiltered = !this.hideUnfiltered;
-            document.getElementById('hide-unfiltered-button').blur();
+            // this.hideUnfiltered = !this.hideUnfiltered;
+            // document.getElementById('hide-unfiltered-button').blur();
         },
         changeShowDirection: function() {
             this.showMode = 'direction';
@@ -613,7 +661,7 @@ export default {
 }
 
 #barcharts-container {
-    margin: 5px 0 0 0;
+    margin: 0 0 0 0;
     display: flex;
     flex-direction: column;
     justify-content: flex-start;

@@ -1162,7 +1162,7 @@ export default {
                     .on('end', resolve);
                 that.statG.transition()
                     .duration(that.transformDuration)
-                    .attr('transform', `translate(${that.leftCornerSize+that.textMatrixMargin+that.matrixWidth+10}, 
+                    .attr('transform', `translate(${that.leftCornerSize+that.textMatrixMargin+that.matrixWidth+20}, 
                         ${that.leftCornerSize+that.textMatrixMargin})`)
                     .on('end', resolve);
                 that.legendG.transition()
