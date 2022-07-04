@@ -726,8 +726,8 @@ class DataCtrler(object):
         alllabels = self.raw_labels[self.predict_label_pairs[:,1], 0].astype(np.int32)
         negaLabels = np.where(self.predict_label_pairs[:len(self.raw_predicts),1]==-1)[0]
         alllabels[negaLabels] = len(self.names)-1
-        allconfidence = self.raw_predicts[self.predict_label_pairs[:,0], 1]
-        allconfidence[self.predict_label_pairs[len(self.raw_predicts):,0]] = 0
+        allconfidence = np.zeros(len(self.predict_label_pairs))
+        allconfidence[:len(self.raw_predicts)] = self.raw_predicts[:, 1]
         allfeatures = self.features
         neighbors = self.sampler.zoomin(nodes, 225, allfeatures)
         zoomInConstraints = None
