@@ -542,6 +542,7 @@ export default {
                     width: d.box[2]*realwidth,
                     height: d.box[3]*realHeight,
                     ispred: d.type==='pred',
+                    class: d.class,
                 };
             });
             svg.selectAll('g.imagebox').remove();
@@ -660,7 +661,9 @@ export default {
                         .container(svg.node())
                         .on('start end', rectMoveStartEnd)
                         .on('drag', rectMoving),
-                    );
+                    )
+                    .append('title')
+                    .text((d)=>d.class);
 
                 newRects
                     .append('g')
