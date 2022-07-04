@@ -600,11 +600,27 @@ export default {
                     matrixCellsinG.filter((d) => d.info.sizeDist!==undefined)
                         .append('polyline')
                         .attr('class', 'dist')
-                        .attr('id', 'distPolyline-' + i)
-                        .attr('stroke-width', (d) => d.info.sizeDist[i]>=1000?0.5+Math.log10(d.info.sizeDist[i]/1000):0)
+                        .attr('id', 'distPolyline-' + i + '-0')
+                        .attr('stroke-width', (d) => d.info.sizeDist[i]>=1000?1:0)
                         .attr('stroke', 'rgb(75,75,75)')
                         .attr('fill', 'rgb(255,255,255)')
-                        .attr('points', `${3+5*i},4 ${5+5*i},2 ${7+5*i},4`);
+                        .attr('points', `${3+5*i},6 ${5+5*i},4.5 ${7+5*i},6`);
+                    matrixCellsinG.filter((d) => d.info.sizeDist!==undefined)
+                        .append('polyline')
+                        .attr('class', 'dist')
+                        .attr('id', 'distPolyline-' + i + '-1')
+                        .attr('stroke-width', (d) => d.info.sizeDist[i]>=4000?1:0)
+                        .attr('stroke', 'rgb(75,75,75)')
+                        .attr('fill', 'rgb(255,255,255)')
+                        .attr('points', `${3+5*i},4 ${5+5*i},2.5 ${7+5*i},4`);
+                    matrixCellsinG.filter((d) => d.info.sizeDist!==undefined)
+                        .append('polyline')
+                        .attr('class', 'dist')
+                        .attr('id', 'distPolyline-' + i + '-2')
+                        .attr('stroke-width', (d) => d.info.sizeDist[i]>=10000?1:0)
+                        .attr('stroke', 'rgb(75,75,75)')
+                        .attr('fill', 'rgb(255,255,255)')
+                        .attr('points', `${3+5*i},2 ${5+5*i},0.5 ${7+5*i},2`);
                 }
                 matrixCellsinG.filter((d) => d.info.sizeDist!==undefined)
                     .append('line')
@@ -1011,20 +1027,39 @@ export default {
                         }
                         for (let i = 0; i < 5; ++i) {
                             // eslint-disable-next-line no-invalid-this
-                            d3.select(this).selectAll('.dist')
-                                .attr('opacity', 1);
-                            // eslint-disable-next-line no-invalid-this
                             d3.select(this).select(`#distRect-${i}`)
                                 .transition()
                                 .duration(that.updateDuration)
+                                .attr('opacity', 1)
                                 .attr('height', (d) => that.getDistHeight(d.info.sizeDist[i]))
                                 .attr('y', (d) => that.cellAttrs.size - 1 - that.getDistHeight(d.info.sizeDist[i]))
                                 .on('end', resolve);
                             // eslint-disable-next-line no-invalid-this
-                            d3.select(this).select(`#distPolyline-${i}`)
+                            d3.select(this).select(`#distPolyline-${i}-0`)
                                 .transition()
                                 .duration(that.updateDuration)
-                                .attr('stroke-width', (d) => d.info.sizeDist[i]>=1000?0.5+Math.log10(d.info.sizeDist[i]/1000):0)
+                                .attr('opacity', (d) => d.info.sizeDist[i]>=1000?1:0)
+                                .attr('stroke-width', (d) => d.info.sizeDist[i]>=1000?1:0)
+                                .on('end', resolve);
+                            // eslint-disable-next-line no-invalid-this
+                            d3.select(this).select(`#distPolyline-${i}-1`)
+                                .transition()
+                                .duration(that.updateDuration)
+                                .attr('opacity', (d) => d.info.sizeDist[i]>=4000?1:0)
+                                .attr('stroke-width', (d) => d.info.sizeDist[i]>=4000?1:0)
+                                .on('end', resolve);
+                            // eslint-disable-next-line no-invalid-this
+                            d3.select(this).select(`#distPolyline-${i}-2`)
+                                .transition()
+                                .duration(that.updateDuration)
+                                .attr('opacity', (d) => d.info.sizeDist[i]>=10000?1:0)
+                                .attr('stroke-width', (d) => d.info.sizeDist[i]>=10000?1:0)
+                                .on('end', resolve);
+                            // eslint-disable-next-line no-invalid-this
+                            d3.select(this).select('line')
+                                .transition()
+                                .duration(that.updateDuration)
+                                .attr('opacity', 1)
                                 .on('end', resolve);
                         }
                     });
@@ -1278,7 +1313,7 @@ export default {
         },
         getDistHeight: function(y) {
             if (y===0) return 0;
-            return d3.scaleLinear([0, 1000], [2, this.cellAttrs.size-6])(Math.min(y, 1000));
+            return d3.scaleLinear([0, 1000], [2, this.cellAttrs.size-8])(Math.min(y, 1000));
         },
     },
 };
