@@ -886,11 +886,8 @@ class DataCtrler(object):
             boxes = self.predict_label_pairs[self.imageid2raw_predict[imgID][0]:self.imageid2raw_predict[imgID][1]]
             gt_s = self.imageid2raw_label[imgID][0]
             gt_e = self.imageid2raw_label[imgID][1]
-            gt_boxes = []
-            for pair in self.predict_label_pairs[len(self.raw_predicts):]:
-                if pair[1]>= gt_s and pair[1]<gt_e:
-                    gt_boxes.append(pair)
-            boxes = np.concatenate((boxes, np.array(gt_boxes)), axis=0).tolist()
+            gt_boxes = self.predict_label_pairs[len(self.raw_predicts):][np.logical_and(gt_s <= self.predict_label_pairs[len(self.raw_predicts):, 1], self.predict_label_pairs[len(self.raw_predicts):, 1] < gt_e)]
+            boxes = np.concatenate((boxes, gt_boxes), axis=0).tolist()
         elif showall == 'single':
             boxes.append(self.predict_label_pairs[boxID].tolist())
         for box in boxes:
