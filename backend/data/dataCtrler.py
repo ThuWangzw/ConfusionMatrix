@@ -898,7 +898,8 @@ class DataCtrler(object):
                 finalBoxes.append({
                     "box": predictXYXY,
                     "size": float(self.predict_size[predictBox]),
-                    "type": "pred"
+                    "type": "pred",
+                    "class": self.names[int(self.raw_predicts[predictBox, 0])]
                 })
             labelXYXY = None
             if labelBox != -1:
@@ -906,7 +907,8 @@ class DataCtrler(object):
                 finalBoxes.append({
                     "box": labelXYXY,
                     "size": float(self.label_size[labelBox]),
-                    "type": "gt"
+                    "type": "gt",
+                    "class": self.names[int(self.raw_labels[labelBox, 0])]
                 })
         return {
             "boxes": finalBoxes,

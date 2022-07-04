@@ -291,7 +291,7 @@ export default {
             this.classStatShow = [];
             this.classStatShow.push({
                 val: d3.mean(this.classStatistics),
-                row: -1,
+                row: -1.5,
                 key: 'all',
             });
             this.maxCellValue = 0;
@@ -653,7 +653,7 @@ export default {
                         .attr('fill', 'none')
                         .attr('stroke', 'currentColor')
                         .attr('marker-end', 'url(#arrow)')
-                        .attr('opacity', (d)=>d.info.direction===undefined?0:1)
+                        .attr('opacity', (d)=>d.info.count===0||d.info.direction===undefined||d.info.direction[i]===0?0:1)
                         .attr('transform', (d)=>`translate(${that.cellAttrs['size']/2},${that.cellAttrs['size']/2})
                                                  scale(${d.info.direction===undefined?0:Math.min(1, directionScale(d3.sum(d.info.direction)))})
                                                  translate(${-that.cellAttrs['size']/2},${-that.cellAttrs['size']/2})
