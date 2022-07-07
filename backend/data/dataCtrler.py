@@ -77,8 +77,8 @@ class DataCtrler(object):
                 self.image2index[name.split('.')[0]]=id
                 id += 1
             ## read raw labels
-            # format: label, box(cx, cy, w, h)
-            self.raw_labels = np.zeros((0,5), dtype=np.float32)
+            # format: label, box(cx, cy, w, h), isCrowd(0/1)
+            self.raw_labels = np.zeros((0,6), dtype=np.float32)
             self.raw_label2imageid = np.zeros(0, dtype=np.int32)
             self.imageid2raw_label = np.zeros((id, 2), dtype=np.int32)
             for imageName in os.listdir(self.labels_path):
@@ -86,7 +86,7 @@ class DataCtrler(object):
                 imageid = self.image2index[imageName.split('.')[0]]
                 with open(label_path) as f:
                     lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
-                    if any([len(x)>5 for x in lb]):
+                    if any([len(x)>6 for x in lb]):
                         #TODO segmentation
                         pass
                     lb = np.array(lb, dtype=np.float32)
@@ -262,67 +262,113 @@ class DataCtrler(object):
             
     def compute_label_predict_pair(self):
 
-        def compute_per_image(detections, labels):
-
-            num_detections = len(detections)
-            # as we only have the logit related to one class, not all the logits, so here we assume the other as 0
-            out_prob = np.zeros((num_detections, len(self.classID2Idx)-1))  # [num_detections, num_classes]
-            for i in range(num_detections):
-                out_prob[i, int(detections[i, 0])] = detections[i, 1] # without sigmoid here
-            out_bbox = detections[:, 2:6]  # [num_detections, 4]
-
-            # Also concat the target labels and boxes
-            tgt_ids = labels[:, 0].astype(np.int32)
-            tgt_bbox = labels[:, 1:5]
-
-            # Compute the classification cost.
-            alpha = 0.25
-            gamma = 2.0
-            neg_cost_class = (1 - alpha) * (out_prob ** gamma) * (-np.log(1 - out_prob + 1e-8))
-            pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-np.log(out_prob + 1e-8))
-            cost_class = pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]
-
-            # Compute the L1 cost between boxes
-            cost_bbox = torch.cdist(torch.from_numpy(out_bbox), torch.from_numpy(tgt_bbox), p=1)
-
-            # Compute the giou cost betwen boxes
-            cost_iou = -generalized_box_iou(out_bbox, tgt_bbox)
-
-            # Final cost matrix
-            C = 5.0 * cost_bbox + 2.0 * cost_class + 2.0 * cost_iou
-
-            from scipy.optimize import linear_sum_assignment
-            matches = np.array(linear_sum_assignment(C)).transpose((1, 0))
-            matches = np.concatenate((matches.astype(np.float64), np.array([-cost_iou[matches[i, 0], matches[i, 1]] for i in range(len(matches))]).reshape(-1,1)), axis=1)
-
-            # Updated version of https://github.com/kaanakan/object_detection_confusion_matrix
-            # iou = box_iou(detections[:, 2:6], labels[:, 1:5])
-            # x = np.where(iou > self.iou_threshold_miss)
-            # if x[0].shape[0]:
-            #     matches = np.concatenate((np.stack(x, 1), iou[x[0], x[1]][:, None]), 1)
-            #     if x[0].shape[0] > 1:
-            #         matches = matches[matches[:, 2].argsort()[::-1]]
-            #         matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
-            #         matches = matches[matches[:, 2].argsort()[::-1]]
-            #         matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
-            # else:
-            #     matches = np.zeros((0, 3))
-
-            final_match = -1*np.ones((len(detections),2), dtype=np.int32)
-            ious = np.zeros(len(detections))
-            final_match[:,0] = np.arange(len(detections), dtype=np.int32)
-            for match in matches:
-                if match[2] < self.iou_threshold_miss:
+        def compute_per_image(detections, labels, pos_thres, bg_thres=0.1, max_det=100):
+            pr_bbox = detections[:, 2:6]
+            pr_cat = detections[:, 0].astype(np.int32)
+            pr_conf = detections[:, 1]
+            gt_bbox = labels[:, 1:5]
+            gt_iscrowd = labels[:,5].astype(np.int32)
+            gt_cat = labels[:,0].astype(np.int32)
+            pr_uni_cat = np.unique(detections[:, 0].astype(np.int32))
+            pr_type = np.zeros(len(detections), dtype=np.int32) # record different type of detections, e.g., TP, dup, confusion, etc.
+            # -1 for ignored, 0 for abandoned, 1 for TP, 2~6 for Cls(confusion), Loc, Cls+Loc, Dup, Bkgd
+            gt_match = -np.ones(len(labels), dtype=np.int32)
+            pr_match = -np.ones(len(detections), dtype=np.int32)
+            iou_pair = cal_iou(pr_bbox, gt_bbox, gt_iscrowd)
+            pr_abandon = np.zeros(0, dtype=np.int32) # abandon the predictions of each category out of maxdet
+            # within category match => TP
+            for _cat in pr_uni_cat:
+                # get detections with category _cat
+                pr_idx = np.where(pr_cat == _cat)[0]
+                gt_idx = np.where(gt_cat == _cat)[0]
+                if len(gt_idx) == 0:
                     continue
-                final_match[int(match[0])] = match[:2].astype(np.int32)
-                ious[int(match[0])] = match[2]
-            return final_match, ious
+                # sort by detection confidence, select a maximum of max_det
+                pr_idx = pr_idx[np.argsort(-pr_conf[pr_idx])]
+                if len(pr_idx) > max_det:
+                    pr_abandon = np.concatenate((pr_abandon, pr_idx[max_det:]))
+                    pr_idx = pr_idx[:max_det]
+                # sort by isCrowd attr, put crowd to the back
+                gt_idx = gt_idx[np.argsort(gt_iscrowd[gt_idx])]
+                for _pr_idx in pr_idx:
+                    t = pos_thres
+                    m = -1
+                    # the same as pycocotool
+                    for _gt_idx in gt_idx:
+                        if gt_match[_gt_idx] >= 0 and gt_iscrowd[_gt_idx] == 0:
+                            continue
+                        if m > -1 and gt_iscrowd[m] == 0 and gt_iscrowd[_gt_idx] == 1:
+                            break
+                        iou = iou_pair[_pr_idx, _gt_idx]
+                        if iou < t:
+                            continue
+                        t = iou
+                        m = _gt_idx
+                    if m == -1:
+                        continue
+                    gt_match[m] = _pr_idx
+                    pr_match[_pr_idx] = m
+                    if gt_iscrowd[m]:
+                        pr_type[_pr_idx] = -1 # ignore predictions matched with crowd
+                    else:
+                        pr_type[_pr_idx] = 1 # TP
+            # inter category match for FP
+            # get all unmatched predictions that were not abandoned
+            pr_idx = np.setdiff1d(np.where(pr_match == -1)[0], pr_abandon)
+            pr_idx = pr_idx[np.argsort(-pr_conf[pr_idx])]
+            # exclude all iscrowd gt, this accords with TIDE
+            gt_idx = np.where(gt_iscrowd == 0)[0]
+            for _pr_idx in pr_idx:
+                if len(gt_idx) == 0:
+                    pr_type[_pr_idx] = 6 # background error, for no gt in the image
+                    continue
+                t = -1
+                m = -1
+                # find gt with largest IoU
+                for _gt_idx in gt_idx:
+                    iou = iou_pair[_pr_idx, _gt_idx]
+                    if iou < t:
+                        continue
+                    t = iou
+                    m = _gt_idx
+                if t < bg_thres: # background
+                    pr_type[_pr_idx] = 6
+                elif t > pos_thres: # right location
+                    pr_match[_pr_idx] = m
+                    if gt_cat[m] == pr_cat[_pr_idx]: # duplicate prediction
+                        pr_type[_pr_idx]  = 5
+                    else: # confusion
+                        pr_type[_pr_idx]  = 2
+                        if gt_match[m] == -1:
+                            gt_match[m] = _pr_idx # mark gt as used
+                else: # Loc error
+                    if gt_cat[m] == pr_cat[_pr_idx]: # Location error
+                        pr_type[_pr_idx]  = 3
+                        pr_match[_pr_idx] = m
+                        if gt_match[m] == -1:
+                            gt_match[m] = _pr_idx
+                    else: # Class + Location error
+                        # TODO: now consider this kind as background error
+                        # pr_match[_pr_idx] = m
+                        pr_type[_pr_idx]  = 4
+                        # do not mark gt as used here
+
+            ret_ious = np.zeros(len(detections))
+            ret_match = -1*np.ones((len(detections), 2), dtype=np.int32)
+            for _pr_idx in range(len(detections)):
+                ret_match[_pr_idx] = np.array([_pr_idx, pr_match[_pr_idx]])
+                if pr_match[_pr_idx] == -1:
+                    continue
+                ret_ious[_pr_idx] = iou_pair[_pr_idx, pr_match[_pr_idx]]
+            return ret_match, ret_ious
         
         self.predict_label_pairs = -1*np.ones((len(self.raw_predicts), 2), dtype=np.int32)
         self.predict_label_ious = np.zeros(len(self.raw_predicts))
+        pos_thres = 0.5
+        bg_thres = 0.1
         for imageidx in range(len(self.image2index)):
             matches, ious = compute_per_image(self.raw_predicts[self.imageid2raw_predict[imageidx][0]:self.imageid2raw_predict[imageidx][1]],
-                                        self.raw_labels[self.imageid2raw_label[imageidx][0]:self.imageid2raw_label[imageidx][1]])
+                                        self.raw_labels[self.imageid2raw_label[imageidx][0]:self.imageid2raw_label[imageidx][1]], pos_thres, bg_thres)
             negaWeights = np.where(matches[:,1]==-1)[0]
             if len(matches)>0:
                 matches[:,1]+=self.imageid2raw_label[imageidx][0]
@@ -899,7 +945,9 @@ class DataCtrler(object):
                     "box": predictXYXY,
                     "size": float(self.predict_size[predictBox]),
                     "type": "pred",
-                    "class": self.names[int(self.raw_predicts[predictBox, 0])]
+                    "class": self.names[int(self.raw_predicts[predictBox, 0])],
+                    "id": predictBox,
+                    "score": float(self.raw_predicts[predictBox, 1])
                 })
             labelXYXY = None
             if labelBox != -1:
@@ -908,7 +956,9 @@ class DataCtrler(object):
                     "box": labelXYXY,
                     "size": float(self.label_size[labelBox]),
                     "type": "gt",
-                    "class": self.names[int(self.raw_labels[labelBox, 0])]
+                    "class": self.names[int(self.raw_labels[labelBox, 0])],
+                    "id": labelBox,
+                    "score": 0
                 })
         return {
             "boxes": finalBoxes,
@@ -1103,6 +1153,29 @@ def xywh2xyxy(x):
         y[:, 2] = x[:, 0] + x[:, 2] / 2  # bottom right x
         y[:, 3] = x[:, 1] + x[:, 3] / 2  # bottom right y
         return y
+
+def cal_iou(pr, gt, iscrowd = None):
+        # https://github.com/pytorch/vision/blob/master/torchvision/ops/boxes.py
+        """
+            Return intersection-over-union (Jaccard index) of boxes.
+            Both sets of boxes are expected to be in (x1, y1, x2, y2) format.
+            Arguments:
+                pr (Tensor[N, 4])
+                gt (Tensor[M, 4])
+                iscrowd ([M])
+            Returns:
+                iou (Tensor[N, M]): the NxM matrix containing the pairwise
+                    IoU values for every element in boxes1 and boxes2
+        """
+        pr, gt = xywh2xyxy(pr), xywh2xyxy(gt)
+        (a1, a2), (b1, b2) = np.array_split(pr[:, None],2,axis=2), np.array_split(gt, 2, axis=1)
+        inter = (np.minimum(a2, b2) - np.maximum(a1, b1)).clip(0).prod(2)
+        union = (box_area(pr.T)[:, None] + box_area(gt.T) - inter)
+        if iscrowd is not None:
+            crowd_idx = np.where(iscrowd == 1)[0]
+            if len(crowd_idx) > 0:
+                union[:, crowd_idx] = box_area(pr.T)[:, None]
+        return inter / (union + 1e-6)
 
 def box_iou(box1, box2):
     # https://github.com/pytorch/vision/blob/master/torchvision/ops/boxes.py
