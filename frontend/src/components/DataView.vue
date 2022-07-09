@@ -5,6 +5,29 @@
                 <div class="toolbar-title">Settings</div>
                 <div class="toolbox">
                     <div class="mode-select">
+                        <span class="select-label">IoU threshold</span>
+                        <el-select v-model="iouThreshold" @change="changeIouThreshold" size="mini">
+                            <el-option
+                                v-for="item in iouThresholds"
+                                :key="item"
+                                :label="item"
+                                :value="item">
+                            </el-option>
+                        </el-select>
+                        <i v-if="gettingMatrix||gettingSizeBarchart||gettingAspectRatioBarchart" class="el-icon-loading"></i>
+                    </div>
+                    <div class="mode-select">
+                        <span class="select-label">Confidence</span>
+                        <el-select v-model="confThreshold" @change="changeConfThreshold" size="mini">
+                            <el-option
+                                v-for="item in confThresholds"
+                                :key="item"
+                                :label="item"
+                                :value="item">
+                            </el-option>
+                        </el-select>
+                    </div>
+                    <div class="mode-select">
                         <span class="select-label">Matrix Encoding</span>
                         <el-select v-model="dataMode" @change="changeDataMode" size="mini">
                             <el-option
@@ -14,7 +37,6 @@
                                 :value="item.value">
                             </el-option>
                         </el-select>
-                        <i v-if="gettingMatrix||gettingSizeBarchart||gettingAspectRatioBarchart" class="el-icon-loading"></i>
                     </div>
                     <!-- <div class="mode-select">
                         <span class="select-label">Normalization</span>
@@ -129,7 +151,7 @@
                 </div>
             </div>
             <div id="grid-layout-container">
-                <grid-layout ref="grid"></grid-layout>
+                <grid-layout ref="grid" :iouThreshold="iouThreshold" :confThreshold="confThreshold"></grid-layout>
             </div>
         </div>
     </div>
@@ -163,6 +185,14 @@ export default {
             dataMode: 'count',
             statisticsMode: 'mAP',
             normalizationMode: 'total',
+            iouThreshold: 0.5,
+            iouThresholds: [
+                0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95,
+            ],
+            confThreshold: 0.1,
+            confThresholds: [
+                0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8,
+            ],
             dataModes: [{
                 value: 'count',
                 label: 'count (total)',
@@ -304,6 +334,17 @@ export default {
             // this.hideUnfiltered = !this.hideUnfiltered;
             // document.getElementById('hide-unfiltered-button').blur();
         },
+        changeIouThreshold: function() {
+            this.query['iou_thres'] = this.iouThreshold;
+            this.setConfusionMatrix();
+        },
+        changeConfThreshold: function() {
+            this.query['conf_thres'] = this.confThreshold;
+            this.setConfusionMatrix();
+            // TODO: change confidence should affect barcharts?
+            // this.setBoxSizeInfo();
+            // this.setBoxAspectRatioInfo();
+        },
         changeShowDirection: function() {
             this.showMode = 'direction';
         },
@@ -319,6 +360,8 @@ export default {
             if (query===undefined) {
                 query = {};
             }
+            query['iou_thres'] = this.iouThreshold;
+            query['conf_thres'] = this.confThreshold;
             const returnList = ['count'];
             if (this.returnMode!=='count') returnList.push(this.returnMode);
             returnList.push('size_comparison');
@@ -337,6 +380,11 @@ export default {
             this.gettingSizeBarchart = true;
             const store = this.$store;
             const that = this;
+            if (query===undefined) {
+                query = {};
+            }
+            query['iou_thres'] = this.iouThreshold;
+            query['conf_thres'] = this.confThreshold;
             axios.post(store.getters.URL_GET_BOX_SIZE_DIST, query===undefined?{}:{query: query})
                 .then(function(response) {
                     that.labelSizeSplit = response.data.labelSplit;
@@ -360,6 +408,11 @@ export default {
             this.gettingAspectRatioBarchart = true;
             const store = this.$store;
             const that = this;
+            if (query===undefined) {
+                query = {};
+            }
+            query['iou_thres'] = this.iouThreshold;
+            query['conf_thres'] = this.confThreshold;
             axios.post(store.getters.URL_GET_BOX_ASPECT_RATIO_DIST, query===undefined?{}:{query: query})
                 .then(function(response) {
                     that.labelAspectRatioSplit = response.data.labelSplit;
@@ -469,6 +522,8 @@ export default {
             if (query===undefined) {
                 query = {};
             }
+            query['iou_thres'] = this.iouThreshold;
+            query['conf_thres'] = this.confThreshold;
             this.query = {...this.query, ...query};
             this.setConfusionMatrix(this.query);
             this.gettingSizeBarchart = true;
@@ -504,6 +559,8 @@ export default {
             const query = this.query;
             query['query_key'] = queryKey;
             query['range'] = rangeShow;
+            query['iou_thres'] = this.iouThreshold;
+            query['conf_thres'] = this.confThreshold;
             if (queryKey === 'label_size') {
                 that.labelSizeShow = rangeShow;
                 this.gettingSizeBarchart = true;
@@ -580,6 +637,8 @@ export default {
                     selection.setNewColor(selection.findNodeByName(d.colNode.name), false);
                 }
             }
+            that.query['iou_thres'] = that.iouThreshold;
+            that.query['conf_thres'] = that.confThreshold;
 
             axios.post(store.getters.URL_GET_IMAGES_IN_MATRIX_CELL, {
                 labels: d.rowNode.leafs,

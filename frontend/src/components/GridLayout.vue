@@ -29,7 +29,7 @@
                     <div class="widget-image-container">
                         <svg :id="'gird-widget-image-'+node.index" width="95%" height="95%" :ref="'image-'+node.index">
                             <image class="gird-widget-image" x="0" y="0"
-                            :href="URL_GET_IMAGE(node.index, 'full', node.widgetmode, true)"></image>
+                            :href="URL_GET_IMAGE(node.index, 'full', node.widgetmode, iouThreshold, confThreshold, true)"></image>
                         </svg>
                     </div>
                 </div>
@@ -54,6 +54,16 @@ export default {
     name: 'GridLayout',
     components: {WaitingIcon, VueDraggableResizable},
     mixins: [Util, GlobalVar],
+    props: {
+        iouThreshold: {
+            type: Number,
+            default: 0.5,
+        },
+        confThreshold: {
+            type: Number,
+            default: 0.1,
+        },
+    },
     computed: {
         ...mapGetters([
             'labelHierarchy',
@@ -167,11 +177,15 @@ export default {
                 nodes: nodes,
                 depth: this.depth,
                 aspectRatio: that.getAspectArtio(),
+                iou: that.iouThreshold,
+                conf: that.confThreshold,
             }:{
                 nodes: nodes,
                 depth: this.depth,
                 constraints: tsnes,
                 aspectRatio: this.getAspectArtio(),
+                iou: that.iouThreshold,
+                conf: that.confThreshold,
             };
             axios.post(this.URL_GET_GRID, data)
                 .then(function(response) {
@@ -192,6 +206,8 @@ export default {
                 depth: 1000,
                 aspectRatio: this.getAspectArtio(),
                 zoomin: zoomin,
+                iou: that.iouThreshold,
+                conf: that.confThreshold,
             }).then(function(response) {
                 that.nodes = response.data.nodes;
                 that.depth = response.data.depth;
@@ -371,6 +387,8 @@ export default {
                 axios.post(that.URL_GET_IMAGES, {
                     boxIDs: that.nodes.map((d) => d.index),
                     show: 'box',
+                    iou: that.iouThreshold,
+                    conf: that.confThreshold,
                 }).then((response) => {
                     for (let i=0; i<that.nodes.length; i++) {
                         that.nodes[i].img = `data:image/jpeg;base64,${response.data[i]}`;
@@ -457,7 +475,8 @@ export default {
                         <div>Ground Truth: ${that.labelnames[node.label]}</div>
                         <div>Prediction: ${that.labelnames[node.pred]}</div>
                         <div>Confidence: ${Math.round(node.confidence*100000)/100000}</div>
-                    <img class="gird-tooltip-image" src="${getImageGradientURL(node.index, 'full', 'single')}"/>
+                    <img class="gird-tooltip-image" src="${getImageGradientURL(node.index, 'full', 'single',
+        that.iouThreshold, that.confThreshold)}"/>
                     <div id="grid-tooltip-arrow" data-popper-arrow></div>`);
             return tooltip.node();
         },
@@ -536,13 +555,14 @@ export default {
             const HANDLE_R_ACTIVE = 5;
             boxes = boxes.map(function(d, i) {
                 return {
-                    id: i,
+                    id: d.id,
                     x: (d.box[0]-d.box[2]/2)*realwidth+xshift,
                     y: (d.box[1]-d.box[3]/2)*realHeight+yshift,
                     width: d.box[2]*realwidth,
                     height: d.box[3]*realHeight,
                     ispred: d.type==='pred',
                     class: d.class,
+                    score: d.score,
                 };
             });
             svg.selectAll('g.imagebox').remove();
@@ -663,7 +683,7 @@ export default {
                         .on('drag', rectMoving),
                     )
                     .append('title')
-                    .text((d)=>d.class);
+                    .text((d)=>d.class+d.id+'\n'+d.score.toFixed(3));
 
                 newRects
                     .append('g')
@@ -734,6 +754,8 @@ export default {
             axios.post(that.URL_GET_IMAGEBOX, {
                 boxID: node.index,
                 showall: node.widgetmode,
+                iou: that.iouThreshold,
+                conf: that.confThreshold,
             }).then(function(response) {
                 const boxes = response.data.boxes;
                 node.boxes = boxes;
@@ -748,6 +770,8 @@ export default {
             nodes: [],
             depth: 0,
             aspectRatio: this.getAspectArtio(),
+            iou: that.iouThreshold,
+            conf: that.confThreshold,
         }).then(function(response) {
             that.nodes = response.data.nodes;
             that.depth = response.data.depth;
