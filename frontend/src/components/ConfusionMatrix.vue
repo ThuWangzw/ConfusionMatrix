@@ -52,6 +52,10 @@ export default {
             type: Array,
             default: undefined,
         },
+        normalizationMode: {
+            type: String,
+            default: 'total',
+        },
     },
     computed: {
         ...mapGetters([
@@ -132,12 +136,14 @@ export default {
             return this.maxHorizonTextWidth;
         },
         colorScale: function() {
-            if (this.returnMode==='count') {
-                return d3.scaleSequential([0, this.maxCellValue], ['rgb(255, 255, 255)', 'rgb(8, 48, 107)']).clamp(true);
-            } else if (this.returnMode==='avg_iou' || this.returnMode==='avg_acc') {
-                return d3.scaleSequential([1, 0], ['rgb(255, 255, 255)', 'rgb(8, 48, 107)']).clamp(true);
+            if (this.returnMode==='avg_iou' || this.returnMode==='avg_acc') {
+                return d3.scaleSequential([1, 0], ['rgb(226, 232, 224)', 'rgb(56, 99, 140)']).clamp(true);
+            } else if (this.returnMode==='avg_label_size' || this.returnMode==='avg_predict_size') {
+                return d3.scaleSequential([0, 1], ['rgb(226, 232, 224)', 'rgb(56, 99, 140)']).clamp(true);
             } else {
-                return d3.scaleSequential([0, 1], ['rgb(255, 255, 255)', 'rgb(8, 48, 107)']).clamp(true);
+                if (this.normalizationMode !== 'total' && this.returnMode === 'count') {
+                    return d3.scaleSequential([0, 1], ['rgb(226, 232, 224)', 'rgb(56, 99, 140)']).clamp(true);
+                } else return d3.scaleSequential([0, this.maxCellValue], ['rgb(226, 232, 224)', 'rgb(56, 99, 140)']).clamp(true);
             }
         },
     },
@@ -154,9 +160,15 @@ export default {
             this.getDataAndRender();
         },
         confusionMatrix: function() {
+            this.legendExist = false;
             this.getDataAndRender();
         },
         showMode: function() {
+            this.getDataAndRender();
+        },
+        normalizationMode: function() {
+            if (this.returnMode !== 'count') return;
+            this.legendExist = false;
             this.getDataAndRender();
         },
         classStatistics: function() {
@@ -233,6 +245,8 @@ export default {
             maxCellCount: 0,
             maxCellValue: 0,
             maxCellDirection: 0,
+            columnSum: [],
+            rowSum: [],
         };
     },
     methods: {
@@ -297,6 +311,12 @@ export default {
             this.maxCellValue = 0;
             this.maxCellDirection = 0;
             this.maxCellCount = 0;
+            this.columnSum = [];
+            this.rowSum = [];
+            for (let i=0; i<this.showNodes.length; i++) {
+                this.columnSum.push(0);
+                this.rowSum.push(0);
+            }
             for (let i=0; i<this.showNodes.length; i++) {
                 const nodea = this.showNodes[i];
                 if (i < this.showNodes.length - 1) {
@@ -320,14 +340,18 @@ export default {
                         rowNode: nodea,
                         colNode: nodeb,
                     };
+                    this.rowSum[i] += cell.info.val;
+                    this.columnSum[j] += cell.info.val;
                     if (i === this.showNodes.length-1 || j === this.showNodes.length-1) {
                         cell.info.direction = undefined;
                         cell.info.sizeCmp = undefined;
                         if (i === this.showNodes.length-1 && j === this.showNodes.length-1) cell.info.sizeDist = undefined;
                     } else cell.info.sizeDist = undefined;
                     this.cells.push(cell);
-                    if (!this.isHideCell(cell) && (i!=j || this.returnMode!=='count') && i!==this.showNodes.length-1 && j!==this.showNodes.length-1) {
+                    if (!this.isHideCell(cell)) {
                         this.maxCellValue = Math.max(this.maxCellValue, cell.info.val);
+                    }
+                    if (!this.isHideCell(cell) && (i!=j || this.returnMode!=='count') && i!==this.showNodes.length-1 && j!==this.showNodes.length-1) {
                         this.maxCellCount = Math.max(this.maxCellCount, cell.info.count);
                         if (i!=j && cell.info.direction!==undefined) {
                             this.maxCellDirection = Math.max(this.maxCellDirection, d3.sum(cell.info.direction));
@@ -392,6 +416,7 @@ export default {
                     .on('click', function(e, d) {
                         if (d.children.length===1) return;
                         d.expand = !d.expand;
+                        that.legendExist = false;
                         that.getDataAndRender();
                     });
 
@@ -455,6 +480,7 @@ export default {
                     .on('click', function(e, d) {
                         if (d.children.length===1) return;
                         d.expand = !d.expand;
+                        that.legendExist = false;
                         that.getDataAndRender();
                     });
 
@@ -585,7 +611,7 @@ export default {
                     .attr('height', that.cellAttrs['size'])
                     .attr('stroke', that.cellAttrs['stroke'])
                     .attr('stroke-width', that.cellAttrs['stroke-width'])
-                    .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val));
+                    .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.getFillColor(d));
 
                 for (let i = 0; i < 5; ++i) {
                     matrixCellsinG.filter((d) => d.info.sizeDist!==undefined)
@@ -925,7 +951,7 @@ export default {
                         d3.select(this).select('rect')
                             .transition()
                             .duration(that.updateDuration)
-                            .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val))
+                            .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.getFillColor(d))
                             .attr('opacity', 0)
                             .on('end', resolve);
                     });
@@ -953,7 +979,7 @@ export default {
                         d3.select(this).select('rect')
                             .transition()
                             .duration(that.updateDuration)
-                            .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.colorScale(d.info.val))
+                            .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.getFillColor(d))
                             .attr('opacity', 1)
                             .on('end', resolve);
                     });
@@ -1214,7 +1240,7 @@ export default {
                 }
             }
             if (this.returnMode === 'count') infoMap.val = infoMap.count;
-            else infoMap.val /= infoMap.count;
+            else if (infoMap.count > 0) infoMap.val /= infoMap.count;
             return infoMap;
         },
         drawLegend: function() {
@@ -1314,6 +1340,11 @@ export default {
         getDistHeight: function(y) {
             if (y===0) return 0;
             return d3.scaleLinear([0, 1000], [2, this.cellAttrs.size-8])(Math.min(y, 1000));
+        },
+        getFillColor: function(d) {
+            if (this.normalizationMode === 'total' || this.normalizationMode === 'none') return this.colorScale(d.info.val);
+            else if (this.normalizationMode === 'row') return this.colorScale(d.info.val / this.rowSum[d.row]);
+            else return this.colorScale(d.info.val / this.columnSum[d.column]);
         },
     },
 };
