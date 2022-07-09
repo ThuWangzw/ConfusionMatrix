@@ -26,6 +26,7 @@
                     <div>Ground Truth: {{ labelnames[node.label] }}</div>
                     <div>Prediction: {{ labelnames[node.pred] }}</div>
                     <div>Confidence: {{ Math.round(node.confidence*100000)/100000 }}</div>
+                    <div>Type: {{ typeInfo[node.type] }}</div>
                     <div class="widget-image-container">
                         <svg :id="'gird-widget-image-'+node.index" width="95%" height="95%" :ref="'image-'+node.index">
                             <image class="gird-widget-image" x="0" y="0"
@@ -153,6 +154,15 @@ export default {
             },
 
             tooltipClass: 'cell-tooltip',
+            typeInfo: [
+                'Missed groundtruth',
+                'True postive',
+                'Class error',
+                'Location error',
+                'Class & Location error',
+                'Duplicate error',
+                'Background error',
+            ],
 
             showImages: [],
             hoverEnable: true,
@@ -475,6 +485,7 @@ export default {
                         <div>Ground Truth: ${that.labelnames[node.label]}</div>
                         <div>Prediction: ${that.labelnames[node.pred]}</div>
                         <div>Confidence: ${Math.round(node.confidence*100000)/100000}</div>
+                        <div>Type: ${that.typeInfo[node.type]}</div>
                     <img class="gird-tooltip-image" src="${getImageGradientURL(node.index, 'full', 'single',
         that.iouThreshold, that.confThreshold)}"/>
                     <div id="grid-tooltip-arrow" data-popper-arrow></div>`);

@@ -198,7 +198,7 @@ class DataCtrler(object):
         # direction map, also use IoU threshold as key because different match results in different directions
         self.directions_map = {}
         for iou_thres in self.iou_thresholds:
-            predict_label_pairs, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+            predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
             directionIdxes = np.where(np.logical_and(predict_label_pairs[:,0]>-1, predict_label_pairs[:,1]>-1))[0]
             directionVectors = self.raw_predicts[predict_label_pairs[directionIdxes,0]][:,[2,3]] - self.raw_labels[predict_label_pairs[directionIdxes,1]][:,[1,2]]
             directionNorm = np.sqrt(np.power(directionVectors[:,0], 2)+ np.power(directionVectors[:,1], 2))
@@ -360,6 +360,7 @@ class DataCtrler(object):
             # should ignore detections matched with ignored gt
             ret_ious = np.zeros(0)
             ret_match = -1*np.ones((0, 2), dtype=np.int32)
+            ret_type = np.zeros(0, dtype=np.int32)
             for _pr_idx in range(len(detections)):
                 if pr_type[_pr_idx] <= 0:
                     continue
@@ -368,15 +369,17 @@ class DataCtrler(object):
                     ret_ious = np.concatenate((ret_ious, [0]))
                 else:
                     ret_ious = np.concatenate((ret_ious, [iou_pair[_pr_idx, pr_match[_pr_idx]]]))
-            return ret_match, ret_ious
+                ret_type = np.concatenate((ret_type, [pr_type[_pr_idx]]))
+            return ret_match, ret_ious, ret_type
         self.pairs_map_under_iou_thresholds = {}
         bg_thres = 0.1
         for pos_thres in self.iou_thresholds:
             # remember: this doesn't contain all predictions, because some are ignored !!!
             predict_label_pairs = -1*np.ones((0, 2), dtype=np.int32)
             predict_label_ious = np.zeros(0)
+            predict_type = np.zeros(0, dtype=np.int32)
             for imageidx in range(len(self.image2index)):
-                matches, ious = compute_per_image(self.raw_predicts[self.imageid2raw_predict[imageidx][0]:self.imageid2raw_predict[imageidx][1]],
+                matches, ious, types = compute_per_image(self.raw_predicts[self.imageid2raw_predict[imageidx][0]:self.imageid2raw_predict[imageidx][1]],
                                             self.raw_labels[self.imageid2raw_label[imageidx][0]:self.imageid2raw_label[imageidx][1]], pos_thres, bg_thres)
                 negaWeights = np.where(matches[:,1]==-1)[0]
                 if len(matches)>0:
@@ -385,7 +388,8 @@ class DataCtrler(object):
                     matches[negaWeights,1]=-1
                     predict_label_pairs = np.concatenate((predict_label_pairs, matches))
                     predict_label_ious = np.concatenate((predict_label_ious, ious))
-            self.pairs_map_under_iou_thresholds[pos_thres] = (predict_label_pairs, predict_label_ious)
+                    predict_type = np.concatenate((predict_type, types))
+            self.pairs_map_under_iou_thresholds[pos_thres] = (predict_label_pairs, predict_label_ious, predict_type)
         return self.pairs_map_under_iou_thresholds
     
     def filterSamples(self, query = None):
@@ -413,7 +417,7 @@ class DataCtrler(object):
         
         # separate matched pairs from unmatch ones
         # index of pred_label_pairs
-        predict_label_pairs, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
         filtered = np.arange(len(predict_label_pairs))[np.logical_and(predict_label_pairs[:,1]>-1, self.raw_predicts[predict_label_pairs[:,0], 1]>conf_thres)]
         unmatch_predict = np.arange(len(predict_label_pairs))[np.logical_and(predict_label_pairs[:,1]==-1, self.raw_predicts[predict_label_pairs[:,0], 1]>conf_thres)]
         # this is index of gt, not pred_label_pairs, as this is calculated after filtering
@@ -469,7 +473,7 @@ class DataCtrler(object):
         iou_thres = self.iou_thresholds[0]
         if query is not None and "iou_thres" in query:
             iou_thres = query["iou_thres"]
-        predict_label_pairs, predict_label_ious = self.pairs_map_under_iou_thresholds[iou_thres]
+        predict_label_pairs, predict_label_ious, _ = self.pairs_map_under_iou_thresholds[iou_thres]
         bg_size_dist_bins = 5
         function_map = { # x represents array of indexes of predict_label_pair
             'count': lambda x: len(x),
@@ -535,7 +539,7 @@ class DataCtrler(object):
         iou_thres = self.iou_thresholds[0]
         if query is not None and "iou_thres" in query:
             iou_thres = query["iou_thres"]
-        predict_label_pairs, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
         label_target, pred_target = np.arange(80), np.arange(80)
         if query is not None and "label" in query and "predict" in query:
             label_target = query["label"]
@@ -580,7 +584,7 @@ class DataCtrler(object):
         iou_thres = self.iou_thresholds[0]
         if query is not None and "iou_thres" in query:
             iou_thres = query["iou_thres"]
-        predict_label_pairs, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
         label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
         if target == 'label_size':
             all_dist = [0 for _ in range(K)]
@@ -679,7 +683,7 @@ class DataCtrler(object):
         iou_thres = self.iou_thresholds[0]
         if query is not None and "iou_thres" in query:
             iou_thres = query["iou_thres"]
-        predict_label_pairs, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
         filtered_label_size = self.label_size[predict_label_pairs[filtered][:,1]]
         filtered_predict_size = self.predict_size[predict_label_pairs[filtered][:,0]]
         unmatched_label_size = self.label_size[unmatch_label]
@@ -737,7 +741,7 @@ class DataCtrler(object):
         iou_thres = self.iou_thresholds[0]
         if query is not None and "iou_thres" in query:
             iou_thres = query["iou_thres"]
-        predict_label_pairs, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
         filtered_label_aspect_ratio = self.label_aspect_ratio[predict_label_pairs[filtered,1]]
         filtered_predict_aspect_ratio = self.predict_aspect_ratio[predict_label_pairs[filtered,0]]
         unmatched_label_aspect_ratio = self.label_aspect_ratio[unmatch_label]
@@ -816,7 +820,7 @@ class DataCtrler(object):
         return labelTransform.astype(int)
         
     def gridZoomIn(self, nodes, constraints, depth, aspectRatio, zoomin, iou_thres, conf_thres):
-        predict_label_pairs, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        predict_label_pairs, _, predict_type = self.pairs_map_under_iou_thresholds[iou_thres]
         filtered, unmatch_predict, unmatch_label = self.filterSamples({
             "iou_thres": iou_thres,
             "conf_thres": conf_thres
@@ -846,7 +850,7 @@ class DataCtrler(object):
                     zoomInConstraintX.append(node)
             zoomInConstraintX = allfeatures[nodes]
         
-        zoomInLabels, zoomInPreds, zoomInConfidence = [], [], []
+        zoomInLabels, zoomInPreds, zoomInConfidence, zoomInType = [], [], [], []
         for node in zoomInNodes:
             if node < len(self.raw_predicts):
                 if predict_label_pairs[predict_label_pairs[:,0]==node][0, 1] == -1:
@@ -855,11 +859,13 @@ class DataCtrler(object):
                     zoomInLabels.append(self.raw_labels[predict_label_pairs[predict_label_pairs[:,0]==node][0, 1], 0])
                 zoomInPreds.append(self.raw_predicts[node, 0])
                 zoomInConfidence.append(self.raw_predicts[node, 1])
+                zoomInType.append(predict_type[predict_label_pairs[:,0]==node][0])
             else:
                 zoomInLabels.append(self.raw_labels[node-len(self.raw_predicts), 0])
                 zoomInPreds.append(-1)
                 zoomInConfidence.append(0)
-        zoomInLabels, zoomInPreds, zoomInConfidence = np.array(zoomInLabels, dtype=np.int32), np.array(zoomInPreds, dtype=np.int32), np.array(zoomInConfidence, dtype=np.float64)
+                zoomInType.append(0) # missed error
+        zoomInLabels, zoomInPreds, zoomInConfidence, zoomInType = np.array(zoomInLabels, dtype=np.int32), np.array(zoomInPreds, dtype=np.int32), np.array(zoomInConfidence, dtype=np.float64), np.array(zoomInType, dtype=np.int32)
         zoomInLabels[zoomInLabels==-1] = len(self.names) - 1
         zoomInPreds[zoomInPreds==-1] = len(self.names) - 1
 
@@ -975,6 +981,7 @@ class DataCtrler(object):
         zoomInLabels = zoomInLabels.tolist()
         zoomInPreds = zoomInPreds.tolist()
         zoomInConfidence = zoomInConfidence.tolist()
+        zoomInType = zoomInType.tolist()
 
         n = len(zoomInNodes)
         nodes = [{
@@ -983,7 +990,8 @@ class DataCtrler(object):
             "grid": grid[i],
             "label": zoomInLabels[i],
             "pred": zoomInPreds[i],
-            "confidence": zoomInConfidence[i]
+            "confidence": zoomInConfidence[i],
+            "type": zoomInType[i]
         } for i in range(n)]
         res = {
             "nodes": nodes,
@@ -1001,7 +1009,7 @@ class DataCtrler(object):
         return self.raw_predict2imageid[boxID]
     
     def _getBoxesByImgId(self, img_id: int, iou_thres: float, conf_thres: float):
-        predict_label_pairs, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
         # as 1 gt may occur in many pairs, so pr_boxes will only contain predict indexes, and so as gt_boxes
         pr_boxes = predict_label_pairs[np.logical_and(np.logical_and(predict_label_pairs[:, 0]>=self.imageid2raw_predict[img_id][0],
                                                                      predict_label_pairs[:, 0]< self.imageid2raw_predict[img_id][1]), 
@@ -1010,7 +1018,7 @@ class DataCtrler(object):
         return pr_boxes.tolist(), gt_boxes.tolist()
 
     def _getBoxByBoxId(self, box_id: int, iou_thres: float):
-        predict_label_pairs, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
         pr_box, gt_box = [], []
         if box_id >= len(self.raw_predicts):
             pr_box.append(-1)
@@ -1146,7 +1154,7 @@ class DataCtrler(object):
         iou_thres = self.iou_thresholds[0]
         if query is not None and "iou_thres" in query:
             iou_thres = query["iou_thres"]
-        predict_label_pairs, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
         # convert list of label names to dict
         labelNames = self.names
         name2idx = {}
