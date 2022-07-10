@@ -34,9 +34,9 @@ class Annotator:
             self.im = im
         self.lw = line_width or max(round(sum(im.shape) / 2 * 0.003), 2)  # line width
 
-    def box_label(self, box, label='', color=(128, 128, 128), txt_color=(255, 255, 255)):
+    def box_label(self, box, label='', color=(128, 128, 128), txt_color=(255, 255, 255), width=None):
         # Add one xyxy box to image with label
-        self.draw.rectangle(box, width=self.lw, outline=color)  # box
+        self.draw.rectangle(box, width=self.lw if width is None else width, outline=color)  # box
         if label:
             w, h = self.font.getsize(label)  # text width, height
             outside = box[1] - h >= 0  # label fits outside box

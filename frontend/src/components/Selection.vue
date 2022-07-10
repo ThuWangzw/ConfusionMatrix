@@ -119,7 +119,7 @@ export default {
             colorCellMargin: 10,
             editColorSize: 15,
             textMatrixMargin: 10,
-            baseColors: ['#1b9e77', '#d95f02', '#7570b3', '#e7298a', '#66a61e', '#e6ab02', '#a6761d'],
+            baseColors: ['#377eb8', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf'],
             defaultColor: 'gray',
             nextColor: 0,
             coloredNodes: [],

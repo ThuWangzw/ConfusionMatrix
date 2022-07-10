@@ -292,10 +292,10 @@ export default {
 
                 gridCellsInG.append('rect')
                     .attr('class', 'imgcell')
-                    .attr('x', 0)
-                    .attr('y', 0)
-                    .attr('width', that.gridCellAttrs['size'])
-                    .attr('height', that.gridCellAttrs['size'])
+                    .attr('x', 2)
+                    .attr('y', 2)
+                    .attr('width', that.gridCellAttrs['size']-4)
+                    .attr('height', that.gridCellAttrs['size']-4)
                     .attr('stroke', (d) => that.hierarchyColors[that.labelnames[d.label]])
                     .attr('stroke-width', (d) => that.hierarchyColors[that.labelnames[d.label]]===that.defaultColor?
                         0.2:that.gridCellAttrs['stroke-width'])
@@ -685,7 +685,7 @@ export default {
                     .append('rect')
                     .classed('bg', true)
                     .attr('fill', 'none')
-                    .attr('stroke', (d) => d.ispred?'rgb(255,102,0)':'rgb(95,198,181)')
+                    .attr('stroke', (d) => d.ispred?'rgb(255,0,0)':'rgb(0,255,0)')
                     .attr('stroke-width', 2)
                     .on('mouseenter mouseleave', rectHover)
                     .call(d3.drag()

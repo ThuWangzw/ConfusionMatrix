@@ -1087,8 +1087,6 @@ class DataCtrler(object):
         output = io.BytesIO()
         if hideBox:
             img.save(output, format="JPEG")
-        elif show=='box':
-            self.cropImageByBox(anno.im, predictXYXY, labelXYXY, [img.width, img.height]).save(output, format="JPEG")
         else:
             anno.im.save(output, format="JPEG")
         return output
@@ -1104,16 +1102,30 @@ class DataCtrler(object):
             predictXYXY = None
             if predictBox != -1:
                 predictXYXY = xywh2xyxy(self.raw_predicts[predictBox, 2:6]*amp).tolist()
-                anno.box_label(predictXYXY, color=(255,102,0))
             labelXYXY = None
             if labelBox != -1:
                 labelXYXY = xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist()
-                anno.box_label(labelXYXY, color=(95,198,181))
-            output = io.BytesIO()
+                
             if show=='box':
-                self.cropImageByBox(anno.im, predictXYXY, labelXYXY, [img.width, img.height]).save(output, format="JPEG")
-            else:
-                anno.im.save(output, format="JPEG")
+                im, cropbox = self.cropImageByBox(anno.im, predictXYXY, labelXYXY, [img.width, img.height])
+                anno = Annotator(np.array(im), pil=True)
+                if predictBox != -1:
+                    predictXYXY[0] -= cropbox[0]
+                    predictXYXY[2] -= cropbox[0]
+                    predictXYXY[1] -= cropbox[1]
+                    predictXYXY[3] -= cropbox[1]
+                if labelBox != -1:
+                    labelXYXY[0] -= cropbox[0]
+                    labelXYXY[2] -= cropbox[0]
+                    labelXYXY[1] -= cropbox[1]
+                    labelXYXY[3] -= cropbox[1]
+            stroke = int(max(anno.im.width, anno.im.height)/20)
+            if predictBox != -1:
+                anno.box_label(predictXYXY, color=(255,0,0), width = stroke)
+            if labelBox != -1:
+                anno.box_label(labelXYXY, color=(0,255,0), width = stroke)
+            output = io.BytesIO()
+            anno.im.save(output, format="JPEG")
             base64Imgs.append(base64.b64encode(output.getvalue()).decode())
         return base64Imgs
             
@@ -1140,7 +1152,7 @@ class DataCtrler(object):
             min(center[0]+size, shape[0]),
             min(center[1]+size, shape[1])
         ]
-        return img.crop(box)
+        return img.crop(box), box
         
     def getImagesInConsuionMatrixCell(self, labels: list, preds: list, query = None) -> list:
         """
