@@ -23,8 +23,7 @@ class DataCtrler(object):
 
     def __init__(self):
         super().__init__()
-        self.iou_threshold_localization = 0.5
-        self.iou_threshold_miss = 0.3
+        self.iou_thresholds = [0.5 + 0.05 * i for i in range(10)]
         self.classID2Idx = {}      
         self.hierarchy = {}  
         self.names = []
@@ -77,8 +76,8 @@ class DataCtrler(object):
                 self.image2index[name.split('.')[0]]=id
                 id += 1
             ## read raw labels
-            # format: label, box(cx, cy, w, h)
-            self.raw_labels = np.zeros((0,5), dtype=np.float32)
+            # format: label, box(cx, cy, w, h), isCrowd(0/1)
+            self.raw_labels = np.zeros((0,6), dtype=np.float32)
             self.raw_label2imageid = np.zeros(0, dtype=np.int32)
             self.imageid2raw_label = np.zeros((id, 2), dtype=np.int32)
             for imageName in os.listdir(self.labels_path):
@@ -86,7 +85,7 @@ class DataCtrler(object):
                 imageid = self.image2index[imageName.split('.')[0]]
                 with open(label_path) as f:
                     lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
-                    if any([len(x)>5 for x in lb]):
+                    if any([len(x)>6 for x in lb]):
                         #TODO segmentation
                         pass
                     lb = np.array(lb, dtype=np.float32)
@@ -146,13 +145,15 @@ class DataCtrler(object):
                 
             
         # compute (prediction, label) pair
+        # creates a map, with different IoU threshold (0.5~0.95 0.05) as key and (predict_label_pairs, iou) as value
+        # do not store the unmatched gt here, because different confidence thershold may result in different "Missed Error"
         if os.path.exists(self.label_predict_iou_path):
             with open(self.label_predict_iou_path, 'rb') as f:
-                self.predict_label_pairs, self.predict_label_ious = pickle.load(f)
+                self.pairs_map_under_iou_thresholds = pickle.load(f)
         else:
-            self.predict_label_pairs, self.predict_label_ious = self.compute_label_predict_pair()
+            self.pairs_map_under_iou_thresholds = self.compute_label_predict_pair()
             with open(self.label_predict_iou_path, 'wb') as f:
-                pickle.dump((self.predict_label_pairs, self.predict_label_ious), f)
+                pickle.dump(self.pairs_map_under_iou_thresholds, f)
         
         if os.path.exists(self.box_size_split_path):
             with open(self.box_size_split_path, 'rb') as f:
@@ -166,7 +167,7 @@ class DataCtrler(object):
         else:
             self.box_aspect_ratio_split_map = {}
         
-        ## init size
+        # init size
         self.label_size = self.raw_labels[:,3]*self.raw_labels[:,4]
         self.predict_size = self.raw_predicts[:,4]*self.raw_predicts[:,5]
 
@@ -180,7 +181,7 @@ class DataCtrler(object):
             with open(self.box_size_dist_path, 'wb') as f:
                 pickle.dump(self.box_size_dist_map, f)
 
-        ## init aspect ratio
+        # init aspect ratio
         self.label_aspect_ratio = self.raw_labels[:,3]/self.raw_labels[:,4]
         self.predict_aspect_ratio = self.raw_predicts[:,4]/self.raw_predicts[:,5]
 
@@ -193,30 +194,38 @@ class DataCtrler(object):
             self.box_aspect_ratio_dist_map = self.getBoxAspectRatioDistribution()
             with open(self.box_aspect_ratio_dist_path, 'wb') as f:
                 pickle.dump(self.box_aspect_ratio_dist_map, f)
-        ## direction
-        directionIdxes = np.where(np.logical_and(self.predict_label_pairs[:,0]>-1, self.predict_label_pairs[:,1]>-1))
-        directionVectors = self.raw_predicts[self.predict_label_pairs[directionIdxes][:,0]][:,[2,3]] - self.raw_labels[self.predict_label_pairs[directionIdxes][:,1]][:,[1,2]]
-        directionNorm = np.sqrt(np.power(directionVectors[:,0], 2)+ np.power(directionVectors[:,1], 2))
-        directionCos = directionVectors[:,0]/directionNorm
-        directions = np.zeros(directionCos.shape[0], dtype=np.int32)
-        directionSplits = np.array([math.cos(angle/180*math.pi) for angle in [180, 157.5, 112.5, 67.5, 22.5, 0]])
-        for i in range(2,len(directionSplits)):
-            directions[np.logical_and(directionCos>directionSplits[i-1], directionCos<=directionSplits[i])] = i-1
-        negaYs = np.logical_and(directionVectors[:,1]<0, directions!=0)
-        directions[negaYs] = 8-directions[negaYs]
-        # use box w, h to define min_shift, with a maximum value of 0.05
-        min_shift = (self.raw_labels[self.predict_label_pairs[directionIdxes, 1], 3] + \
-            self.raw_labels[self.predict_label_pairs[directionIdxes, 1], 4]).squeeze() / 10
-        min_shift[min_shift > 0.05] = 0.05
-        directions[directionNorm<min_shift] = 8
-        self.directions = -1*np.ones(self.predict_label_pairs.shape[0], dtype=np.int32)
-        self.directions[directionIdxes] = directions
+
+        # direction map, also use IoU threshold as key because different match results in different directions
+        self.directions_map = {}
+        for iou_thres in self.iou_thresholds:
+            predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+            directionIdxes = np.where(np.logical_and(predict_label_pairs[:,0]>-1, predict_label_pairs[:,1]>-1))[0]
+            directionVectors = self.raw_predicts[predict_label_pairs[directionIdxes,0]][:,[2,3]] - self.raw_labels[predict_label_pairs[directionIdxes,1]][:,[1,2]]
+            directionNorm = np.sqrt(np.power(directionVectors[:,0], 2)+ np.power(directionVectors[:,1], 2))
+            directionCos = directionVectors[:,0]/directionNorm
+            directions = np.zeros(directionCos.shape[0], dtype=np.int32)
+            directionSplits = np.array([math.cos(angle/180*math.pi) for angle in [180, 157.5, 112.5, 67.5, 22.5, 0]])
+            for i in range(2,len(directionSplits)):
+                directions[np.logical_and(directionCos>directionSplits[i-1], directionCos<=directionSplits[i])] = i-1
+            # starts from <-: 0, and clock-wise to 7, middle point as 8
+            # if directionVectors[:,1]>0, means direction downward, as the y coordinate is downward!!!
+            negaYs = np.logical_and(directionVectors[:,1]>0, directions!=0)
+            directions[negaYs] = 8-directions[negaYs]
+            # use box w, h to define min_shift, with a maximum value of 0.05
+            min_shift = (self.raw_labels[predict_label_pairs[directionIdxes, 1], 3] + \
+                self.raw_labels[predict_label_pairs[directionIdxes, 1], 4]).squeeze() / 10
+            min_shift[min_shift > 0.05] = 0.05
+            directions[directionNorm<min_shift] = 8
+            self.directions_map[iou_thres] = -1*np.ones(predict_label_pairs.shape[0], dtype=np.int32)
+            self.directions_map[iou_thres][directionIdxes] = directions
         
         # read feature data
         if os.path.exists(self.all_features_path):
-            self.features = np.load(self.all_features_path)
+            all_features = np.load(self.all_features_path)
+            self.pr_features = all_features[:len(self.raw_predicts)]
+            self.gt_features = all_features[len(self.raw_predicts):]
         else:
-            self.features = np.zeros((self.predict_label_pairs.shape[0], 256))
+            self.pr_features = np.zeros((self.raw_predicts.shape[0], 256))
             for name in os.listdir(self.images_path):
                 feature_path = os.path.join(self.features_path, name.split('.')[0]+'.npy')
                 imageid = self.image2index[name.split('.')[0]]
@@ -224,9 +233,9 @@ class DataCtrler(object):
                 if not os.path.exists(feature_path):
                     # WARNING
                     self.logger.warning("can't find feature: %s" % feature_path)
-                    self.features[self.imageid2raw_predict[imageid][0]:self.imageid2raw_predict[imageid][1]] = np.random.rand(boxCount, 256)
+                    self.pr_features[self.imageid2raw_predict[imageid][0]:self.imageid2raw_predict[imageid][1]] = np.random.rand(boxCount, 256)
                 else:
-                    self.features[self.imageid2raw_predict[imageid][0]:self.imageid2raw_predict[imageid][1]] = np.load(feature_path)
+                    self.pr_features[self.imageid2raw_predict[imageid][0]:self.imageid2raw_predict[imageid][1]] = np.load(feature_path)
             
             self.gt_features = np.zeros((self.raw_labels.shape[0], 256))
             for name in os.listdir(self.images_path):
@@ -239,19 +248,17 @@ class DataCtrler(object):
                     self.gt_features[self.imageid2raw_label[imageid][0]:self.imageid2raw_label[imageid][1]] = np.random.rand(boxCount, 256)
                 else:
                     self.gt_features[self.imageid2raw_label[imageid][0]:self.imageid2raw_label[imageid][1]] = np.load(feature_path)
-            unmatch_gt_features = self.gt_features[self.predict_label_pairs[len(self.raw_predicts):,1]]
-            self.features[len(self.raw_predicts):] = unmatch_gt_features
-            np.save(self.all_features_path, self.features)
+            np.save(self.all_features_path, np.concatenate((self.pr_features, self.gt_features)))
         
         # hierarchy sampling
         self.sampler = HierarchySampling()
         if os.path.exists(self.hierarchy_sample_path):
             self.sampler.load(self.hierarchy_sample_path)
         else:
-            labels = self.raw_predicts[:, 0].astype(np.int32)
-            unmatch_labels = self.raw_labels[self.predict_label_pairs[len(self.raw_predicts):,1], 0].astype(np.int32)
-            labels = np.concatenate((labels, unmatch_labels), axis=0)
-            self.sampler.fit(self.features, labels, 400)
+            # fit all features (predict & gt) to sampler
+            labels = np.concatenate((self.raw_predicts[:, 0], self.raw_labels[:, 0])).astype(np.int32)
+            features = np.concatenate((self.pr_features, self.gt_features))
+            self.sampler.fit(features, labels, 400)
             self.sampler.dump(self.hierarchy_sample_path)
           
     def getMetaData(self):
@@ -262,82 +269,130 @@ class DataCtrler(object):
             
     def compute_label_predict_pair(self):
 
-        def compute_per_image(detections, labels):
-
-            num_detections = len(detections)
-            # as we only have the logit related to one class, not all the logits, so here we assume the other as 0
-            out_prob = np.zeros((num_detections, len(self.classID2Idx)-1))  # [num_detections, num_classes]
-            for i in range(num_detections):
-                out_prob[i, int(detections[i, 0])] = detections[i, 1] # without sigmoid here
-            out_bbox = detections[:, 2:6]  # [num_detections, 4]
-
-            # Also concat the target labels and boxes
-            tgt_ids = labels[:, 0].astype(np.int32)
-            tgt_bbox = labels[:, 1:5]
-
-            # Compute the classification cost.
-            alpha = 0.25
-            gamma = 2.0
-            neg_cost_class = (1 - alpha) * (out_prob ** gamma) * (-np.log(1 - out_prob + 1e-8))
-            pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-np.log(out_prob + 1e-8))
-            cost_class = pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]
-
-            # Compute the L1 cost between boxes
-            cost_bbox = torch.cdist(torch.from_numpy(out_bbox), torch.from_numpy(tgt_bbox), p=1)
-
-            # Compute the giou cost betwen boxes
-            cost_iou = -generalized_box_iou(out_bbox, tgt_bbox)
-
-            # Final cost matrix
-            C = 5.0 * cost_bbox + 2.0 * cost_class + 2.0 * cost_iou
-
-            from scipy.optimize import linear_sum_assignment
-            matches = np.array(linear_sum_assignment(C)).transpose((1, 0))
-            matches = np.concatenate((matches.astype(np.float64), np.array([-cost_iou[matches[i, 0], matches[i, 1]] for i in range(len(matches))]).reshape(-1,1)), axis=1)
-
-            # Updated version of https://github.com/kaanakan/object_detection_confusion_matrix
-            # iou = box_iou(detections[:, 2:6], labels[:, 1:5])
-            # x = np.where(iou > self.iou_threshold_miss)
-            # if x[0].shape[0]:
-            #     matches = np.concatenate((np.stack(x, 1), iou[x[0], x[1]][:, None]), 1)
-            #     if x[0].shape[0] > 1:
-            #         matches = matches[matches[:, 2].argsort()[::-1]]
-            #         matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
-            #         matches = matches[matches[:, 2].argsort()[::-1]]
-            #         matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
-            # else:
-            #     matches = np.zeros((0, 3))
-
-            final_match = -1*np.ones((len(detections),2), dtype=np.int32)
-            ious = np.zeros(len(detections))
-            final_match[:,0] = np.arange(len(detections), dtype=np.int32)
-            for match in matches:
-                if match[2] < self.iou_threshold_miss:
+        def compute_per_image(detections, labels, pos_thres, bg_thres=0.1, max_det=100):
+            pr_bbox = detections[:, 2:6]
+            pr_cat = detections[:, 0].astype(np.int32)
+            pr_conf = detections[:, 1]
+            gt_bbox = labels[:, 1:5]
+            gt_iscrowd = labels[:,5].astype(np.int32)
+            gt_cat = labels[:,0].astype(np.int32)
+            pr_uni_cat = np.unique(detections[:, 0].astype(np.int32))
+            pr_type = np.zeros(len(detections), dtype=np.int32) # record different type of detections, e.g., TP, dup, confusion, etc.
+            # -1 for ignored, 0 for abandoned, 1 for TP, 2~6 for Cls(confusion), Loc, Cls+Loc, Dup, Bkgd
+            gt_match = -np.ones(len(labels), dtype=np.int32)
+            pr_match = -np.ones(len(detections), dtype=np.int32)
+            iou_pair = cal_iou(pr_bbox, gt_bbox, gt_iscrowd)
+            pr_abandon = np.zeros(0, dtype=np.int32) # abandon the predictions of each category out of maxdet
+            # within category match => TP
+            for _cat in pr_uni_cat:
+                # get detections with category _cat
+                pr_idx = np.where(pr_cat == _cat)[0]
+                gt_idx = np.where(gt_cat == _cat)[0]
+                if len(gt_idx) == 0:
                     continue
-                final_match[int(match[0])] = match[:2].astype(np.int32)
-                ious[int(match[0])] = match[2]
-            return final_match, ious
-        
-        self.predict_label_pairs = -1*np.ones((len(self.raw_predicts), 2), dtype=np.int32)
-        self.predict_label_ious = np.zeros(len(self.raw_predicts))
-        for imageidx in range(len(self.image2index)):
-            matches, ious = compute_per_image(self.raw_predicts[self.imageid2raw_predict[imageidx][0]:self.imageid2raw_predict[imageidx][1]],
-                                        self.raw_labels[self.imageid2raw_label[imageidx][0]:self.imageid2raw_label[imageidx][1]])
-            negaWeights = np.where(matches[:,1]==-1)[0]
-            if len(matches)>0:
-                matches[:,1]+=self.imageid2raw_label[imageidx][0]
-                matches[:,0]+=self.imageid2raw_predict[imageidx][0]
-                matches[negaWeights,1]=-1
-                self.predict_label_pairs[self.imageid2raw_predict[imageidx][0]:self.imageid2raw_predict[imageidx][1]] = matches
-                self.predict_label_ious[self.imageid2raw_predict[imageidx][0]:self.imageid2raw_predict[imageidx][1]] = ious
-        # for labels that haven't been matched to any predict
-        label_not_match = np.setdiff1d(np.arange(len(self.raw_labels)), self.predict_label_pairs[:, 1])
-        label_extra_pairs = -1 * np.ones((len(label_not_match), 2), dtype=np.int32)
-        label_extra_pairs[:, 1] = label_not_match
-        label_extra_ious = np.zeros(len(label_not_match))
-        self.predict_label_pairs = np.concatenate((self.predict_label_pairs, label_extra_pairs))
-        self.predict_label_ious = np.concatenate((self.predict_label_ious, label_extra_ious))
-        return self.predict_label_pairs, self.predict_label_ious
+                # sort by detection confidence, select a maximum of max_det
+                pr_idx = pr_idx[np.argsort(-pr_conf[pr_idx])]
+                if len(pr_idx) > max_det:
+                    pr_abandon = np.concatenate((pr_abandon, pr_idx[max_det:]))
+                    pr_idx = pr_idx[:max_det]
+                # sort by isCrowd attr, put crowd to the back
+                gt_idx = gt_idx[np.argsort(gt_iscrowd[gt_idx])]
+                for _pr_idx in pr_idx:
+                    t = pos_thres
+                    m = -1
+                    # the same as pycocotool
+                    for _gt_idx in gt_idx:
+                        if gt_match[_gt_idx] >= 0 and gt_iscrowd[_gt_idx] == 0:
+                            continue
+                        if m > -1 and gt_iscrowd[m] == 0 and gt_iscrowd[_gt_idx] == 1:
+                            break
+                        iou = iou_pair[_pr_idx, _gt_idx]
+                        if iou < t:
+                            continue
+                        t = iou
+                        m = _gt_idx
+                    if m == -1:
+                        continue
+                    gt_match[m] = _pr_idx
+                    pr_match[_pr_idx] = m
+                    if gt_iscrowd[m]:
+                        pr_type[_pr_idx] = -1 # ignore predictions matched with crowd
+                    else:
+                        pr_type[_pr_idx] = 1 # TP
+            # inter category match for FP
+            # get all unmatched predictions that were not abandoned
+            pr_idx = np.setdiff1d(np.where(pr_match == -1)[0], pr_abandon)
+            pr_idx = pr_idx[np.argsort(-pr_conf[pr_idx])]
+            # exclude all iscrowd gt, this accords with TIDE
+            gt_idx = np.where(gt_iscrowd == 0)[0]
+            for _pr_idx in pr_idx:
+                if len(gt_idx) == 0:
+                    pr_type[_pr_idx] = 6 # background error, for no gt in the image
+                    continue
+                t = -1
+                m = -1
+                # find gt with largest IoU
+                for _gt_idx in gt_idx:
+                    iou = iou_pair[_pr_idx, _gt_idx]
+                    if iou < t:
+                        continue
+                    t = iou
+                    m = _gt_idx
+                if t < bg_thres: # background
+                    pr_type[_pr_idx] = 6
+                elif t > pos_thres: # right location
+                    pr_match[_pr_idx] = m
+                    if gt_cat[m] == pr_cat[_pr_idx]: # duplicate prediction
+                        pr_type[_pr_idx]  = 5
+                    else: # confusion
+                        pr_type[_pr_idx]  = 2
+                        if gt_match[m] == -1:
+                            gt_match[m] = _pr_idx # mark gt as used
+                else: # Loc error
+                    if gt_cat[m] == pr_cat[_pr_idx]: # Location error
+                        pr_type[_pr_idx]  = 3
+                        pr_match[_pr_idx] = m
+                        if gt_match[m] == -1:
+                            gt_match[m] = _pr_idx
+                    else: # Class + Location error
+                        # TODO: now consider this kind as background error
+                        # pr_match[_pr_idx] = m
+                        pr_type[_pr_idx]  = 4
+                        # do not mark gt as used here
+            # should ignore detections matched with ignored gt
+            ret_ious = np.zeros(0)
+            ret_match = -1*np.ones((0, 2), dtype=np.int32)
+            ret_type = np.zeros(0, dtype=np.int32)
+            for _pr_idx in range(len(detections)):
+                if pr_type[_pr_idx] <= 0:
+                    continue
+                ret_match = np.concatenate((ret_match, np.array([[_pr_idx, pr_match[_pr_idx]]])))
+                if pr_match[_pr_idx] == -1:
+                    ret_ious = np.concatenate((ret_ious, [0]))
+                else:
+                    ret_ious = np.concatenate((ret_ious, [iou_pair[_pr_idx, pr_match[_pr_idx]]]))
+                ret_type = np.concatenate((ret_type, [pr_type[_pr_idx]]))
+            return ret_match, ret_ious, ret_type
+        self.pairs_map_under_iou_thresholds = {}
+        bg_thres = 0.1
+        for pos_thres in self.iou_thresholds:
+            # remember: this doesn't contain all predictions, because some are ignored !!!
+            predict_label_pairs = -1*np.ones((0, 2), dtype=np.int32)
+            predict_label_ious = np.zeros(0)
+            predict_type = np.zeros(0, dtype=np.int32)
+            for imageidx in range(len(self.image2index)):
+                matches, ious, types = compute_per_image(self.raw_predicts[self.imageid2raw_predict[imageidx][0]:self.imageid2raw_predict[imageidx][1]],
+                                            self.raw_labels[self.imageid2raw_label[imageidx][0]:self.imageid2raw_label[imageidx][1]], pos_thres, bg_thres)
+                negaWeights = np.where(matches[:,1]==-1)[0]
+                if len(matches)>0:
+                    matches[:,1]+=self.imageid2raw_label[imageidx][0]
+                    matches[:,0]+=self.imageid2raw_predict[imageidx][0]
+                    matches[negaWeights,1]=-1
+                    predict_label_pairs = np.concatenate((predict_label_pairs, matches))
+                    predict_label_ious = np.concatenate((predict_label_ious, ious))
+                    predict_type = np.concatenate((predict_type, types))
+            self.pairs_map_under_iou_thresholds[pos_thres] = (predict_label_pairs, predict_label_ious, predict_type)
+        return self.pairs_map_under_iou_thresholds
     
     def filterSamples(self, query = None):
         """
@@ -351,15 +406,25 @@ class DataCtrler(object):
             "direction": [0,1,2,3,4,5,6,7,8],
             "label": np.arange(len(self.classID2Idx)-1),
             "predict": np.arange(len(self.classID2Idx)-1),
-            "split": 10
+            "split": 10,
+            "conf_thres": 0.05,
+            "iou_thres": 0.5
         }
+        iou_thres = self.iou_thresholds[0]
+        conf_thres = 0.05
         if query is not None:
             query = {**default_query, **query}
+            iou_thres = query['iou_thres']
+            conf_thres = query['conf_thres']
+        
         # separate matched pairs from unmatch ones
         # index of pred_label_pairs
-        filtered = np.arange(len(self.predict_label_pairs))[np.logical_and(self.predict_label_pairs[:,1]>-1, self.predict_label_pairs[:,0]>-1)]
-        unmatch_predict = np.arange(len(self.predict_label_pairs))[self.predict_label_pairs[:,1]==-1]
-        unmatch_label = np.arange(len(self.predict_label_pairs))[self.predict_label_pairs[:,0]==-1]
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        filtered = np.arange(len(predict_label_pairs))[np.logical_and(predict_label_pairs[:,1]>-1, self.raw_predicts[predict_label_pairs[:,0], 1]>conf_thres)]
+        unmatch_predict = np.arange(len(predict_label_pairs))[np.logical_and(predict_label_pairs[:,1]==-1, self.raw_predicts[predict_label_pairs[:,0], 1]>conf_thres)]
+        # this is index of gt, not pred_label_pairs, as this is calculated after filtering
+        # should ignore iscrowd object
+        unmatch_label = np.setdiff1d(np.arange(len(self.raw_labels))[self.raw_labels[:, 5]==0], predict_label_pairs[filtered, 1])
 
         if query is not None:
             label_selected = np.array([True for _ in range(len(self.label_size))])
@@ -381,10 +446,11 @@ class DataCtrler(object):
             # get results after query
             label_selected = np.arange(len(self.raw_labels))[label_selected]
             predict_selected = np.arange(len(self.raw_predicts))[predict_selected]
-            filtered = filtered[np.isin(self.predict_label_pairs[filtered][:,1], label_selected)]
-            filtered = filtered[np.isin(self.predict_label_pairs[filtered][:,0], predict_selected)]
-            unmatch_predict = unmatch_predict[np.isin(self.predict_label_pairs[unmatch_predict][:,0], predict_selected)]
-            unmatch_label = unmatch_label[np.isin(self.predict_label_pairs[unmatch_label][:,1], label_selected)]
+            filtered = filtered[np.isin(predict_label_pairs[filtered][:,1], label_selected)]
+            filtered = filtered[np.isin(predict_label_pairs[filtered][:,0], predict_selected)]
+            unmatch_predict = unmatch_predict[np.isin(predict_label_pairs[unmatch_predict][:,0], predict_selected)]
+            # this is different because unmatch_label is NOT the index of predict_label_pairs
+            unmatch_label = unmatch_label[np.isin(unmatch_label, label_selected)]
 
             # only for unmatch_label
             if isinstance(query["predict_size"][0], str) or isinstance(query["predict_size"][1], str) or \
@@ -406,21 +472,26 @@ class DataCtrler(object):
         statistics_modes = ['count']
         if query is not None and "return" in query:
             statistics_modes = query['return']
-        function_map = {
+        iou_thres = self.iou_thresholds[0]
+        if query is not None and "iou_thres" in query:
+            iou_thres = query["iou_thres"]
+        predict_label_pairs, predict_label_ious, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        bg_size_dist_bins = 5
+        function_map = { # x represents array of indexes of predict_label_pair
             'count': lambda x: len(x),
-            'avg_label_size': lambda x: 0 if self.predict_label_pairs[x[0],1]==-1 else self.label_size[self.predict_label_pairs[x, 1]].mean(),
-            'avg_predict_size': lambda x: 0 if self.predict_label_pairs[x[0],0]==-1 else self.predict_size[self.predict_label_pairs[x, 0]].mean(),
-            'avg_iou': lambda x: self.predict_label_ious[x].mean(),
-            'avg_acc': lambda x: 0 if np.any(self.predict_label_pairs[x[0],:]==-1) else 
-                            (self.raw_predicts[self.predict_label_pairs[x,0], 0]==self.raw_labels[self.predict_label_pairs[x,1], 0]).mean(),
-            'avg_label_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],1]==-1 else self.label_aspect_ratio[self.predict_label_pairs[x, 1]].mean(),
-            'avg_predict_aspect_ratio': lambda x: 0 if self.predict_label_pairs[x[0],0]==-1 else self.predict_aspect_ratio[self.predict_label_pairs[x, 0]].mean(),
-            'direction': lambda x: [int(np.count_nonzero(self.directions[x]==i)) for i in range(9)],
+            'avg_label_size': lambda x: 0 if predict_label_pairs[x[0],1]==-1 else self.label_size[predict_label_pairs[x, 1]].mean(),
+            'avg_predict_size': lambda x: 0 if predict_label_pairs[x[0],0]==-1 else self.predict_size[predict_label_pairs[x, 0]].mean(),
+            'avg_iou': lambda x: predict_label_ious[x].mean(),
+            'avg_acc': lambda x: 0 if np.any(predict_label_pairs[x[0],:]==-1) else 
+                            (self.raw_predicts[predict_label_pairs[x,0], 0]==self.raw_labels[predict_label_pairs[x,1], 0]).mean(),
+            'avg_label_aspect_ratio': lambda x: 0 if predict_label_pairs[x[0],1]==-1 else self.label_aspect_ratio[predict_label_pairs[x, 1]].mean(),
+            'avg_predict_aspect_ratio': lambda x: 0 if predict_label_pairs[x[0],0]==-1 else self.predict_aspect_ratio[predict_label_pairs[x, 0]].mean(),
+            'direction': lambda x: [int(np.count_nonzero(self.directions_map[iou_thres][x]==i)) for i in range(9)],
             'size_comparison': lambda x: [0, 0] if len(x)==0 \
-                else np.bincount((self.predict_size[self.predict_label_pairs[x, 0]]*5).tolist()).tolist() if self.predict_label_pairs[x[0],1]==-1 \
-                else np.bincount((self.label_size[self.predict_label_pairs[x, 1]]*5).tolist()).tolist() if self.predict_label_pairs[x[0],0]==-1 else \
-                [int(np.count_nonzero(self.predict_size[self.predict_label_pairs[x, 0]] > (self.label_size[self.predict_label_pairs[x, 1]]*1.15))),
-                int(np.count_nonzero(self.label_size[self.predict_label_pairs[x, 1]] > (self.predict_size[self.predict_label_pairs[x, 0]]*1.15)))]
+                else np.bincount((self.predict_size[predict_label_pairs[x, 0]]*bg_size_dist_bins).tolist()).tolist() if predict_label_pairs[x[0],1]==-1 \
+                else np.bincount((self.label_size[predict_label_pairs[x, 1]]*bg_size_dist_bins).tolist()).tolist() if predict_label_pairs[x[0],0]==-1 else \
+                [int(np.count_nonzero(self.predict_size[predict_label_pairs[x, 0]] > (self.label_size[predict_label_pairs[x, 1]]*1.15))),
+                int(np.count_nonzero(self.label_size[predict_label_pairs[x, 1]] > (self.predict_size[predict_label_pairs[x, 0]]*1.15)))]
         }
         ret_matrixes = []
         for statistics_mode in statistics_modes:
@@ -432,17 +503,31 @@ class DataCtrler(object):
                 for j in range(len(stat_matrix[0])):
                     if statistics_mode != 'direction' and statistics_mode != 'size_comparison' and len(matrix[i][j]) == 0:
                         continue
+                    # specially deal with unmatch gt
+                    if j == len(stat_matrix[0]) - 1:
+                        if statistics_mode == 'count':
+                            stat_matrix[i][j] = len(matrix[i][j])
+                        elif statistics_mode == 'avg_label_size':
+                            stat_matrix[i][j] = self.label_size[matrix[i][j]].mean()
+                        elif statistics_mode == 'avg_label_aspect_ratio':
+                            stat_matrix[i][j] = self.label_aspect_ratio[matrix[i][j]].mean()
+                        elif statistics_mode == 'direction':
+                            stat_matrix[i][j] = [0 for _ in range(9)]
+                        elif statistics_mode =='size_comparison':
+                            stat_matrix[i][j] = np.bincount((self.label_size[matrix[i][j]]*bg_size_dist_bins).tolist()).tolist()
+                            if len(stat_matrix[i][j]) > bg_size_dist_bins:
+                                stat_matrix[i][j][bg_size_dist_bins-1] += stat_matrix[i][j][bg_size_dist_bins]
+                                stat_matrix[i][j] = stat_matrix[i][j][:bg_size_dist_bins]
+                        continue
                     if statistics_mode == 'direction' and (i == len(stat_matrix)-1 or j == len(stat_matrix[0])-1):
                         stat_matrix[i][j] = [0 for _ in range(9)]
                     else:
                         stat_matrix[i][j] = map_func(matrix[i][j])
                         if statistics_mode == 'size_comparison':
-                            if len(stat_matrix[i][j]) > 5:
-                                stat_matrix[i][j][4] += stat_matrix[i][j][5]
-                                stat_matrix[i][j] = stat_matrix[i][j][:5]
-                            # elif len(stat_matrix[i][j]) < 25:
-                            #     stat_matrix[i][j] += [0] * (25 - len(stat_matrix[i][j]))
-            ret_matrixes.append(stat_matrix)
+                            if len(stat_matrix[i][j]) > bg_size_dist_bins:
+                                stat_matrix[i][j][bg_size_dist_bins-1] += stat_matrix[i][j][bg_size_dist_bins]
+                                stat_matrix[i][j] = stat_matrix[i][j][:bg_size_dist_bins]
+            ret_matrixes.append(np.array(stat_matrix).tolist()) # to avoid JSON unserializable error
         return ret_matrixes
 
     def getConfusionMatrix(self, query = None):
@@ -453,6 +538,10 @@ class DataCtrler(object):
             label/predict: np.arange(80)}
         """
         filtered , unmatch_predict, unmatch_label = self.filterSamples(query)
+        iou_thres = self.iou_thresholds[0]
+        if query is not None and "iou_thres" in query:
+            iou_thres = query["iou_thres"]
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
         label_target, pred_target = np.arange(80), np.arange(80)
         if query is not None and "label" in query and "predict" in query:
             label_target = query["label"]
@@ -460,16 +549,16 @@ class DataCtrler(object):
         confusion = [[[] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
         label_rec, pred_rec = [], []
         for i in range(len(label_target)):
-            label_rec.append(self.raw_labels[self.predict_label_pairs[filtered][:, 1], 0]==label_target[i])
+            label_rec.append(self.raw_labels[predict_label_pairs[filtered][:, 1], 0]==label_target[i])
         for j in range(len(pred_target)):
-            pred_rec.append(self.raw_predicts[self.predict_label_pairs[filtered][:, 0], 0]==pred_target[j])
+            pred_rec.append(self.raw_predicts[predict_label_pairs[filtered][:, 0], 0]==pred_target[j])
         for i in range(len(label_target)):
             for j in range(len(pred_target)):
                 confusion[i][j] = filtered[np.logical_and(label_rec[i], pred_rec[j])]
         for i in range(len(label_target)):
-            confusion[i][len(pred_target)] = unmatch_label[self.raw_labels[self.predict_label_pairs[unmatch_label][:, 1], 0]==label_target[i]]
+            confusion[i][len(pred_target)] = unmatch_label[self.raw_labels[unmatch_label, 0]==label_target[i]]
         for j in range(len(pred_target)):
-            confusion[len(label_target)][j] = unmatch_predict[self.raw_predicts[self.predict_label_pairs[unmatch_predict][:, 0], 0]==pred_target[j]]
+            confusion[len(label_target)][j] = unmatch_predict[self.raw_predicts[predict_label_pairs[unmatch_predict][:, 0], 0]==pred_target[j]]
         return self.getStatisticsMatrices(confusion, query)
     
     def getOverallDistribution(self):
@@ -494,6 +583,10 @@ class DataCtrler(object):
         K = 25
         split_pos = np.array([target_range[0]+i*(target_range[1]-target_range[0])/K for i in range(K+1)])
         filtered, unmatch_predict, unmatch_label = self.filterSamples(query)
+        iou_thres = self.iou_thresholds[0]
+        if query is not None and "iou_thres" in query:
+            iou_thres = query["iou_thres"]
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
         label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
         if target == 'label_size':
             all_dist = [0 for _ in range(K)]
@@ -501,8 +594,8 @@ class DataCtrler(object):
                 last = split_pos[i]
                 cur = split_pos[i+1]
                 all_dist[i] = np.count_nonzero(np.logical_and(self.label_size>last, self.label_size<=cur))
-            match_select = self.label_size[self.predict_label_pairs[filtered,1]]
-            unmatch_select = self.label_size[self.predict_label_pairs[unmatch_label,1]]
+            match_select = self.label_size[predict_label_pairs[filtered,1]]
+            unmatch_select = self.label_size[unmatch_label]
             select_dist = [0 for _ in range(K)]
             for i in range(K):
                 last = split_pos[i]
@@ -510,9 +603,9 @@ class DataCtrler(object):
                 select_dist[i] = np.count_nonzero(np.logical_and(match_select>last, match_select<=cur)) + \
                     np.count_nonzero(np.logical_and(unmatch_select>last, unmatch_select<=cur))
             confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
-            for (pr, gt) in self.predict_label_pairs[filtered]:
+            for (pr, gt) in predict_label_pairs[filtered]:
                 confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_pos[1:-1], self.label_size[gt])]+=1
-            for (pr, gt) in self.predict_label_pairs[unmatch_label]:
+            for gt in unmatch_label:
                 confusion[int(self.raw_labels[gt, 0])][len(pred_target)][bisect.bisect_left(split_pos[1:-1], self.label_size[gt])]+=1
         elif target == 'predict_size':
             all_dist = [0 for _ in range(K)]
@@ -520,8 +613,8 @@ class DataCtrler(object):
                 last = split_pos[i]
                 cur = split_pos[i+1]
                 all_dist[i] = np.count_nonzero(np.logical_and(self.predict_size>last, self.predict_size<=cur))
-            match_select = self.predict_size[self.predict_label_pairs[filtered,0]]
-            unmatch_select = self.predict_size[self.predict_label_pairs[unmatch_predict,0]]
+            match_select = self.predict_size[predict_label_pairs[filtered,0]]
+            unmatch_select = self.predict_size[predict_label_pairs[unmatch_predict,0]]
             select_dist = [0 for _ in range(K)]
             for i in range(K):
                 last = split_pos[i]
@@ -529,9 +622,9 @@ class DataCtrler(object):
                 select_dist[i] = np.count_nonzero(np.logical_and(match_select>last, match_select<=cur)) + \
                     np.count_nonzero(np.logical_and(unmatch_select>last, unmatch_select<=cur))
             confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
-            for (pr, gt) in self.predict_label_pairs[filtered]:
+            for (pr, gt) in predict_label_pairs[filtered]:
                 confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_pos[1:-1], self.predict_size[pr])]+=1
-            for (pr, gt) in self.predict_label_pairs[unmatch_predict]:
+            for (pr, gt) in predict_label_pairs[unmatch_predict]:
                 confusion[len(label_target)][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_pos[1:-1], self.predict_size[pr])]+=1
         elif target == 'label_aspect_ratio':
             all_dist = [0 for _ in range(K)]
@@ -539,8 +632,8 @@ class DataCtrler(object):
                 last = split_pos[i]
                 cur = split_pos[i+1]
                 all_dist[i] = np.count_nonzero(np.logical_and(self.label_aspect_ratio>last, self.label_aspect_ratio<=cur))
-            match_select = self.label_aspect_ratio[self.predict_label_pairs[filtered,1]]
-            unmatch_select = self.label_aspect_ratio[self.predict_label_pairs[unmatch_label,1]]
+            match_select = self.label_aspect_ratio[predict_label_pairs[filtered,1]]
+            unmatch_select = self.label_aspect_ratio[unmatch_label]
             select_dist = [0 for _ in range(K)]
             for i in range(K):
                 last = split_pos[i]
@@ -548,9 +641,9 @@ class DataCtrler(object):
                 select_dist[i] = np.count_nonzero(np.logical_and(match_select>last, match_select<=cur)) + \
                     np.count_nonzero(np.logical_and(unmatch_select>last, unmatch_select<=cur))
             confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
-            for (pr, gt) in self.predict_label_pairs[filtered]:
+            for (pr, gt) in predict_label_pairs[filtered]:
                 confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_pos[1:-1], self.label_aspect_ratio[gt])]+=1
-            for (pr, gt) in self.predict_label_pairs[unmatch_label]:
+            for gt in unmatch_label:
                 confusion[int(self.raw_labels[gt, 0])][len(pred_target)][bisect.bisect_left(split_pos[1:-1], self.label_aspect_ratio[gt])]+=1
         elif target == 'predict_aspect_ratio':
             all_dist = [0 for _ in range(K)]
@@ -558,8 +651,8 @@ class DataCtrler(object):
                 last = split_pos[i]
                 cur = split_pos[i+1]
                 all_dist[i] = np.count_nonzero(np.logical_and(self.predict_aspect_ratio>last, self.predict_aspect_ratio<=cur))
-            match_select = self.predict_aspect_ratio[self.predict_label_pairs[filtered,0]]
-            unmatch_select = self.predict_aspect_ratio[self.predict_label_pairs[unmatch_predict,0]]
+            match_select = self.predict_aspect_ratio[predict_label_pairs[filtered,0]]
+            unmatch_select = self.predict_aspect_ratio[predict_label_pairs[unmatch_predict,0]]
             select_dist = [0 for _ in range(K)]
             for i in range(K):
                 last = split_pos[i]
@@ -567,9 +660,9 @@ class DataCtrler(object):
                 select_dist[i] = np.count_nonzero(np.logical_and(match_select>last, match_select<=cur)) + \
                     np.count_nonzero(np.logical_and(unmatch_select>last, unmatch_select<=cur))
             confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
-            for (pr, gt) in self.predict_label_pairs[filtered]:
+            for (pr, gt) in predict_label_pairs[filtered]:
                 confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_pos[1:-1], self.predict_aspect_ratio[pr])]+=1
-            for (pr, gt) in self.predict_label_pairs[unmatch_predict]:
+            for (pr, gt) in predict_label_pairs[unmatch_predict]:
                 confusion[len(label_target)][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_pos[1:-1], self.predict_aspect_ratio[pr])]+=1
         else:
             raise NotImplementedError()
@@ -589,10 +682,14 @@ class DataCtrler(object):
         if query is None and self.box_size_dist_map is not None:
             return self.box_size_dist_map
         filtered, unmatch_predict, unmatch_label = self.filterSamples(query)
-        filtered_label_size = self.label_size[self.predict_label_pairs[filtered][:,1]]
-        filtered_predict_size = self.predict_size[self.predict_label_pairs[filtered][:,0]]
-        unmatched_label_size = self.label_size[self.predict_label_pairs[unmatch_label][:,1]]
-        unmatched_predict_size = self.predict_size[self.predict_label_pairs[unmatch_predict][:,0]]
+        iou_thres = self.iou_thresholds[0]
+        if query is not None and "iou_thres" in query:
+            iou_thres = query["iou_thres"]
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        filtered_label_size = self.label_size[predict_label_pairs[filtered][:,1]]
+        filtered_predict_size = self.predict_size[predict_label_pairs[filtered][:,0]]
+        unmatched_label_size = self.label_size[unmatch_label]
+        unmatched_predict_size = self.predict_size[predict_label_pairs[unmatch_predict][:,0]]
         
         K = 25
         if query is not None and 'label_range' in query:
@@ -615,15 +712,15 @@ class DataCtrler(object):
         label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
         label_box_size_confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
         predict_box_size_confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
-        for (pr, gt) in self.predict_label_pairs[filtered]:
+        for (pr, gt) in predict_label_pairs[filtered]:
             if label_range[0] <= self.label_size[gt] <= label_range[1]:
                 label_box_size_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(label_split[1:-1], self.label_size[gt])]+=1
             if predict_range[0] <= self.predict_size[pr] <= predict_range[1]:
                 predict_box_size_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(predict_split[1:-1], self.predict_size[pr])]+=1
-        for (pr, gt) in self.predict_label_pairs[unmatch_label]:
+        for gt in unmatch_label:
             if label_range[0] <= self.label_size[gt] <= label_range[1]:
                 label_box_size_confusion[int(self.raw_labels[gt, 0])][len(pred_target)][bisect.bisect_left(label_split[1:-1], self.label_size[gt])]+=1
-        for (pr, gt) in self.predict_label_pairs[unmatch_predict]:
+        for (pr, gt) in predict_label_pairs[unmatch_predict]:
             if predict_range[0] <= self.predict_size[pr] <= predict_range[1]:
                 predict_box_size_confusion[len(label_target)][int(self.raw_predicts[pr, 0])][bisect.bisect_left(predict_split[1:-1], self.predict_size[pr])]+=1
                 
@@ -643,17 +740,21 @@ class DataCtrler(object):
         if query is None and self.box_aspect_ratio_dist_map is not None:
             return self.box_aspect_ratio_dist_map
         filtered, unmatch_predict, unmatch_label = self.filterSamples(query)
-        filtered_label_aspect_ratio = self.label_aspect_ratio[self.predict_label_pairs[filtered,1]]
-        filtered_predict_aspect_ratio = self.predict_aspect_ratio[self.predict_label_pairs[filtered,0]]
-        unmatched_label_aspect_ratio = self.label_aspect_ratio[self.predict_label_pairs[unmatch_label,1]]
-        unmatched_predict_aspect_ratio = self.predict_aspect_ratio[self.predict_label_pairs[unmatch_predict,0]]
+        iou_thres = self.iou_thresholds[0]
+        if query is not None and "iou_thres" in query:
+            iou_thres = query["iou_thres"]
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        filtered_label_aspect_ratio = self.label_aspect_ratio[predict_label_pairs[filtered,1]]
+        filtered_predict_aspect_ratio = self.predict_aspect_ratio[predict_label_pairs[filtered,0]]
+        unmatched_label_aspect_ratio = self.label_aspect_ratio[unmatch_label]
+        unmatched_predict_aspect_ratio = self.predict_aspect_ratio[predict_label_pairs[unmatch_predict,0]]
         
         K = 25
         if query is not None and 'label_range' in query:
             label_range = query['label_range']
             predict_range = query['predict_range']
         else:
-            maximum_val = np.max(np.concatenate((self.label_aspect_ratio, self.predict_aspect_ratio)))
+            maximum_val = np.max(np.concatenate((self.label_aspect_ratio, filtered_predict_aspect_ratio, unmatched_predict_aspect_ratio)))
             label_range = [0, maximum_val]
             predict_range = [0, maximum_val]
         label_split = np.array([label_range[0]+i*(label_range[1]-label_range[0])/K for i in range(K+1)])
@@ -669,15 +770,15 @@ class DataCtrler(object):
         label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
         label_box_aspect_ratio_confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
         predict_box_aspect_ratio_confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
-        for (pr, gt) in self.predict_label_pairs[filtered]:
+        for (pr, gt) in predict_label_pairs[filtered]:
             if label_range[0] <= self.label_aspect_ratio[gt] <= label_range[1]:
                 label_box_aspect_ratio_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(label_split[1:-1], self.label_aspect_ratio[gt])]+=1
             if predict_range[0] <= self.predict_aspect_ratio[pr] <= predict_range[1]:
                 predict_box_aspect_ratio_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(predict_split[1:-1], self.predict_aspect_ratio[pr])]+=1
-        for (pr, gt) in self.predict_label_pairs[unmatch_label]:
+        for gt in unmatch_label:
             if label_range[0] <= self.label_aspect_ratio[gt] <= label_range[1]:
                 label_box_aspect_ratio_confusion[int(self.raw_labels[gt, 0])][len(pred_target)][bisect.bisect_left(label_split[1:-1], self.label_aspect_ratio[gt])]+=1
-        for (pr, gt) in self.predict_label_pairs[unmatch_predict]:
+        for (pr, gt) in predict_label_pairs[unmatch_predict]:
             if predict_range[0] <= self.predict_aspect_ratio[pr] <= predict_range[1]:
                 predict_box_aspect_ratio_confusion[len(label_target)][int(self.raw_predicts[pr, 0])][bisect.bisect_left(predict_split[1:-1], self.predict_aspect_ratio[pr])]+=1
                 
@@ -720,16 +821,23 @@ class DataCtrler(object):
                 labelTransform[i] = childToTop[self.names[i]]
         return labelTransform.astype(int)
         
-    def gridZoomIn(self, nodes, constraints, depth, aspectRatio, zoomin):
-        allpreds = self.raw_predicts[self.predict_label_pairs[:,0], 0].astype(np.int32)
-        allpreds[len(self.raw_predicts):] = len(self.names)-1
-        alllabels = self.raw_labels[self.predict_label_pairs[:,1], 0].astype(np.int32)
-        negaLabels = np.where(self.predict_label_pairs[:len(self.raw_predicts),1]==-1)[0]
-        alllabels[negaLabels] = len(self.names)-1
-        allconfidence = np.zeros(len(self.predict_label_pairs))
-        allconfidence[:len(self.raw_predicts)] = self.raw_predicts[:, 1]
-        allfeatures = self.features
-        neighbors = self.sampler.zoomin(nodes, 225, allfeatures)
+    def gridZoomIn(self, nodes, constraints, depth, aspectRatio, zoomin, iou_thres, conf_thres):
+        predict_label_pairs, _, predict_type = self.pairs_map_under_iou_thresholds[iou_thres]
+        filtered, unmatch_predict, unmatch_label = self.filterSamples({
+            "iou_thres": iou_thres,
+            "conf_thres": conf_thres
+        })
+        all_pred_ids = predict_label_pairs[np.concatenate((filtered, unmatch_predict)), 0]
+        unmatch_label_ids = unmatch_label + len(self.raw_predicts)
+
+        allfeatures = np.concatenate((self.pr_features, self.gt_features))
+        neighbors = self.sampler.zoomin(nodes, 250, allfeatures)
+
+        # filter after sampling
+        neighbors = np.array(neighbors)[np.logical_or(np.isin(neighbors, all_pred_ids),
+                                                      np.isin(neighbors, unmatch_label_ids))].tolist()
+
+
         zoomInConstraints = None
         zoomInConstraintX = None
         if constraints is not None:
@@ -743,9 +851,25 @@ class DataCtrler(object):
                 if node in nodesset:
                     zoomInConstraintX.append(node)
             zoomInConstraintX = allfeatures[nodes]
-        zoomInLabels = alllabels[zoomInNodes]
-        zoomInPreds = allpreds[zoomInNodes]
-        zoomInConfidence = allconfidence[zoomInNodes]
+        
+        zoomInLabels, zoomInPreds, zoomInConfidence, zoomInType = [], [], [], []
+        for node in zoomInNodes:
+            if node < len(self.raw_predicts):
+                if predict_label_pairs[predict_label_pairs[:,0]==node][0, 1] == -1:
+                    zoomInLabels.append(-1)
+                else:
+                    zoomInLabels.append(self.raw_labels[predict_label_pairs[predict_label_pairs[:,0]==node][0, 1], 0])
+                zoomInPreds.append(self.raw_predicts[node, 0])
+                zoomInConfidence.append(self.raw_predicts[node, 1])
+                zoomInType.append(predict_type[predict_label_pairs[:,0]==node][0])
+            else:
+                zoomInLabels.append(self.raw_labels[node-len(self.raw_predicts), 0])
+                zoomInPreds.append(-1)
+                zoomInConfidence.append(0)
+                zoomInType.append(0) # missed error
+        zoomInLabels, zoomInPreds, zoomInConfidence, zoomInType = np.array(zoomInLabels, dtype=np.int32), np.array(zoomInPreds, dtype=np.int32), np.array(zoomInConfidence, dtype=np.float64), np.array(zoomInType, dtype=np.int32)
+        zoomInLabels[zoomInLabels==-1] = len(self.names) - 1
+        zoomInPreds[zoomInPreds==-1] = len(self.names) - 1
 
         def getBottomLabels(zoomInNodes):
             hierarchy = copy.deepcopy(self.hierarchy)
@@ -838,8 +962,16 @@ class DataCtrler(object):
 
         bottomLabels = getBottomLabels(copy.deepcopy(zoomInNodes))
         labelTransform = self.transformBottomLabelToTop(bottomLabels)
-        constraintLabels = labelTransform[alllabels[nodes]]
-        labels = labelTransform[zoomInLabels]  
+        constraintLabels = []
+        for node in nodes:
+            if node < len(self.raw_predicts):
+                if predict_label_pairs[predict_label_pairs[:,0]==node][0, 1] == -1:
+                    constraintLabels.append(labelTransform[len(self.names) - 1])
+                else:
+                    constraintLabels.append(labelTransform[int(self.raw_labels[predict_label_pairs[predict_label_pairs[:,0]==node][0, 1], 0])])
+            else:
+                constraintLabels.append(labelTransform[int(self.raw_labels[node-len(self.raw_predicts), 0])])
+        labels = labelTransform[zoomInLabels]
 
         # oroginal
         # labelTransform = self.transformBottomLabelToTop([node['name'] for node in self.statistic['confusion']['hierarchy']])       
@@ -851,6 +983,7 @@ class DataCtrler(object):
         zoomInLabels = zoomInLabels.tolist()
         zoomInPreds = zoomInPreds.tolist()
         zoomInConfidence = zoomInConfidence.tolist()
+        zoomInType = zoomInType.tolist()
 
         n = len(zoomInNodes)
         nodes = [{
@@ -859,7 +992,8 @@ class DataCtrler(object):
             "grid": grid[i],
             "label": zoomInLabels[i],
             "pred": zoomInPreds[i],
-            "confidence": zoomInConfidence[i]
+            "confidence": zoomInConfidence[i],
+            "type": zoomInType[i]
         } for i in range(n)]
         res = {
             "nodes": nodes,
@@ -873,42 +1007,57 @@ class DataCtrler(object):
         
     def pairIDtoImageID(self, boxID: int):
         if boxID>=len(self.raw_predicts):
-            return self.raw_label2imageid[self.predict_label_pairs[boxID,1]]
+            return self.raw_label2imageid[boxID-len(self.raw_predicts)]
         return self.raw_predict2imageid[boxID]
+    
+    def _getBoxesByImgId(self, img_id: int, iou_thres: float, conf_thres: float):
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        # as 1 gt may occur in many pairs, so pr_boxes will only contain predict indexes, and so as gt_boxes
+        pr_boxes = predict_label_pairs[np.logical_and(np.logical_and(predict_label_pairs[:, 0]>=self.imageid2raw_predict[img_id][0],
+                                                                     predict_label_pairs[:, 0]< self.imageid2raw_predict[img_id][1]), 
+                                                      self.raw_predicts[predict_label_pairs[:, 0], 1] > conf_thres), 0]
+        gt_boxes = np.arange(self.imageid2raw_label[img_id][0], self.imageid2raw_label[img_id][1])
+        return pr_boxes.tolist(), gt_boxes.tolist()
+
+    def _getBoxByBoxId(self, box_id: int, iou_thres: float):
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        pr_box, gt_box = [], []
+        if box_id >= len(self.raw_predicts):
+            pr_box.append(-1)
+            gt_box.append(box_id - len(self.raw_predicts))
+        else:
+            pr_box.append(box_id)
+            gt_box.append(int(predict_label_pairs[predict_label_pairs[:, 0] == box_id][0, 1]))
+        return pr_box, gt_box
         
-    def getImagebox(self, boxID: int, showall: str):
-        boxes = []
+    def getImagebox(self, boxID: int, showall: str, iou_thres: float, conf_thres: float):
         finalBoxes = []
         img = Image.open(os.path.join(self.images_path, self.index2image[self.pairIDtoImageID(boxID)]+'.jpg'))
         amp = [img.width,img.height]
         if showall == 'all':
             imgID = self.pairIDtoImageID(boxID)
-            boxes = self.predict_label_pairs[self.imageid2raw_predict[imgID][0]:self.imageid2raw_predict[imgID][1]]
-            gt_s = self.imageid2raw_label[imgID][0]
-            gt_e = self.imageid2raw_label[imgID][1]
-            gt_boxes = self.predict_label_pairs[len(self.raw_predicts):][np.logical_and(gt_s <= self.predict_label_pairs[len(self.raw_predicts):, 1], self.predict_label_pairs[len(self.raw_predicts):, 1] < gt_e)]
-            boxes = np.concatenate((boxes, gt_boxes), axis=0).tolist()
+            pr_boxes, gt_boxes = self._getBoxesByImgId(imgID, iou_thres, conf_thres)
         elif showall == 'single':
-            boxes.append(self.predict_label_pairs[boxID].tolist())
-        for box in boxes:
-            predictBox, labelBox = box
-            predictXYXY = None
-            if predictBox != -1:
-                predictXYXY = (self.raw_predicts[predictBox, 2:6]).tolist()
+            pr_boxes, gt_boxes = self._getBoxByBoxId(boxID, iou_thres)
+        for box in pr_boxes:
+            if box != -1:
                 finalBoxes.append({
-                    "box": predictXYXY,
-                    "size": float(self.predict_size[predictBox]),
+                    "box": (self.raw_predicts[box, 2:6]).tolist(),
+                    "size": float(self.predict_size[box]),
                     "type": "pred",
-                    "class": self.names[int(self.raw_predicts[predictBox, 0])]
+                    "class": self.names[int(self.raw_predicts[box, 0])],
+                    "id": box,
+                    "score": float(self.raw_predicts[box, 1])
                 })
-            labelXYXY = None
-            if labelBox != -1:
-                labelXYXY = (self.raw_labels[labelBox, 1:5]).tolist()
+        for box in gt_boxes:
+            if box != -1:
                 finalBoxes.append({
-                    "box": labelXYXY,
-                    "size": float(self.label_size[labelBox]),
+                    "box": (self.raw_labels[box, 1:5]).tolist(),
+                    "size": float(self.label_size[box]),
                     "type": "gt",
-                    "class": self.names[int(self.raw_labels[labelBox, 0])]
+                    "class": self.names[int(self.raw_labels[box, 0])],
+                    "id": box,
+                    "score": 0
                 })
         return {
             "boxes": finalBoxes,
@@ -916,33 +1065,25 @@ class DataCtrler(object):
         }
         
         
-    def getImage(self, boxID: int, show: str, showall: str, hideBox = False):
+    def getImage(self, boxID: int, show: str, showall: str, iou_thres: float, conf_thres: float, hideBox = False):
         img = Image.open(os.path.join(self.images_path, self.index2image[self.pairIDtoImageID(boxID)]+'.jpg'))
         anno = Annotator(np.array(img), pil=True)
         amp = np.array([img.width,img.height,img.width,img.height])
-        boxes = []
         if showall == 'all':
             imgID = self.pairIDtoImageID(boxID)
-            boxes = self.predict_label_pairs[self.imageid2raw_predict[imgID][0]:self.imageid2raw_predict[imgID][1]]
-            gt_s = self.imageid2raw_label[imgID][0]
-            gt_e = self.imageid2raw_label[imgID][1]
-            gt_boxes = []
-            for pair in self.predict_label_pairs[len(self.raw_predicts):]:
-                if pair[1]>= gt_s and pair[1]<gt_e:
-                    gt_boxes.append(pair)
-            boxes = np.concatenate((boxes, np.array(gt_boxes)), axis=0).tolist()
+            pr_boxes, gt_boxes = self._getBoxesByImgId(imgID, iou_thres, conf_thres)
         elif showall == 'single':
-            boxes.append(self.predict_label_pairs[boxID])
-        for box in boxes:
-            predictBox, labelBox = box
+            pr_boxes, gt_boxes = self._getBoxByBoxId(boxID, iou_thres)
+        for box in pr_boxes:
             predictXYXY = None
-            if predictBox != -1:
-                predictXYXY = xywh2xyxy(self.raw_predicts[predictBox, 2:6]*amp).tolist()
-                anno.box_label(predictXYXY, color=(255,102,0))
+            if box != -1:
+                predictXYXY = xywh2xyxy(self.raw_predicts[box, 2:6]*amp).tolist()
+                anno.box_label(predictXYXY, color=(255, 0, 0))
+        for box in gt_boxes:
             labelXYXY = None
-            if labelBox != -1:
-                labelXYXY = xywh2xyxy(self.raw_labels[labelBox, 1:5]*amp).tolist()
-                anno.box_label(labelXYXY, color=(95,198,181))
+            if box != -1:
+                labelXYXY = xywh2xyxy(self.raw_labels[box, 1:5]*amp).tolist()
+                anno.box_label(labelXYXY, color=(0, 255, 0))
         output = io.BytesIO()
         if hideBox:
             img.save(output, format="JPEG")
@@ -952,13 +1093,14 @@ class DataCtrler(object):
             anno.im.save(output, format="JPEG")
         return output
     
-    def getImages(self, boxIDs: list, show: str):
+    def getImages(self, boxIDs: list, show: str, iou_thres: float):
         base64Imgs = []
         for boxID in boxIDs:
             img = Image.open(os.path.join(self.images_path, self.index2image[self.pairIDtoImageID(boxID)]+'.jpg'))
             anno = Annotator(np.array(img), pil=True)
             amp = np.array([img.width,img.height,img.width,img.height])
-            predictBox, labelBox = self.predict_label_pairs[boxID]
+            pr_boxes, gt_boxes = self._getBoxByBoxId(boxID, iou_thres)
+            predictBox, labelBox = pr_boxes[0], gt_boxes[0]
             predictXYXY = None
             if predictBox != -1:
                 predictXYXY = xywh2xyxy(self.raw_predicts[predictBox, 2:6]*amp).tolist()
@@ -1011,18 +1153,15 @@ class DataCtrler(object):
         Returns:
             list: images id
         """ 
-        allpreds = self.raw_predicts[self.predict_label_pairs[:,0], 0].astype(np.int32)
-        allpreds[len(self.raw_predicts):] = len(self.names)-1
-        alllabels = self.raw_labels[self.predict_label_pairs[:,1], 0].astype(np.int32)
-        negaLabels = np.where(self.predict_label_pairs[:len(self.raw_predicts),1]==-1)[0]
-        alllabels[negaLabels] = len(self.names)-1
-        filtered , unmatch_predict, unmatch_label = self.filterSamples(query)
+        iou_thres = self.iou_thresholds[0]
+        if query is not None and "iou_thres" in query:
+            iou_thres = query["iou_thres"]
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
         # convert list of label names to dict
         labelNames = self.names
         name2idx = {}
         for i in range(len(labelNames)):
             name2idx[labelNames[i]]=i
-        
         # find images
         labelSet = set()
         for label in labels:
@@ -1030,13 +1169,18 @@ class DataCtrler(object):
         predSet = set()
         for label in preds:
             predSet.add(name2idx[label])
+        query["label"] = list(labelSet)
+        query["predict"] = list(predSet)
+        filtered , unmatch_predict, unmatch_label = self.filterSamples(query)
         imageids = []
-        if alllabels is not None and allpreds is not None:
-            n = len(alllabels)
-            for i in range(n):
-                if alllabels[i] in labelSet and allpreds[i] in predSet:
-                    imageids.append(i)
-                    
+        if (len(self.names)-1) in labelSet and (len(self.names)-1) in predSet:
+            pass
+        elif (len(self.names)-1) in labelSet:
+            imageids = predict_label_pairs[unmatch_predict, 0].tolist()
+        elif (len(self.names)-1) in predSet:
+            imageids = (unmatch_label + len(self.raw_predicts)).tolist()
+        else:
+            imageids = predict_label_pairs[filtered, 0].tolist()
         # limit length of images
         return imageids
     
@@ -1103,6 +1247,29 @@ def xywh2xyxy(x):
         y[:, 2] = x[:, 0] + x[:, 2] / 2  # bottom right x
         y[:, 3] = x[:, 1] + x[:, 3] / 2  # bottom right y
         return y
+
+def cal_iou(pr, gt, iscrowd = None):
+        # https://github.com/pytorch/vision/blob/master/torchvision/ops/boxes.py
+        """
+            Return intersection-over-union (Jaccard index) of boxes.
+            Both sets of boxes are expected to be in (x1, y1, x2, y2) format.
+            Arguments:
+                pr (Tensor[N, 4])
+                gt (Tensor[M, 4])
+                iscrowd ([M])
+            Returns:
+                iou (Tensor[N, M]): the NxM matrix containing the pairwise
+                    IoU values for every element in boxes1 and boxes2
+        """
+        pr, gt = xywh2xyxy(pr), xywh2xyxy(gt)
+        (a1, a2), (b1, b2) = np.array_split(pr[:, None],2,axis=2), np.array_split(gt, 2, axis=1)
+        inter = (np.minimum(a2, b2) - np.maximum(a1, b1)).clip(0).prod(2)
+        union = (box_area(pr.T)[:, None] + box_area(gt.T) - inter)
+        if iscrowd is not None:
+            crowd_idx = np.where(iscrowd == 1)[0]
+            if len(crowd_idx) > 0:
+                union[:, crowd_idx] = box_area(pr.T)[:, None]
+        return inter / (union + 1e-6)
 
 def box_iou(box1, box2):
     # https://github.com/pytorch/vision/blob/master/torchvision/ops/boxes.py

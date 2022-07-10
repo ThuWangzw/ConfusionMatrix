@@ -1,21 +1,54 @@
 <template>
     <div id="data-content">
         <div id="left-widgets">
-            <!-- <div id="toolbox-container">
+            <div id="toolbox-container">
                 <div class="toolbar-title">Settings</div>
                 <div class="toolbox">
                     <div class="mode-select">
-                        <span class="select-label">Matrix Encoding</span>
-                        <el-select v-model="returnMode" @change="changeDataMode" size="mini">
+                        <span class="select-label">IoU threshold</span>
+                        <el-select v-model="iouThreshold" @change="changeIouThreshold" size="mini">
                             <el-option
-                                v-for="item in dataModes"
-                                :key="item.value"
-                                :label="item.value"
-                                :value="item.value">
+                                v-for="item in iouThresholds"
+                                :key="item"
+                                :label="item"
+                                :value="item">
                             </el-option>
                         </el-select>
                         <i v-if="gettingMatrix||gettingSizeBarchart||gettingAspectRatioBarchart" class="el-icon-loading"></i>
                     </div>
+                    <div class="mode-select">
+                        <span class="select-label">Confidence</span>
+                        <el-select v-model="confThreshold" @change="changeConfThreshold" size="mini">
+                            <el-option
+                                v-for="item in confThresholds"
+                                :key="item"
+                                :label="item"
+                                :value="item">
+                            </el-option>
+                        </el-select>
+                    </div>
+                    <div class="mode-select">
+                        <span class="select-label">Matrix Encoding</span>
+                        <el-select v-model="dataMode" @change="changeDataMode" size="mini">
+                            <el-option
+                                v-for="item in dataModes"
+                                :key="item.value"
+                                :label="item.label"
+                                :value="item.value">
+                            </el-option>
+                        </el-select>
+                    </div>
+                    <!-- <div class="mode-select">
+                        <span class="select-label">Normalization</span>
+                        <el-select v-model="normalizationMode" size="mini" :disabled="returnMode!=='count'">
+                            <el-option
+                                v-for="item in normalizationModes"
+                                :key="item.value"
+                                :label="item.label"
+                                :value="item.value">
+                            </el-option>
+                        </el-select>
+                    </div> -->
                     <div class="mode-select">
                         <span class="select-label">Statistics</span>
                         <el-select v-model="statisticsMode" @change="changeStatisticsMode" size="mini">
@@ -29,34 +62,32 @@
                     </div>
                     <div class="mode-select">
                         <span class="select-label">Display Mode</span>
-                        <el-button id="log-linear-button" size="mini" @click="changeDisplayMode">{{displayMode}}</el-button>
+                        <el-select v-model="displayMode" @change="changeDisplayMode" size="mini">
+                            <el-option
+                                v-for="item in displayModes"
+                                :key="item.value"
+                                :label="item.label"
+                                :value="item.value">
+                            </el-option>
+                        </el-select>
                     </div>
                     <div class="mode-select">
                         <span class="select-label">Hide Unfiltered</span>
-                        <el-button id="hide-unfiltered-button" size="mini" @click="changeHideUnfiltered">{{hideUnfiltered}}</el-button>
+                        <el-select v-model="hideUnfiltered" @change="changeHideUnfiltered" size="mini">
+                            <el-option
+                                v-for="item in filterModes"
+                                :key="item.value"
+                                :label="item.label"
+                                :value="item.value">
+                            </el-option>
+                        </el-select>
                     </div>
                 </div>
-            </div> -->
+            </div>
 
             <div id="barcharts-container">
                 <div class="toolbar-title">
                     <span>Filters</span>
-                    <select v-model="displayMode" @change="changeDisplayMode" style="margin-left: 15px; height: 17px; font-size: 10px">
-                        <option
-                            v-for="item in displayModes"
-                            :key="item.value"
-                            :label="item.label"
-                            :value="item.value">
-                        </option>
-                    </select>
-                    <select v-model="hideUnfiltered" @change="changeHideUnfiltered" style="margin-left: 15px; height: 17px; font-size: 10px">
-                        <option
-                            v-for="item in filterModes"
-                            :key="item.value"
-                            :label="item.label"
-                            :value="item.value">
-                        </option>
-                    </select>
                 </div>
                 <div id="scented-barcharts">
                     <scented-barchart ref="label-size-hist" :barNum="barNum" :dataRangeAll="labelSizeRange" :hideUnfiltered="hideUnfiltered"
@@ -98,26 +129,11 @@
                     <img id="matrix-direction-icon" class="grid-icon" src="/static/images/directions.svg" @click="changeShowDirection">
                     <img id="matrix-size-comparison-icon" class="grid-icon" src="/static/images/circle.png" @click="changeShowSizeComparison">
                 </div>
-                <select v-model="returnMode" @change="changeDataMode" style="margin-left: 15px; height: 17px; font-size: 10px">
-                    <option
-                        v-for="item in dataModes"
-                        :key="item.value"
-                        :label="item.value"
-                        :value="item.value">
-                    </option>
-                </select>
-                <select v-model="statisticsMode" @change="changeStatisticsMode" style="margin-left: 15px; height: 17px; font-size: 10px">
-                    <option
-                        v-for="item in prModes"
-                        :key="item.value"
-                        :label="item.label"
-                        :value="item.value">
-                    </option>
-                </select>
             </div>
             <div id="confusion-matrix-container">
                 <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion" :showMode="showMode" @clickCell="clickConfusionCell"
-                    :confusionMatrix="confusionMatrix" :returnMode="returnMode" :classStatistics="classStatistics"></confusion-matrix>
+                    :confusionMatrix="confusionMatrix" :returnMode="returnMode" :classStatistics="classStatistics"
+                    :normalizationMode="normalizationMode"></confusion-matrix>
             </div>
         </div>
         <div id="grid-view-container">
@@ -135,7 +151,7 @@
                 </div>
             </div>
             <div id="grid-layout-container">
-                <grid-layout ref="grid"></grid-layout>
+                <grid-layout ref="grid" :iouThreshold="iouThreshold" :confThreshold="confThreshold"></grid-layout>
             </div>
         </div>
     </div>
@@ -166,28 +182,44 @@ export default {
             confusionMatrix: undefined,
             showMode: 'normal',
             returnMode: 'count',
+            dataMode: 'count',
             statisticsMode: 'mAP',
+            normalizationMode: 'total',
+            iouThreshold: 0.5,
+            iouThresholds: [
+                0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95,
+            ],
+            confThreshold: 0.1,
+            confThresholds: [
+                0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8,
+            ],
             dataModes: [{
                 value: 'count',
-                label: '数量',
+                label: 'count (total)',
+            }, {
+                value: 'count_row',
+                label: 'count (row probability)',
+            }, {
+                value: 'count_col',
+                label: 'count (column probability)',
             }, {
                 value: 'avg_label_size',
-                label: '真实物体框平均大小',
+                label: 'avg_label_size',
             }, {
                 value: 'avg_predict_size',
-                label: '预测物体框平均大小',
+                label: 'avg_predict_size',
             }, {
                 value: 'avg_iou',
-                label: 'iou均值',
+                label: 'avg_iou',
             }, {
                 value: 'avg_acc',
-                label: '准确率均值',
+                label: 'avg_acc',
             }, {
                 value: 'avg_label_aspect_ratio',
-                label: '真实物体框纵横比均值',
+                label: 'avg_label_aspect_ratio',
             }, {
                 value: 'avg_predict_aspect_ratio',
-                label: '预测物体框纵横比均值',
+                label: 'avg_predict_aspect_ratio',
             }],
             prModes: [{
                 value: 'mAP',
@@ -239,6 +271,16 @@ export default {
             }, {
                 value: true,
                 label: 'hide unfiltered',
+            }],
+            normalizationModes: [{
+                value: 'total',
+                label: 'total',
+            }, {
+                value: 'col',
+                label: 'column',
+            }, {
+                value: 'row',
+                label: 'row',
             }],
             query: {},
             labelSizeSplit: [],
@@ -292,6 +334,17 @@ export default {
             // this.hideUnfiltered = !this.hideUnfiltered;
             // document.getElementById('hide-unfiltered-button').blur();
         },
+        changeIouThreshold: function() {
+            this.query['iou_thres'] = this.iouThreshold;
+            this.setConfusionMatrix();
+        },
+        changeConfThreshold: function() {
+            this.query['conf_thres'] = this.confThreshold;
+            this.setConfusionMatrix();
+            // TODO: change confidence should affect barcharts?
+            // this.setBoxSizeInfo();
+            // this.setBoxAspectRatioInfo();
+        },
         changeShowDirection: function() {
             this.showMode = 'direction';
         },
@@ -307,6 +360,8 @@ export default {
             if (query===undefined) {
                 query = {};
             }
+            query['iou_thres'] = this.iouThreshold;
+            query['conf_thres'] = this.confThreshold;
             const returnList = ['count'];
             if (this.returnMode!=='count') returnList.push(this.returnMode);
             returnList.push('size_comparison');
@@ -325,6 +380,11 @@ export default {
             this.gettingSizeBarchart = true;
             const store = this.$store;
             const that = this;
+            if (query===undefined) {
+                query = {};
+            }
+            query['iou_thres'] = this.iouThreshold;
+            query['conf_thres'] = this.confThreshold;
             axios.post(store.getters.URL_GET_BOX_SIZE_DIST, query===undefined?{}:{query: query})
                 .then(function(response) {
                     that.labelSizeSplit = response.data.labelSplit;
@@ -348,6 +408,11 @@ export default {
             this.gettingAspectRatioBarchart = true;
             const store = this.$store;
             const that = this;
+            if (query===undefined) {
+                query = {};
+            }
+            query['iou_thres'] = this.iouThreshold;
+            query['conf_thres'] = this.confThreshold;
             axios.post(store.getters.URL_GET_BOX_ASPECT_RATIO_DIST, query===undefined?{}:{query: query})
                 .then(function(response) {
                     that.labelAspectRatioSplit = response.data.labelSplit;
@@ -370,7 +435,15 @@ export default {
                 });
         },
         changeDataMode: function() {
-            this.setConfusionMatrix();
+            if (this.dataMode.startsWith('count')) {
+                this.returnMode = 'count';
+                if (this.dataMode === 'count') this.normalizationMode = 'total';
+                else this.normalizationMode = this.dataMode.substr(this.dataMode.length-3, 3);
+            } else {
+                this.returnMode = this.dataMode;
+                this.normalizationMode = 'none';
+                this.setConfusionMatrix();
+            }
         },
         changeStatisticsMode: function() {
             this.setClassStatistics();
@@ -449,6 +522,8 @@ export default {
             if (query===undefined) {
                 query = {};
             }
+            query['iou_thres'] = this.iouThreshold;
+            query['conf_thres'] = this.confThreshold;
             this.query = {...this.query, ...query};
             this.setConfusionMatrix(this.query);
             this.gettingSizeBarchart = true;
@@ -484,6 +559,8 @@ export default {
             const query = this.query;
             query['query_key'] = queryKey;
             query['range'] = rangeShow;
+            query['iou_thres'] = this.iouThreshold;
+            query['conf_thres'] = this.confThreshold;
             if (queryKey === 'label_size') {
                 that.labelSizeShow = rangeShow;
                 this.gettingSizeBarchart = true;
@@ -560,6 +637,8 @@ export default {
                     selection.setNewColor(selection.findNodeByName(d.colNode.name), false);
                 }
             }
+            that.query['iou_thres'] = that.iouThreshold;
+            that.query['conf_thres'] = that.confThreshold;
 
             axios.post(store.getters.URL_GET_IMAGES_IN_MATRIX_CELL, {
                 labels: d.rowNode.leafs,

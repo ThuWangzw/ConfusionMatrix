@@ -52,17 +52,21 @@ def boxAspectRatioDist():
 def imagebox():
     boxID = int(request.json['boxID'])
     showall = request.json['showall']
-    return jsonify(dataCtrler.getImagebox(boxID, showall))
+    conf_thres = request.json['conf']
+    iou_thres = request.json['iou']
+    return jsonify(dataCtrler.getImagebox(boxID, showall, iou_thres, conf_thres))
 
 @app.route('/api/image', methods=["GET"])
 def imageGradient():
     boxID = int(request.args['boxID'])
     showmode = request.args['show']
     showall = request.args['showall']
+    iou_thres = float(request.args['iou'])
+    conf_thres = float(request.args['conf'])
     hideBox = False
     if 'hidebox' in request.args:
         hideBox = request.args['hidebox']=='true'
-    image_binary = dataCtrler.getImage(boxID, showmode, showall, hideBox).getvalue()
+    image_binary = dataCtrler.getImage(boxID, showmode, showall, iou_thres, conf_thres, hideBox).getvalue()
     response = make_response(image_binary)
     response.headers.set('Content-Type', 'image/jpeg')
     response.headers.set(
@@ -73,7 +77,8 @@ def imageGradient():
 def imagesGradient():
     boxIDs = request.json['boxIDs']
     showmode = request.json['show']
-    return jsonify(dataCtrler.getImages(boxIDs, showmode))
+    iou_thres = request.json['iou']
+    return jsonify(dataCtrler.getImages(boxIDs, showmode, iou_thres))
 
 @app.route('/api/imagesInCell', methods=["POST"])
 def confusionMatrixCell():
@@ -97,7 +102,9 @@ def grid():
     zoomin = True
     if 'zoomin' in request.json:
         zoomin = request.json['zoomin']
-    return jsonify(dataCtrler.gridZoomIn(nodes, constraints, depth, aspectRatio, zoomin))
+    conf_thres = request.json['conf']
+    iou_thres = request.json['iou']
+    return jsonify(dataCtrler.gridZoomIn(nodes, constraints, depth, aspectRatio, zoomin, iou_thres, conf_thres))
 
 @app.route('/api/classStatistics', methods=["POST"])
 def classStatistics():
