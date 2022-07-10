@@ -563,7 +563,12 @@ export default {
                         that.$emit('hoverConfusion', undefined, undefined);
                         // eslint-disable-next-line no-invalid-this
                         const cell = d3.select(this);
-                        cell.select('rect').attr('stroke-width', that.cellAttrs['stroke-width']);
+                        if (that.showMode === 'normal') {
+                            cell.select('rect').attr('stroke-width', that.cellAttrs['stroke-width']);
+                        } else {
+                            cell.select('rect').attr('stroke-width', 0);
+                        }
+
                         if (that.showMode === 'direction' && d.info.direction !== undefined) {
                             const directionScale = d3.scaleLinear([0, that.maxCellDirection], [0.4, 1]);
                             // eslint-disable-next-line no-invalid-this
@@ -952,7 +957,8 @@ export default {
                             .transition()
                             .duration(that.updateDuration)
                             .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.getFillColor(d))
-                            .attr('opacity', 0)
+                            .attr('fill-opacity', 0)
+                            .attr('stroke-width', '0px')
                             .on('end', resolve);
                     });
                 }
@@ -980,7 +986,9 @@ export default {
                             .transition()
                             .duration(that.updateDuration)
                             .attr('fill', (d)=>d.info.count===0?'rgb(255,255,255)':that.getFillColor(d))
-                            .attr('opacity', 1)
+                            .attr('stroke', that.cellAttrs['stroke'])
+                            .attr('stroke-width', that.cellAttrs['stroke-width'])
+                            .attr('fill-opacity', 1)
                             .on('end', resolve);
                     });
                 } else if (that.showMode==='direction') {
