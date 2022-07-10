@@ -207,7 +207,9 @@ class DataCtrler(object):
             directionSplits = np.array([math.cos(angle/180*math.pi) for angle in [180, 157.5, 112.5, 67.5, 22.5, 0]])
             for i in range(2,len(directionSplits)):
                 directions[np.logical_and(directionCos>directionSplits[i-1], directionCos<=directionSplits[i])] = i-1
-            negaYs = np.logical_and(directionVectors[:,1]<0, directions!=0)
+            # starts from <-: 0, and clock-wise to 7, middle point as 8
+            # if directionVectors[:,1]>0, means direction downward, as the y coordinate is downward!!!
+            negaYs = np.logical_and(directionVectors[:,1]>0, directions!=0)
             directions[negaYs] = 8-directions[negaYs]
             # use box w, h to define min_shift, with a maximum value of 0.05
             min_shift = (self.raw_labels[predict_label_pairs[directionIdxes, 1], 3] + \
