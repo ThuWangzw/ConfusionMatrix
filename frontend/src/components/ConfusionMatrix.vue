@@ -833,7 +833,8 @@ export default {
                 }
                 if (that.showMode!=='normal') {
                     matrixCellsinG.select('rect')
-                        .attr('opacity', 0);
+                        .attr('fill-opacity', 0)
+                        .attr('stroke-width', 0);
                 }
                 if (that.showMode!=='sizeComparison') {
                     matrixCellsinG.selectAll('.size-circle')
