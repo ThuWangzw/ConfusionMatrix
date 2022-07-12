@@ -172,7 +172,7 @@ class HierarchySampling(object):
         if len(indexes)==0:
             return self.top_nodes.tolist()
         else:
-            neighbors = np.unique(np.concatenate(self.neighbors[indexes, :10]))
+            neighbors = np.unique(np.concatenate(self.neighbors[indexes, :50]))
             if len(neighbors)<=maxValue:
                 return neighbors.tolist()
             neighbors_data = data[neighbors]

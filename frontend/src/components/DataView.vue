@@ -360,6 +360,7 @@ export default {
             if (query===undefined) {
                 query = {};
             }
+            query = {...this.query, ...query};
             query['iou_thres'] = this.iouThreshold;
             query['conf_thres'] = this.confThreshold;
             const returnList = ['count'];

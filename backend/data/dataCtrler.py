@@ -833,9 +833,10 @@ class DataCtrler(object):
         allfeatures = np.concatenate((self.pr_features, self.gt_features))
         neighbors = self.sampler.zoomin(nodes, 250, allfeatures)
 
-        # filter after sampling
-        neighbors = np.array(neighbors)[np.logical_or(np.isin(neighbors, all_pred_ids),
-                                                      np.isin(neighbors, unmatch_label_ids))].tolist()
+        # filter after sampling if not initial layout
+        if nodes != []:
+            neighbors = np.array(neighbors)[np.logical_or(np.isin(neighbors, all_pred_ids),
+                                                          np.isin(neighbors, unmatch_label_ids))].tolist()
 
 
         zoomInConstraints = None
@@ -855,13 +856,14 @@ class DataCtrler(object):
         zoomInLabels, zoomInPreds, zoomInConfidence, zoomInType = [], [], [], []
         for node in zoomInNodes:
             if node < len(self.raw_predicts):
-                if predict_label_pairs[predict_label_pairs[:,0]==node][0, 1] == -1:
+                if node not in predict_label_pairs[:,0] or predict_label_pairs[predict_label_pairs[:,0]==node][0, 1] == -1:
                     zoomInLabels.append(-1)
+                    zoomInType.append(6) # background
                 else:
                     zoomInLabels.append(self.raw_labels[predict_label_pairs[predict_label_pairs[:,0]==node][0, 1], 0])
+                    zoomInType.append(predict_type[predict_label_pairs[:,0]==node][0])
                 zoomInPreds.append(self.raw_predicts[node, 0])
                 zoomInConfidence.append(self.raw_predicts[node, 1])
-                zoomInType.append(predict_type[predict_label_pairs[:,0]==node][0])
             else:
                 zoomInLabels.append(self.raw_labels[node-len(self.raw_predicts), 0])
                 zoomInPreds.append(-1)
@@ -961,6 +963,7 @@ class DataCtrler(object):
             return pq_list
 
         bottomLabels = getBottomLabels(copy.deepcopy(zoomInNodes))
+        # TODO: error occurs if zoomInNodes is empty after filtering, scale up number of neighbors selected can deal with that
         labelTransform = self.transformBottomLabelToTop(bottomLabels)
         constraintLabels = []
         for node in nodes:
@@ -1027,7 +1030,10 @@ class DataCtrler(object):
             gt_box.append(box_id - len(self.raw_predicts))
         else:
             pr_box.append(box_id)
-            gt_box.append(int(predict_label_pairs[predict_label_pairs[:, 0] == box_id][0, 1]))
+            try:
+                gt_box.append(int(predict_label_pairs[predict_label_pairs[:, 0] == box_id][0, 1]))
+            except: # in initial position, box_id may not exist in current pairs
+                gt_box.append(-1)
         return pr_box, gt_box
         
     def getImagebox(self, boxID: int, showall: str, iou_thres: float, conf_thres: float):
