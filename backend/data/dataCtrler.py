@@ -198,7 +198,7 @@ class DataCtrler(object):
         # direction map, also use IoU threshold as key because different match results in different directions
         self.directions_map = {}
         for iou_thres in self.iou_thresholds:
-            predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+            predict_label_pairs, _, predict_types = self.pairs_map_under_iou_thresholds[iou_thres]
             directionIdxes = np.where(np.logical_and(predict_label_pairs[:,0]>-1, predict_label_pairs[:,1]>-1))[0]
             directionVectors = self.raw_predicts[predict_label_pairs[directionIdxes,0]][:,[2,3]] - self.raw_labels[predict_label_pairs[directionIdxes,1]][:,[1,2]]
             directionNorm = np.sqrt(np.power(directionVectors[:,0], 2)+ np.power(directionVectors[:,1], 2))
@@ -211,13 +211,10 @@ class DataCtrler(object):
             # if directionVectors[:,1]>0, means direction downward, as the y coordinate is downward!!!
             negaYs = np.logical_and(directionVectors[:,1]>0, directions!=0)
             directions[negaYs] = 8-directions[negaYs]
-            # use box w, h to define min_shift, with a maximum value of 0.05
-            min_shift = (self.raw_labels[predict_label_pairs[directionIdxes, 1], 3] + \
-                self.raw_labels[predict_label_pairs[directionIdxes, 1], 4]).squeeze() / 10
-            min_shift[min_shift > 0.05] = 0.05
-            directions[directionNorm<min_shift] = 8
             self.directions_map[iou_thres] = -1*np.ones(predict_label_pairs.shape[0], dtype=np.int32)
             self.directions_map[iou_thres][directionIdxes] = directions
+            # assign predicts with no Loc error under this iou_thres to 8
+            self.directions_map[iou_thres][np.isin(predict_types, [1, 2, 5])] = 8
         
         # read feature data
         if os.path.exists(self.all_features_path):
@@ -355,8 +352,8 @@ class DataCtrler(object):
                         if gt_match[m] == -1:
                             gt_match[m] = _pr_idx
                     else: # Class + Location error
-                        # TODO: now consider this kind as background error
-                        # pr_match[_pr_idx] = m
+                        # TODO: now consider this kind similar with confusion
+                        pr_match[_pr_idx] = m
                         pr_type[_pr_idx]  = 4
                         # do not mark gt as used here
             # should ignore detections matched with ignored gt
@@ -475,7 +472,7 @@ class DataCtrler(object):
         iou_thres = self.iou_thresholds[0]
         if query is not None and "iou_thres" in query:
             iou_thres = query["iou_thres"]
-        predict_label_pairs, predict_label_ious, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        predict_label_pairs, predict_label_ious, predict_types = self.pairs_map_under_iou_thresholds[iou_thres]
         bg_size_dist_bins = 5
         function_map = { # x represents array of indexes of predict_label_pair
             'count': lambda x: len(x),
@@ -490,8 +487,8 @@ class DataCtrler(object):
             'size_comparison': lambda x: [0, 0] if len(x)==0 \
                 else np.bincount((self.predict_size[predict_label_pairs[x, 0]]*bg_size_dist_bins).tolist()).tolist() if predict_label_pairs[x[0],1]==-1 \
                 else np.bincount((self.label_size[predict_label_pairs[x, 1]]*bg_size_dist_bins).tolist()).tolist() if predict_label_pairs[x[0],0]==-1 else \
-                [int(np.count_nonzero(self.predict_size[predict_label_pairs[x, 0]] > (self.label_size[predict_label_pairs[x, 1]]*1.15))),
-                int(np.count_nonzero(self.label_size[predict_label_pairs[x, 1]] > (self.predict_size[predict_label_pairs[x, 0]]*1.15)))]
+                [int(np.count_nonzero(self.predict_size[predict_label_pairs[x, 0]] > (self.label_size[predict_label_pairs[x, 1]]))),
+                int(np.count_nonzero(self.label_size[predict_label_pairs[x, 1]] > (self.predict_size[predict_label_pairs[x, 0]])))]
         }
         ret_matrixes = []
         for statistics_mode in statistics_modes:
@@ -522,7 +519,17 @@ class DataCtrler(object):
                     if statistics_mode == 'direction' and (i == len(stat_matrix)-1 or j == len(stat_matrix[0])-1):
                         stat_matrix[i][j] = [0 for _ in range(9)]
                     else:
-                        stat_matrix[i][j] = map_func(matrix[i][j])
+                        if statistics_mode == 'size_comparison' and i != len(stat_matrix)-1 and j != len(stat_matrix[0])-1:
+                            mat_ij = matrix[i][j].copy()
+                            if i == j:
+                                # only pass Location error to calculate size bias
+                                mat_ij = mat_ij[predict_types[mat_ij]==3]
+                            else:
+                                # Loc+Cls error
+                                mat_ij = mat_ij[predict_types[mat_ij]==4]
+                            stat_matrix[i][j] = map_func(mat_ij)
+                        else:
+                            stat_matrix[i][j] = map_func(matrix[i][j])
                         if statistics_mode == 'size_comparison':
                             if len(stat_matrix[i][j]) > bg_size_dist_bins:
                                 stat_matrix[i][j][bg_size_dist_bins-1] += stat_matrix[i][j][bg_size_dist_bins]
@@ -833,9 +840,10 @@ class DataCtrler(object):
         allfeatures = np.concatenate((self.pr_features, self.gt_features))
         neighbors = self.sampler.zoomin(nodes, 250, allfeatures)
 
-        # filter after sampling
-        neighbors = np.array(neighbors)[np.logical_or(np.isin(neighbors, all_pred_ids),
-                                                      np.isin(neighbors, unmatch_label_ids))].tolist()
+        # filter after sampling if not initial layout
+        if nodes != []:
+            neighbors = np.array(neighbors)[np.logical_or(np.isin(neighbors, all_pred_ids),
+                                                          np.isin(neighbors, unmatch_label_ids))].tolist()
 
 
         zoomInConstraints = None
@@ -855,13 +863,14 @@ class DataCtrler(object):
         zoomInLabels, zoomInPreds, zoomInConfidence, zoomInType = [], [], [], []
         for node in zoomInNodes:
             if node < len(self.raw_predicts):
-                if predict_label_pairs[predict_label_pairs[:,0]==node][0, 1] == -1:
+                if node not in predict_label_pairs[:,0] or predict_label_pairs[predict_label_pairs[:,0]==node][0, 1] == -1:
                     zoomInLabels.append(-1)
+                    zoomInType.append(6) # background
                 else:
                     zoomInLabels.append(self.raw_labels[predict_label_pairs[predict_label_pairs[:,0]==node][0, 1], 0])
+                    zoomInType.append(predict_type[predict_label_pairs[:,0]==node][0])
                 zoomInPreds.append(self.raw_predicts[node, 0])
                 zoomInConfidence.append(self.raw_predicts[node, 1])
-                zoomInType.append(predict_type[predict_label_pairs[:,0]==node][0])
             else:
                 zoomInLabels.append(self.raw_labels[node-len(self.raw_predicts), 0])
                 zoomInPreds.append(-1)
@@ -961,6 +970,7 @@ class DataCtrler(object):
             return pq_list
 
         bottomLabels = getBottomLabels(copy.deepcopy(zoomInNodes))
+        # TODO: error occurs if zoomInNodes is empty after filtering, scale up number of neighbors selected can deal with that
         labelTransform = self.transformBottomLabelToTop(bottomLabels)
         constraintLabels = []
         for node in nodes:
@@ -1027,7 +1037,10 @@ class DataCtrler(object):
             gt_box.append(box_id - len(self.raw_predicts))
         else:
             pr_box.append(box_id)
-            gt_box.append(int(predict_label_pairs[predict_label_pairs[:, 0] == box_id][0, 1]))
+            try:
+                gt_box.append(int(predict_label_pairs[predict_label_pairs[:, 0] == box_id][0, 1]))
+            except: # in initial position, box_id may not exist in current pairs
+                gt_box.append(-1)
         return pr_box, gt_box
         
     def getImagebox(self, boxID: int, showall: str, iou_thres: float, conf_thres: float):
@@ -1168,7 +1181,7 @@ class DataCtrler(object):
         iou_thres = self.iou_thresholds[0]
         if query is not None and "iou_thres" in query:
             iou_thres = query["iou_thres"]
-        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        predict_label_pairs, _, predict_types = self.pairs_map_under_iou_thresholds[iou_thres]
         # convert list of label names to dict
         labelNames = self.names
         name2idx = {}
@@ -1183,7 +1196,7 @@ class DataCtrler(object):
             predSet.add(name2idx[label])
         query["label"] = list(labelSet)
         query["predict"] = list(predSet)
-        filtered , unmatch_predict, unmatch_label = self.filterSamples(query)
+        filtered, unmatch_predict, unmatch_label = self.filterSamples(query)
         imageids = []
         if (len(self.names)-1) in labelSet and (len(self.names)-1) in predSet:
             pass
@@ -1192,7 +1205,9 @@ class DataCtrler(object):
         elif (len(self.names)-1) in predSet:
             imageids = (unmatch_label + len(self.raw_predicts)).tolist()
         else:
-            imageids = predict_label_pairs[filtered, 0].tolist()
+            imageids = predict_label_pairs[filtered, 0]
+            imageids = imageids[predict_types[np.isin(predict_label_pairs[:,0],imageids)]>1]
+            imageids = imageids.tolist()
         # limit length of images
         return imageids
     
