@@ -44,5 +44,7 @@ export default new Vuex.Store({
         URL_GET_IMAGES_IN_MATRIX_CELL: (state) => state.APIBASE+'/api/imagesInCell',
         URL_GET_GRID: (state) => state.APIBASE + '/api/grid',
         URL_GET_CLASS_STATISTICS: (state) => state.APIBASE + '/api/classStatistics',
+        URL_GET_PR_CURVES: (state) => state.APIBASE + '/api/classPRCurve',
+        URL_GET_PR_CURVE_IMAGES: (state) => state.APIBASE + '/api/imagesInPRCurve',
     },
 });

@@ -60,6 +60,7 @@ class DataCtrler(object):
         self.box_aspect_ratio_dist_path = os.path.join(bufferPath, "{}_box_aspect_ratio_dist.pkl".format(setting_name))
         self.hierarchy_sample_path = os.path.join(bufferPath, "{}_hierarchy_samples.pkl".format(setting_name))
         self.all_features_path = os.path.join(bufferPath, "{}_features.npy".format(setting_name))
+        self.pr_curves_path = os.path.join(bufferPath, "{}_pr_curves.pkl".format(setting_name))
         self.eval_data = torch.load(os.path.join(rawDataPath, 'eval.pth'))
         
         
@@ -154,6 +155,15 @@ class DataCtrler(object):
             self.pairs_map_under_iou_thresholds = self.compute_label_predict_pair()
             with open(self.label_predict_iou_path, 'wb') as f:
                 pickle.dump(self.pairs_map_under_iou_thresholds, f)
+        
+        # compute PR curve of each category and average under each IoU threshold
+        if os.path.exists(self.pr_curves_path):
+            with open(self.pr_curves_path, 'rb') as f:
+                self.pr_curves_map, self.pr_index_map = pickle.load(f)
+        else:
+            self.pr_curves_map, self.pr_index_map = self.compute_pr_curves()
+            with open(self.pr_curves_path, 'wb') as f:
+                pickle.dump((self.pr_curves_map, self.pr_index_map), f)
         
         if os.path.exists(self.box_size_split_path):
             with open(self.box_size_split_path, 'rb') as f:
@@ -391,6 +401,54 @@ class DataCtrler(object):
             self.pairs_map_under_iou_thresholds[pos_thres] = (predict_label_pairs, predict_label_ious, predict_type)
         return self.pairs_map_under_iou_thresholds
     
+    def compute_pr_curves(self):
+        # each pr curve is an 1-d array of precisions under each recall (0-1, 0.001)
+        pr_curves_map = {}
+        pr_index_map = {}
+        for iou_thres in self.iou_thresholds:
+            predict_label_pairs, _, predict_types = self.pairs_map_under_iou_thresholds[iou_thres]
+            pr_index_map[iou_thres] = {}
+            pr_curves = np.zeros((0, 1001))
+            px = np.linspace(0, 1, 1001)
+            for _cat_id in range(len(self.names) - 1):
+                cat_prs = self.raw_predicts[predict_label_pairs[:, 0], 0] == _cat_id
+                sort_idx = np.argsort(-self.raw_predicts[predict_label_pairs[cat_prs, 0], 1])
+                pred_idx = predict_label_pairs[cat_prs][sort_idx][:, 0]
+                tp = predict_types[cat_prs][sort_idx].copy()
+                tp[tp!=1] = 0
+                num_labels = len(self.raw_labels[np.logical_and(self.raw_labels[:, 5] == 0,
+                                                                self.raw_labels[:, 0] == _cat_id)])
+                tpc = np.cumsum(tp)
+                fpc = np.cumsum(1 - tp)
+                recall = tpc / num_labels
+                precision = tpc / (tpc + fpc)
+                pr_curve = np.interp(px, recall, precision, right=0)
+                pr_curves = np.concatenate((pr_curves, [pr_curve]))
+                pr_index_map[iou_thres][_cat_id] = (precision, recall, pred_idx)
+            pr_curves_map[iou_thres] = pr_curves
+        return pr_curves_map, pr_index_map
+    
+    def getClassPRCurve(self, query = None):
+        assert query is not None, 'should provide target category'
+        target_cat = query['class']
+        iou_thres = query['iou_thres']
+        return {
+            "class": self.pr_curves_map[iou_thres][target_cat].tolist(),
+            "average": np.mean(self.pr_curves_map[iou_thres], axis=0, keepdims=False).tolist()
+        }
+    
+    def getImagesInPRCurve(self, query = None):
+        iou_thres = query["iou_thres"]
+        target_cat = query['class']
+        rc_range = query["recall_range"]
+        pr_range = query["precision_range"]
+        assert rc_range[0] >=0 and rc_range[1] <= 1
+        assert pr_range[0] >= 0 and pr_range[1] <= 1
+        precision, recall, pred_idx = self.pr_index_map[iou_thres][target_cat]
+        return pred_idx[np.logical_and(np.logical_and(precision >= pr_range[0], precision <= pr_range[1]),
+                                       np.logical_and(recall >= rc_range[0], recall <= rc_range[1]))].tolist()
+
+
     def filterSamples(self, query = None):
         """
             return filtered, unmatch_predict, unmatch_label: index of pairs in predict_label_pairs

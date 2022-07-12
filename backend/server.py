@@ -113,6 +113,20 @@ def classStatistics():
         query = request.json['query']
     return jsonify(dataCtrler.getClassStatistics(query))
 
+@app.route('/api/classPRCurve', methods=["POST"])
+def classPRCurve():
+    query = None
+    if 'query' in request.json:
+        query = request.json['query']
+    return jsonify(dataCtrler.getClassPRCurve(query))
+
+@app.route('/api/imagesInPRCurve', methods=["POST"])
+def imagesInPRCurve():
+    query = None
+    if 'query' in request.json:
+        query = request.json['query']
+    return jsonify(dataCtrler.getImagesInPRCurve(query))
+
 def main():
     parser = argparse.ArgumentParser(description='manual to this script')
     parser.add_argument("--rawDataPath", type=str, default='/data/yukai/UnifiedConfusionMatrix/datasets/coco/')

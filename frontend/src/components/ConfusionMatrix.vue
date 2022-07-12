@@ -20,6 +20,7 @@
             </g>
             <g id="matrix-cells-g" transform="translate(0, 0)"></g>
             <g id="class-statistics-g" transform="translate(0, 0)"></g>
+            <g id="pr-curves-g" transform="translate(0, 0)"></g>
         </g>
     </svg>
 </template>
@@ -31,6 +32,7 @@ window.d3 = d3;
 import Util from './Util.vue';
 import GlobalVar from './GlovalVar.vue';
 import clone from 'just-clone';
+import {brushX} from 'd3-brush';
 
 export default {
     name: 'ConfusionMatrix',
@@ -55,6 +57,10 @@ export default {
         normalizationMode: {
             type: String,
             default: 'total',
+        },
+        prCurves: {
+            type: Array,
+            default: undefined,
         },
     },
     computed: {
@@ -84,8 +90,14 @@ export default {
         matrixWidth: function() {
             return this.showNodes.length * this.cellAttrs['size'];
         },
+        matrixHeight: function() {
+            return (this.showNodes.length + (this.prCurveClass===''?0:this.prShift)) * this.cellAttrs['size'];
+        },
         svgWidth: function() {
             return this.leftCornerSize+this.textMatrixMargin+this.matrixWidth+50;// legend height
+        },
+        svgHeight: function() {
+            return this.leftCornerSize+this.textMatrixMargin+this.matrixHeight+50;// legend height
         },
         colorCellSize: function() {
             return this.showColor?this.cellAttrs['size']*0.7:0;
@@ -110,6 +122,9 @@ export default {
         },
         statG: function() {
             return this.svg.select('g#class-statistics-g');
+        },
+        prCurvesG: function() {
+            return this.svg.select('g#pr-curves-g');
         },
         horizonLegend: function() {
             return this.svg.select('text#horizon-legend');
@@ -172,6 +187,9 @@ export default {
             this.getDataAndRender();
         },
         classStatistics: function() {
+            this.getDataAndRender();
+        },
+        prCurves: function() {
             this.getDataAndRender();
         },
     },
@@ -247,6 +265,12 @@ export default {
             maxCellDirection: 0,
             columnSum: [],
             rowSum: [],
+            // pr curve category name
+            prCurveClass: '',
+            prShifts: [],
+            prShift: 10,
+            prCurvePos: -1,
+            brush: brushX(),
         };
     },
     methods: {
@@ -300,6 +324,11 @@ export default {
             }
             // get nodes to show
             this.showNodes = this.getShowNodes(this.hierarchy);
+            let find = false;
+            for (const node of this.showNodes) {
+                if (node.name === this.prCurveClass) find = true;
+            }
+            if (!find) this.prCurveClass = '';
             // get cells to render
             this.cells = [];
             this.classStatShow = [];
@@ -307,6 +336,7 @@ export default {
                 val: d3.mean(this.classStatistics),
                 row: -1.5,
                 key: 'all',
+                click: false,
             });
             this.maxCellValue = 0;
             this.maxCellDirection = 0;
@@ -317,6 +347,8 @@ export default {
                 this.columnSum.push(0);
                 this.rowSum.push(0);
             }
+            this.prShifts = [];
+            let prShift = 0;
             for (let i=0; i<this.showNodes.length; i++) {
                 const nodea = this.showNodes[i];
                 if (i < this.showNodes.length - 1) {
@@ -326,8 +358,9 @@ export default {
                     }
                     this.classStatShow.push({
                         val: tmp / nodea.leafs.length,
-                        row: i,
+                        row: i + prShift,
                         key: nodea.name,
+                        click: this.indexNames.indexOf(nodea.name)>=0,
                     });
                 }
                 for (let j=0; j<this.showNodes.length; j++) {
@@ -358,6 +391,11 @@ export default {
                         }
                     }
                 }
+                this.prShifts.push(prShift);
+                if (nodea.name === this.prCurveClass) {
+                    prShift = this.prShift;
+                    this.prCurvePos = i+1;
+                }
             }
             this.render();
         },
@@ -379,12 +417,51 @@ export default {
         create: async function() {
             const that = this;
             return new Promise((resolve, reject) => {
+                if (that.prCurveClass !== '') {
+                    that.prCurvesG.selectAll('polyline').remove();
+                    const prYScale = d3.scaleLinear([0, 1], [280, 20]);
+                    const prXScale = d3.scaleLinear([0, 1], [0, 260]);
+                    let classLine = '';
+                    let averageLine = '';
+                    let px = 0;
+                    for (const i of that.prCurves[0]) {
+                        if (i < 0.00001) break;
+                        if (px > 0) classLine += ' ';
+                        classLine += String(prXScale(px))+','+String(prYScale(i));
+                        px += 1/1000;
+                    }
+                    px = 0;
+                    for (const i of that.prCurves[1]) {
+                        if (i < 0.00001) break;
+                        if (px > 0) averageLine += ' ';
+                        averageLine += String(prXScale(px))+','+String(prYScale(i));
+                        px += 1/1000;
+                    }
+                    that.prCurvesG.append('polyline')
+                        .attr('stroke', 'rgb(0,0,0)')
+                        .attr('transform', `translate(0,${that.prCurvePos*that.cellAttrs['size']})`)
+                        .attr('fill', 'none')
+                        .attr('points', classLine);
+                    that.prCurvesG.append('polyline')
+                        .attr('stroke', 'rgb(0,0,255)')
+                        .attr('transform', `translate(0,${that.prCurvePos*that.cellAttrs['size']})`)
+                        .attr('fill', 'none')
+                        .attr('points', averageLine);
+                    // that.prCurvesG.transition()
+                    //     .duration(that.createDuration)
+                    //     .attr('opacity', 1);
+                    // this.prCurvesG.call(this.brush.extent([[prXScale(0), prYScale(1)], [prXScale(1), prYScale(0)]])
+                    //     .on('end', function({selection}) {
+                    //         console.log(selection);
+                    //     }));
+                }
+
                 const horizonTextinG = that.horizonTextinG.enter()
                     .append('g')
                     .attr('class', that.horizonTextAttrs['gClass'])
                     .attr('opacity', 0)
                     .attr('transform', (d, i) => `translate(${d.depth*that.horizonTextAttrs['leftMargin']}, 
-                        ${i*that.cellAttrs['size']})`);
+                        ${(i+that.prShifts[i])*that.cellAttrs['size']})`);
 
                 horizonTextinG.transition()
                     .duration(that.createDuration)
@@ -514,7 +591,7 @@ export default {
                     .attr('opacity', 0)
                     .attr('cursor', (d)=>that.isHideCell(d)?'default':that.cellAttrs['cursor'])
                     .attr('transform', (d) => `translate(${d.column*that.cellAttrs['size']}, 
-                        ${d.row*that.cellAttrs['size']})`)
+                        ${(d.row+that.prShifts[d.row])*that.cellAttrs['size']})`)
                     .on('click', function(e, d) {
                         that.$emit('clickCell', d);
                     })
@@ -783,7 +860,18 @@ export default {
                 const classStatinG = that.classStatinG.enter()
                     .append('g')
                     .attr('opacity', 0)
-                    .attr('class', that.statAttrs['gClass']);
+                    .attr('class', that.statAttrs['gClass'])
+                    .attr('cursor', (d)=>d.click?'pointer':'default')
+                    .on('click', function(e, d) {
+                        if (!d.click) return;
+                        if (that.prCurveClass === d.key) {
+                            that.prCurveClass = '';
+                            that.getDataAndRender();
+                        } else {
+                            that.prCurveClass = d.key;
+                            that.$emit('showPRCurve', that.name2index[d.key]);
+                        }
+                    });
                 classStatinG.transition()
                     .duration(that.createDuration)
                     .attr('opacity', 1)
@@ -824,7 +912,7 @@ export default {
                     .transition()
                     .duration(that.updateDuration)
                     .attr('transform', (d, i) => `translate(${d.depth*that.horizonTextAttrs['leftMargin']}, 
-                        ${i*that.cellAttrs['size']})`)
+                        ${(i+that.prShifts[i])*that.cellAttrs['size']})`)
                     .on('end', resolve);
 
                 const icony = that.cellAttrs['size']/2-that.horizonTextAttrs['font-size']/2+that.horizonTextAttrs['iconDy'];
@@ -917,7 +1005,7 @@ export default {
                     .duration(that.updateDuration)
                     .attr('opacity', (d)=>(that.isHideCell(d)?0:1))
                     .attr('transform', (d) => `translate(${d.column*that.cellAttrs['size']}, 
-                        ${d.row*that.cellAttrs['size']})`)
+                        ${(d.row+that.prShifts[d.row])*that.cellAttrs['size']})`)
                     .on('end', resolve);
 
                 that.matrixCellsinG.each(function(d) {
@@ -1125,6 +1213,12 @@ export default {
         remove: async function() {
             const that = this;
             return new Promise((resolve, reject) => {
+                that.prCurvesG.selectAll('polyline')
+                    .transition()
+                    .duration(that.removeDuration)
+                    .attr('opacity', 0)
+                    .remove()
+                    .on('end', resolve);
                 that.horizonTextinG.exit()
                     .transition()
                     .duration(that.removeDuration)
@@ -1165,19 +1259,17 @@ export default {
                 // compute transform
                 const svgRealWidth = that.$refs.svg.clientWidth;
                 const svgRealHeight = that.$refs.svg.clientHeight;
-                console.log(svgRealWidth, svgRealHeight);
-                const realSize = Math.min(svgRealWidth, svgRealHeight);
                 let shiftx = 0;
                 let shifty = 0;
                 let scale = 1;
-                if (that.svgWidth*1.1 > realSize) {
-                    scale = realSize/that.svgWidth/1.1;
-                } else {
-                    scale = 1;
+                if (that.svgWidth*1.1 > svgRealWidth) {
+                    scale = Math.min(scale, svgRealWidth/that.svgWidth/1.1);
                 }
-                console.log(that.svgWidth);
+                if (that.svgHeight*1.1 > svgRealHeight) {
+                    scale = Math.min(scale, svgRealHeight/that.svgHeight/1.1);
+                }
                 shiftx = (svgRealWidth-scale*that.svgWidth)/2;
-                shifty = (svgRealHeight-scale*that.svgWidth)/2;
+                shifty = (svgRealHeight-scale*that.svgHeight)/2;
                 that.mainG.transition()
                     .duration(that.transformDuration)
                     .attr('transform', `translate(${shiftx} ${shifty}) scale(${scale})`)
@@ -1202,7 +1294,11 @@ export default {
                 that.legendG.transition()
                     .duration(that.transformDuration)
                     .attr('transform', `translate(${that.leftCornerSize+that.textMatrixMargin},
-                        ${that.leftCornerSize+that.textMatrixMargin+that.matrixWidth+5})`)
+                        ${that.leftCornerSize+that.textMatrixMargin+that.matrixHeight+5})`)
+                    .on('end', resolve);
+                that.prCurvesG.transition()
+                    .duration(that.transformDuration)
+                    .attr('transform', `translate(${that.leftCornerSize+that.textMatrixMargin}, ${that.leftCornerSize+that.textMatrixMargin})`)
                     .on('end', resolve);
             });
         },

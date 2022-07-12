@@ -133,7 +133,7 @@
             <div id="confusion-matrix-container">
                 <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion" :showMode="showMode" @clickCell="clickConfusionCell"
                     :confusionMatrix="confusionMatrix" :returnMode="returnMode" :classStatistics="classStatistics"
-                    :normalizationMode="normalizationMode"></confusion-matrix>
+                    :normalizationMode="normalizationMode" @showPRCurve="getPRCurve" :prCurves="prCurves"></confusion-matrix>
             </div>
         </div>
         <div id="grid-view-container">
@@ -322,6 +322,7 @@ export default {
             selections: [0],
             selectedSelection: -1,
             classStatistics: undefined,
+            prCurves: undefined,
         };
     },
     methods: {
@@ -613,6 +614,21 @@ export default {
             } else {
                 console.log('query_key error: ' + String(rangeShow));
             }
+        },
+        getPRCurve: function(category) {
+            const store = this.$store;
+            const that = this;
+            axios.post(store.getters.URL_GET_PR_CURVES, {query: {
+                class: category,
+                iou_thres: that.iouThreshold,
+            }})
+                .then(function(response) {
+                    const tmp = [];
+                    tmp.push(response.data.class);
+                    tmp.push(response.data.average);
+                    console.log(tmp);
+                    that.prCurves = tmp;
+                });
         },
         setOverallDist: function() {
             const store = this.$store;
