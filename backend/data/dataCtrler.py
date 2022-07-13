@@ -23,7 +23,7 @@ class DataCtrler(object):
 
     def __init__(self):
         super().__init__()
-        self.iou_thresholds = [0.5 + 0.05 * i for i in range(10)]
+        self.iou_thresholds = [(50 + 5 * i) / 100 for i in range(10)]
         self.classID2Idx = {}      
         self.hierarchy = {}  
         self.names = []
