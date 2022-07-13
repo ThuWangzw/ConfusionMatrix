@@ -425,14 +425,14 @@ export default {
                     let averageLine = '';
                     let px = 0;
                     for (const i of that.prCurves[0]) {
-                        if (i < 0.00001) break;
+                        if (i < 0.00001 && classLine.length > 0) break;
                         if (px > 0) classLine += ' ';
                         classLine += String(prXScale(px))+','+String(prYScale(i));
                         px += 1/1000;
                     }
                     px = 0;
                     for (const i of that.prCurves[1]) {
-                        if (i < 0.00001) break;
+                        if (i < 0.00001 && averageLine.length > 0) break;
                         if (px > 0) averageLine += ' ';
                         averageLine += String(prXScale(px))+','+String(prYScale(i));
                         px += 1/1000;
