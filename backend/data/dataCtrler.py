@@ -18,6 +18,7 @@ from data.grid.sampling import HierarchySampling
 from data.grid.gridLayout import GridLayout
 from data.fisher import get_split_pos
 from data.drawBox import Annotator
+from data.reordering.reorder import statis, getOrderedHierarchyQAPSA
 
 class DataCtrler(object):
 
@@ -28,6 +29,7 @@ class DataCtrler(object):
         self.hierarchy = {}  
         self.names = []
         self.grider = GridLayout()
+        self.ordered_idx = None
 
     def process(self, rawDataPath, bufferPath, reordered=True):
         """process raw data
@@ -143,7 +145,7 @@ class DataCtrler(object):
                 })
             self.names.append("background")
             self.classID2Idx[-1]=len(categorys)
-                
+
             
         # compute (prediction, label) pair
         # creates a map, with different IoU threshold (0.5~0.95 0.05) as key and (predict_label_pairs, iou) as value
@@ -267,11 +269,38 @@ class DataCtrler(object):
             features = np.concatenate((self.pr_features, self.gt_features))
             self.sampler.fit(features, labels, 400)
             self.sampler.dump(self.hierarchy_sample_path)
-          
+
+        if reordered:
+            self.reorder()
+        
+    def reorder(self):
+        CM = self.getConfusionMatrix()
+        CM = np.array(CM[0])
+        CM = CM[:-1][:, :-1]
+        # class 'background' not considered in reordering 
+        confusion = {
+            'matrix': CM,
+            'names': self.names[:-1],
+            'hierarchy': copy.deepcopy(self.hierarchy[:-1])
+        }
+        
+        # ord_ids = statis()
+        ord_h, ord_ids = getOrderedHierarchyQAPSA(confusion)
+        ord_names = [self.names[i] for i in ord_ids]
+        self.hierarchy = ord_h
+        self.new_names = ord_names
+        self.ordered_idx = ord_ids
+
+        self.hierarchy.append({
+            "name": "background",
+            "children": ["background"]
+        })
+        self.new_names.append("background")
+
     def getMetaData(self):
         return {
             "hierarchy": self.hierarchy,
-            "names": self.names
+            "names": self.new_names
         }
             
     def compute_label_predict_pair(self):
@@ -621,6 +650,9 @@ class DataCtrler(object):
             iou_thres = query["iou_thres"]
         predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
         label_target, pred_target = np.arange(80), np.arange(80)
+        if self.ordered_idx:
+            label_target = np.array(self.ordered_idx)
+            pred_target = np.array(self.ordered_idx)
         if query is not None and "label" in query and "predict" in query:
             label_target = query["label"]
             pred_target = query["predict"]

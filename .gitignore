@@ -3,3 +3,4 @@ __pycache__/
 backend/workspace.code-workspace
 buffer/
 datasets/
+*.png
