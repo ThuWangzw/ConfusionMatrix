@@ -621,12 +621,13 @@ export default {
             axios.post(store.getters.URL_GET_PR_CURVES, {query: {
                 class: category,
                 iou_thres: that.iouThreshold,
+                conf_thres: that.confThreshold,
             }})
                 .then(function(response) {
+                    console.log(response.data);
                     const tmp = [];
                     tmp.push(response.data.class);
                     tmp.push(response.data.average);
-                    console.log(tmp);
                     that.prCurves = tmp;
                 });
         },

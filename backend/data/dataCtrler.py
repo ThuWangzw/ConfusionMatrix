@@ -432,9 +432,22 @@ class DataCtrler(object):
         assert query is not None, 'should provide target category'
         target_cat = query['class']
         iou_thres = query['iou_thres']
+        conf_thres = query['conf_thres']
+        predict_label_pairs, _, predict_types = self.pairs_map_under_iou_thresholds[iou_thres]
+        filtered, unmatch_predict, unmatch_label = self.filterSamples({
+            "iou_thres": iou_thres,
+            "conf_thres": conf_thres,
+            "predict": [target_cat]
+        })
+        classErrorDist = [len(np.where(predict_types[filtered]==i)[0]) for i in range(1, 6)]
+        classErrorDist.append(len(unmatch_predict))
+        classErrorDist.append(len(np.where(self.raw_labels[unmatch_label, 0]==target_cat)[0]))
         return {
             "class": self.pr_curves_map[iou_thres][target_cat].tolist(),
-            "average": np.mean(self.pr_curves_map[iou_thres], axis=0, keepdims=False).tolist()
+            "average": np.mean(self.pr_curves_map[iou_thres], axis=0, keepdims=False).tolist(),
+            "dist": classErrorDist,
+            "totalGt": len(np.where(self.raw_labels[self.raw_labels[:, 5]==0][:, 0]==target_cat)[0]),
+            "totalPr": len(filtered) + len(unmatch_predict)
         }
     
     def getImagesInPRCurve(self, query = None):
