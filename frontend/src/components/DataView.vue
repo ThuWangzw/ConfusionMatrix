@@ -338,6 +338,9 @@ export default {
         changeIouThreshold: function() {
             this.query['iou_thres'] = this.iouThreshold;
             this.setConfusionMatrix();
+            if (this.$refs.matrix.prCurveClass !== '') {
+                this.getPRCurve(this.$refs.matrix.name2index[this.$refs.matrix.prCurveClass]);
+            }
         },
         changeConfThreshold: function() {
             this.query['conf_thres'] = this.confThreshold;
