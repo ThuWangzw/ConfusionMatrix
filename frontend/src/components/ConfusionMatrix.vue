@@ -32,7 +32,7 @@ window.d3 = d3;
 import Util from './Util.vue';
 import GlobalVar from './GlovalVar.vue';
 import clone from 'just-clone';
-import {brushX} from 'd3-brush';
+import {brush} from 'd3-brush';
 
 export default {
     name: 'ConfusionMatrix',
@@ -267,10 +267,12 @@ export default {
             rowSum: [],
             // pr curve category name
             prCurveClass: '',
+            prCurveChanged: false,
             prShifts: [],
             prShift: 10,
             prCurvePos: -1,
-            brush: brushX(),
+            brush: brush(),
+            brushSelections: null,
         };
     },
     methods: {
@@ -328,7 +330,10 @@ export default {
             for (const node of this.showNodes) {
                 if (node.name === this.prCurveClass) find = true;
             }
-            if (!find) this.prCurveClass = '';
+            if (!find) {
+                this.prCurveClass = '';
+                this.prCurveChanged = true;
+            }
             // get cells to render
             this.cells = [];
             this.classStatShow = [];
@@ -417,10 +422,11 @@ export default {
         create: async function() {
             const that = this;
             return new Promise((resolve, reject) => {
-                if (that.prCurveClass !== '') {
-                    that.prCurvesG.selectAll('polyline').remove();
-                    const prYScale = d3.scaleLinear([0, 1], [280, 20]);
-                    const prXScale = d3.scaleLinear([0, 1], [0, 260]);
+                if (that.prCurveClass !== '' && that.prCurveChanged) {
+                    that.prCurveChanged = false;
+                    const zoneWidth = 260;
+                    const prYScale = d3.scaleLinear([0, 1], [zoneWidth, 0]);
+                    const prXScale = d3.scaleLinear([0, 1], [0, zoneWidth]);
                     let classLine = '';
                     let averageLine = '';
                     let px = 0;
@@ -439,21 +445,28 @@ export default {
                     }
                     that.prCurvesG.append('polyline')
                         .attr('stroke', 'rgb(0,0,0)')
-                        .attr('transform', `translate(0,${that.prCurvePos*that.cellAttrs['size']})`)
                         .attr('fill', 'none')
                         .attr('points', classLine);
                     that.prCurvesG.append('polyline')
                         .attr('stroke', 'rgb(0,0,255)')
-                        .attr('transform', `translate(0,${that.prCurvePos*that.cellAttrs['size']})`)
                         .attr('fill', 'none')
                         .attr('points', averageLine);
                     // that.prCurvesG.transition()
                     //     .duration(that.createDuration)
                     //     .attr('opacity', 1);
-                    // this.prCurvesG.call(this.brush.extent([[prXScale(0), prYScale(1)], [prXScale(1), prYScale(0)]])
-                    //     .on('end', function({selection}) {
-                    //         console.log(selection);
-                    //     }));
+                    this.prCurvesG.call(this.brush.extent([[prXScale(0), prYScale(1)],
+                        [prXScale(1), prYScale(0)]])
+                        .on('end', function({selection}) {
+                            that.brushSelections = selection;
+                            if (selection === null) return;
+                            const recallRange = [selection[0][0]/zoneWidth, selection[1][0]/zoneWidth];
+                            const precisionRange = [1-selection[1][1]/zoneWidth, 1-selection[0][1]/zoneWidth];
+                            that.$emit('brushPRCurve', {
+                                'class': that.name2index[that.prCurveClass],
+                                'recall_range': recallRange,
+                                'precision_range': precisionRange,
+                            });
+                        }));
                 }
 
                 const horizonTextinG = that.horizonTextinG.enter()
@@ -865,6 +878,7 @@ export default {
                     .attr('cursor', (d)=>d.click?'pointer':'default')
                     .on('click', function(e, d) {
                         if (!d.click) return;
+                        that.prCurveChanged = true;
                         if (that.prCurveClass === d.key) {
                             that.prCurveClass = '';
                             that.getDataAndRender();
@@ -1214,12 +1228,21 @@ export default {
         remove: async function() {
             const that = this;
             return new Promise((resolve, reject) => {
-                that.prCurvesG.selectAll('polyline')
-                    .transition()
-                    .duration(that.removeDuration)
-                    .attr('opacity', 0)
-                    .remove()
-                    .on('end', resolve);
+                if (that.prCurveChanged) {
+                    if (that.brushSelections !== null) that.prCurvesG.call(that.brush.move, null);
+                    that.prCurvesG.selectAll('polyline')
+                        .transition()
+                        .duration(that.removeDuration)
+                        .attr('opacity', 0)
+                        .remove()
+                        .on('end', resolve);
+                    that.prCurvesG.selectAll('rect')
+                        .transition()
+                        .duration(that.removeDuration)
+                        .attr('opacity', 0)
+                        .remove()
+                        .on('end', resolve);
+                }
                 that.horizonTextinG.exit()
                     .transition()
                     .duration(that.removeDuration)
@@ -1299,7 +1322,8 @@ export default {
                     .on('end', resolve);
                 that.prCurvesG.transition()
                     .duration(that.transformDuration)
-                    .attr('transform', `translate(${that.leftCornerSize+that.textMatrixMargin}, ${that.leftCornerSize+that.textMatrixMargin})`)
+                    .attr('transform', `translate(${that.leftCornerSize+that.textMatrixMargin}, 
+                        ${that.leftCornerSize+that.textMatrixMargin+that.prCurvePos*that.cellAttrs['size']+20})`)
                     .on('end', resolve);
             });
         },

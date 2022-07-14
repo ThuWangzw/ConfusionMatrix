@@ -132,7 +132,7 @@
             </div>
             <div id="confusion-matrix-container">
                 <confusion-matrix ref="matrix" @hoverConfusion="hoverConfusion" :showMode="showMode" @clickCell="clickConfusionCell"
-                    :confusionMatrix="confusionMatrix" :returnMode="returnMode" :classStatistics="classStatistics"
+                    :confusionMatrix="confusionMatrix" :returnMode="returnMode" :classStatistics="classStatistics" @brushPRCurve="brushPRCurve"
                     :normalizationMode="normalizationMode" @showPRCurve="getPRCurve" :prCurves="prCurves"></confusion-matrix>
             </div>
         </div>
@@ -191,7 +191,7 @@ export default {
             ],
             confThreshold: 0.1,
             confThresholds: [
-                0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8,
+                0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
             ],
             dataModes: [{
                 value: 'count',
@@ -339,6 +339,7 @@ export default {
             this.query['iou_thres'] = this.iouThreshold;
             this.setConfusionMatrix();
             if (this.$refs.matrix.prCurveClass !== '') {
+                this.$refs.matrix.prCurveChanged = true;
                 this.getPRCurve(this.$refs.matrix.name2index[this.$refs.matrix.prCurveClass]);
             }
         },
@@ -665,6 +666,22 @@ export default {
                 labels: d.rowNode.leafs,
                 preds: d.colNode.leafs,
                 query: that.query,
+            }).then(function(response) {
+                const images = response.data;
+                if (images.length>0) {
+                    console.log(images);
+                    that.$refs.grid.showBottomNodes(images, false);
+                } else {
+                    console.log('no images');
+                }
+            });
+        },
+        brushPRCurve: function(query) {
+            const store = this.$store;
+            const that = this;
+            query['iou_thres'] = this.iouThreshold;
+            axios.post(store.getters.URL_GET_PR_CURVE_IMAGES, {
+                query: query,
             }).then(function(response) {
                 const images = response.data;
                 if (images.length>0) {
