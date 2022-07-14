@@ -311,14 +311,14 @@ def test_on_dataset(gamma=1, num_iters=35000, use_level=False, preorder=False, r
         start = time.time()
         reorder_tree_by_level(tree)
         end = time.time()
-        print('对子树排序用时 ', end-start)
+        # print('对子树排序用时 ', end-start)
         setLeaves(tree)
         ord_ids = [i.id for i in tree.leaves]
     else:
         start = time.time()
         ord_ids = getQAPReordering_file(gamma, True, matrix_txt_path, hierarchy_path, name2id_txt_path, restart, num_iters, preorder, avgs, stds)
         end = time.time()
-        print('对hierarchy排序用时 ', end-start)
+        # print('对hierarchy排序用时 ', end-start)
     reorderTree(tree, ord_ids)
     setLeaves(tree)
 
@@ -360,8 +360,10 @@ def test_on_dataset(gamma=1, num_iters=35000, use_level=False, preorder=False, r
     write_result(results_dic_path, results_csv_path, avgs[1:], stds[1:])
     return ord_ids
 
-def getOrderedHierarchyQAPSA(confusion, use_level=False):
-    path = '/data/fengyuan/72/ConfusionMatrix/backend/data/reordering/data/tmp/80'
+def getOrderedHierarchyQAPSA(confusion, bufferPath, use_level=False):
+    # path = '/data/fengyuan/72/ConfusionMatrix/backend/data/reordering/data/tmp/80'
+    path = os.path.join(bufferPath, 'reordering', 'coco', '80')
+    if not os.path.exists(path): os.makedirs(path)
     from .data.utils import get_max_depth, expand_tree, tree_to_json, hierarchy_json_to_txt, name2id_npy_to_txt, write_case
     from .pkgC.SA.agg_sa import getQAPReordering_file, getQAPReordering, getAvgAndStd
 
@@ -410,7 +412,6 @@ def getOrderedHierarchyQAPSA(confusion, use_level=False):
     if not osp.exists(hierarchy_json_path) or not osp.exists(hierarchy_txt_path):
         json.dump(js, open(hierarchy_json_path,'w',encoding="utf-8"))
         hierarchy_json_to_txt(hierarchy_json_path, hierarchy_txt_path)
-
 
     if not osp.exists(avg_and_std_path):
         avg_std = getAvgAndStd(True, matrix_txt_path, hierarchy_txt_path, name2id_txt_path, 5000)
@@ -549,7 +550,7 @@ def getOrderedHierarchyQAPSA(confusion, use_level=False):
         start = time.time()
         reorder_tree_by_level(tree)
         end = time.time()
-        print('对子树排序用时 ', end-start)
+        # print('对子树排序用时 ', end-start)
         setLeaves(tree)
         ord_ids = [i.id for i in tree.leaves]
     else:
@@ -557,7 +558,7 @@ def getOrderedHierarchyQAPSA(confusion, use_level=False):
         ord_ids = getQAPReordering(1, True, len(CM), CM, hierarchy_txt_path, name2id_txt_path, 5, 10000, False, avgs, stds)
         # ord_ids = getQAPReordering(1, True, matrix_txt_path, hierarchy_txt_path, name2id_txt_path, 5, 10000, False, avgs, stds)
         end = time.time()
-        print('对hierarchy排序用时 ', end-start)
+        # print('对hierarchy排序用时 ', end-start)
     reorderTree(tree, ord_ids)
     setLeaves(tree)
 

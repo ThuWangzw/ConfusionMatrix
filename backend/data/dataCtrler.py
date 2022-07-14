@@ -29,7 +29,6 @@ class DataCtrler(object):
         self.hierarchy = {}  
         self.names = []
         self.grider = GridLayout()
-        self.ordered_idx = None
 
     def process(self, rawDataPath, bufferPath, reordered=True):
         """process raw data
@@ -271,9 +270,9 @@ class DataCtrler(object):
             self.sampler.dump(self.hierarchy_sample_path)
 
         if reordered:
-            self.reorder()
+            self.reorder(bufferPath)
         
-    def reorder(self):
+    def reorder(self, bufferPath):
         CM = self.getConfusionMatrix()
         CM = np.array(CM[0])
         CM = CM[:-1][:, :-1]
@@ -283,24 +282,21 @@ class DataCtrler(object):
             'names': self.names[:-1],
             'hierarchy': copy.deepcopy(self.hierarchy[:-1])
         }
-        
         # ord_ids = statis()
-        ord_h, ord_ids = getOrderedHierarchyQAPSA(confusion)
-        ord_names = [self.names[i] for i in ord_ids]
-        self.hierarchy = ord_h
-        self.new_names = ord_names
-        self.ordered_idx = ord_ids
-
+        ord_hierarchy, ord_ids = getOrderedHierarchyQAPSA(confusion, bufferPath)
+        self.hierarchy = ord_hierarchy
         self.hierarchy.append({
             "name": "background",
             "children": ["background"]
         })
-        self.new_names.append("background")
+        ord_names = [self.names[i] for i in ord_ids]
+        self.ord_names = ord_names
+        self.ord_names.append("background")
 
     def getMetaData(self):
         return {
             "hierarchy": self.hierarchy,
-            "names": self.new_names
+            "names": self.names,
         }
             
     def compute_label_predict_pair(self):
@@ -650,9 +646,6 @@ class DataCtrler(object):
             iou_thres = query["iou_thres"]
         predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
         label_target, pred_target = np.arange(80), np.arange(80)
-        if self.ordered_idx:
-            label_target = np.array(self.ordered_idx)
-            pred_target = np.array(self.ordered_idx)
         if query is not None and "label" in query and "predict" in query:
             label_target = query["label"]
             pred_target = query["predict"]
@@ -1281,6 +1274,7 @@ class DataCtrler(object):
         Returns:
             list: images id
         """ 
+        print(labels, preds)
         iou_thres = self.iou_thresholds[0]
         if query is not None and "iou_thres" in query:
             iou_thres = query["iou_thres"]

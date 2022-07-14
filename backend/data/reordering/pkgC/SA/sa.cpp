@@ -190,7 +190,7 @@ vector<double> calc_level_bar(double level_dis_mat[][N_MAX][N_MAX], Node* tree){
                 level_cost += level_bar_mat[l][i][j] * level_dis_mat[l][ids[i]][ids[j]];
             }
         }
-        cout << l << " " << level_cost << endl;
+        // cout << l << " " << level_cost << endl;
         bars.push_back(level_cost);
     }
     return bars;
@@ -743,29 +743,6 @@ vector<int> getQAPReordering_file(double gamma, bool has_hierarchy, string mat_p
     setId(tree, name2id); 
     setLeaves(tree); 
 
-    // TEST
-    // double testol = 0;
-    // for(int i=0;i<n;i++){
-    //     for(int j=0;j<n;j++){
-    //         testol += b[i][j]*a[i][j];
-    //     }
-    // }
-    // cout << fixed << setprecision(7) << "original bar " << testol << endl;
-
-    // vector<int> init_perm = tree->leavesId;
-    // cout << "initial  perm " << endl;
-    // for(int i=0;i<init_perm.size();i++) cout << init_perm[i] << " ";
-    // cout << endl;
-
-    // testol = 0;
-    // for(int i=0;i<n;i++){
-    //     for(int j=0;j<n;j++){
-    //         testol += b[init_perm[i]][init_perm[j]]*a[i][j];
-    //     }
-    // }
-    // cout << fixed << setprecision(7) << "input bar " << testol << endl;
-    // TEST END
-
     // int num_iters = 35000;
     int num_init_iters = num_iters/100; // Connolly proposes nb_iterations/100
     double tmp_cost;
@@ -832,29 +809,6 @@ vector<int> getQAPReordering(double gamma, bool has_hierarchy, int N, vector<vec
     setId(tree, name2id); 
     setLeaves(tree); 
 
-    // TEST
-    // double testol = 0;
-    // for(int i=0;i<n;i++){
-    //     for(int j=0;j<n;j++){
-    //         testol += b[i][j]*a[i][j];
-    //     }
-    // }
-    // cout << fixed << setprecision(7) << "original bar " << testol << endl;
-
-    // vector<int> init_perm = tree->leavesId;
-    // cout << "initial  perm " << endl;
-    // for(int i=0;i<init_perm.size();i++) cout << init_perm[i] << " ";
-    // cout << endl;
-
-    // testol = 0;
-    // for(int i=0;i<n;i++){
-    //     for(int j=0;j<n;j++){
-    //         testol += b[init_perm[i]][init_perm[j]]*a[i][j];
-    //     }
-    // }
-    // cout << fixed << setprecision(7) << "input bar " << testol << endl;
-    // TEST END
-
     // int num_iters = 35000;
     int num_init_iters = num_iters/100; // Connolly proposes nb_iterations/100
     double tmp_cost;
@@ -916,7 +870,7 @@ vector<vector<double>> getAvgAndStd(bool has_hierarchy, string mat_path, string 
 
     for (int i = 0; i < test_tree_num; i++)
     {
-        cout << i << endl;
+        // cout << i << endl;
         Node* tmp_tree = deepCopy(tree);
         random_shuffle_hierarchy(tmp_tree);
         setLeaves(tmp_tree);

@@ -132,7 +132,7 @@ def main():
     parser.add_argument("--rawDataPath", type=str, default='/data/yukai/UnifiedConfusionMatrix/datasets/coco/')
     parser.add_argument("--bufferPath", type=str, default='/data/zhaowei/ConfusionMatrix/buffer/')
     parser.add_argument("--host", type=str, default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=5012)
+    parser.add_argument("--port", type=int, default=5010)
     args = parser.parse_args()
     if not os.path.exists(args.rawDataPath):
         raise Exception("The path does not exist.")
