@@ -10,7 +10,7 @@
         </svg>
         <waiting-icon v-if="rendering"></waiting-icon>
 
-        <vue-draggable-resizable class="image-widget" v-for="(node, index) in showImages" :key="index" :lockAspectRatio="true"
+        <vue-draggable-resizable class="image-widget" v-for="node in showImages" :key="node.index" :lockAspectRatio="true"
             :handles="['tl','tr','bl','br']" :min-width="150" :x="widgetInitX" :y="widgetInitY" :w="gridWidthInitWidth" :h="gridWidthInitWidth"
                 :onDragStart="disableHover" @dragstop="enableHover()"
                 :onResizeStart="disableHover" @resizestop="enableHover()" @resizing="onResizeWidget(node)">
@@ -497,6 +497,9 @@ export default {
         createImageWidget: function(node) {
             // eslint-disable-next-line new-cap
             node.widgetmode = 'single';
+            if (this.showImages.indexOf(node) > -1) {
+                return;
+            }
             this.showImages.push(node);
             this.$nextTick(()=> {
                 this.fetchAndDrawWidgetBox(node);
