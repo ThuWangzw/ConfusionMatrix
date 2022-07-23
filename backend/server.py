@@ -34,6 +34,13 @@ def zoomInDist():
         query = request.json['query']
     return jsonify(dataCtrler.getZoomInDistribution(query))
 
+@app.route('/api/boxConfDist', methods=["POST"])
+def boxConfDist():
+    query = None
+    if 'query' in request.json:
+        query = request.json['query']
+    return jsonify(dataCtrler.getBoxConfidenceDistribution(query))
+
 @app.route('/api/boxSizeDist', methods=["POST"])
 def boxSizeDist():
     query = None
@@ -62,7 +69,7 @@ def imageGradient():
     showmode = request.args['show']
     showall = request.args['showall']
     iou_thres = float(request.args['iou'])
-    conf_thres = float(request.args['conf'])
+    conf_thres = [float(i) for i in request.args['conf'].split(',')]
     hideBox = False
     if 'hidebox' in request.args:
         hideBox = request.args['hidebox']=='true'

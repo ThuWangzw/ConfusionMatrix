@@ -61,8 +61,8 @@ export default {
             default: 0.5,
         },
         confThreshold: {
-            type: Number,
-            default: 0.1,
+            type: Array,
+            default: undefined,
         },
     },
     computed: {

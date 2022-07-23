@@ -14,18 +14,7 @@
                                 :value="item">
                             </el-option>
                         </el-select>
-                        <i v-if="gettingMatrix||gettingSizeBarchart||gettingAspectRatioBarchart" class="el-icon-loading"></i>
-                    </div>
-                    <div class="mode-select">
-                        <span class="select-label">Confidence</span>
-                        <el-select v-model="confThreshold" @change="changeConfThreshold" size="mini">
-                            <el-option
-                                v-for="item in confThresholds"
-                                :key="item"
-                                :label="item"
-                                :value="item">
-                            </el-option>
-                        </el-select>
+                        <i v-if="gettingMatrix||gettingSizeBarchart||gettingAspectRatioBarchart||gettingConfBarchart" class="el-icon-loading"></i>
                     </div>
                     <div class="mode-select">
                         <span class="select-label">Matrix Encoding</span>
@@ -90,6 +79,10 @@
                     <span>Filters</span>
                 </div>
                 <div id="scented-barcharts">
+                    <scented-barchart ref="conf-hist" :barNum="barNum" :dataRangeAll="confRange" :hideUnfiltered="hideUnfiltered"
+                        :allData="confAll" :title="'PR_conf'" queryKey="conf_thres"
+                        :selectData="confSelect" :xSplit="confSplit" :displayMode="displayMode"
+                        @hoverBarchart="hoverBarchart" @selectRange="selectRange"></scented-barchart>
                     <scented-barchart ref="label-size-hist" :barNum="barNum" :dataRangeAll="labelSizeRange" :hideUnfiltered="hideUnfiltered"
                         :allData="labelSizeAll" :title="'GT_size'" queryKey="label_size" :overallDist="labelSizeOverallDist"
                         :selectData="labelSizeSelect" :xSplit="labelSizeSplit" :displayMode="displayMode"
@@ -151,7 +144,7 @@
                 </div>
             </div>
             <div id="grid-layout-container">
-                <grid-layout ref="grid" :iouThreshold="iouThreshold" :confThreshold="confThreshold"></grid-layout>
+                <grid-layout ref="grid" :iouThreshold="iouThreshold" :confThreshold="query.conf_thres"></grid-layout>
             </div>
         </div>
     </div>
@@ -188,10 +181,6 @@ export default {
             iouThreshold: 0.5,
             iouThresholds: [
                 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95,
-            ],
-            confThreshold: 0.1,
-            confThresholds: [
-                0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
             ],
             dataModes: [{
                 value: 'count',
@@ -282,42 +271,60 @@ export default {
                 value: 'row',
                 label: 'row',
             }],
-            query: {},
+            query: {conf_thres: [0, 1]},
+            // attributes for barcharts
+            // split
             labelSizeSplit: [],
             predictSizeSplit: [],
-            labelSizeAll: [],
-            predictSizeAll: [],
-            labelSizeConfusion: undefined,
-            predictSizeConfusion: undefined,
-            labelSizeSelect: [],
-            predictSizeSelect: [],
-            labelSizeSelectBuffer: [],
-            predictSizeSelectBuffer: [],
             labelAspectRatioSplit: [],
             predictAspectRatioSplit: [],
+            confSplit: [],
+            // all data
+            labelSizeAll: [],
+            predictSizeAll: [],
             labelAspectRatioAll: [],
             predictAspectRatioAll: [],
+            confAll: [],
+            // confusion
+            labelSizeConfusion: undefined,
+            predictSizeConfusion: undefined,
             labelAspectRatioConfusion: undefined,
             predictAspectRatioConfusion: undefined,
+            confConfusion: undefined,
+            // select
+            labelSizeSelect: [],
+            predictSizeSelect: [],
             labelAspectRatioSelect: [],
             predictAspectRatioSelect: [],
+            confSelect: [],
+            // buffer
+            labelSizeSelectBuffer: [],
+            predictSizeSelectBuffer: [],
             labelAspectRatioSelectBuffer: [],
             predictAspectRatioSelectBuffer: [],
-            gettingMatrix: true,
-            gettingSizeBarchart: true,
-            gettingAspectRatioBarchart: true,
+            confBuffer: [],
+            // range
             labelSizeRange: undefined,
             predictSizeRange: undefined,
             labelAspectRatioRange: undefined,
             predictAspectRatioRange: undefined,
+            confRange: undefined,
+            // show
             labelSizeShow: undefined,
             predictSizeShow: undefined,
             labelAspectRatioShow: undefined,
             predictAspectRatioShow: undefined,
+            confShow: undefined,
+            // overall: deprecated
             labelSizeOverallDist: undefined,
             predictSizeOverallDist: undefined,
             labelAspectRatioOverallDist: undefined,
             predictAspectRatioOverallDist: undefined,
+            // status flag
+            gettingMatrix: true,
+            gettingSizeBarchart: true,
+            gettingAspectRatioBarchart: true,
+            gettingConfBarchart: true,
             hideUnfiltered: false,
             selections: [0],
             selectedSelection: -1,
@@ -343,13 +350,6 @@ export default {
                 this.getPRCurve(this.$refs.matrix.name2index[this.$refs.matrix.prCurveClass]);
             }
         },
-        changeConfThreshold: function() {
-            this.query['conf_thres'] = this.confThreshold;
-            this.setConfusionMatrix();
-            // TODO: change confidence should affect barcharts?
-            // this.setBoxSizeInfo();
-            // this.setBoxAspectRatioInfo();
-        },
         changeShowDirection: function() {
             this.showMode = 'direction';
         },
@@ -367,7 +367,6 @@ export default {
             }
             query = {...this.query, ...query};
             query['iou_thres'] = this.iouThreshold;
-            query['conf_thres'] = this.confThreshold;
             const returnList = ['count'];
             if (this.returnMode!=='count') returnList.push(this.returnMode);
             returnList.push('size_comparison');
@@ -382,16 +381,11 @@ export default {
                     that.gettingMatrix = false;
                 });
         },
-        setBoxSizeInfo: function(query) {
+        setBoxSizeInfo: function() {
             this.gettingSizeBarchart = true;
             const store = this.$store;
             const that = this;
-            if (query===undefined) {
-                query = {};
-            }
-            query['iou_thres'] = this.iouThreshold;
-            query['conf_thres'] = this.confThreshold;
-            axios.post(store.getters.URL_GET_BOX_SIZE_DIST, query===undefined?{}:{query: query})
+            axios.post(store.getters.URL_GET_BOX_SIZE_DIST, {})
                 .then(function(response) {
                     that.labelSizeSplit = response.data.labelSplit;
                     that.predictSizeSplit = response.data.predictSplit;
@@ -410,16 +404,11 @@ export default {
                     that.gettingSizeBarchart = false;
                 });
         },
-        setBoxAspectRatioInfo: function(query) {
+        setBoxAspectRatioInfo: function() {
             this.gettingAspectRatioBarchart = true;
             const store = this.$store;
             const that = this;
-            if (query===undefined) {
-                query = {};
-            }
-            query['iou_thres'] = this.iouThreshold;
-            query['conf_thres'] = this.confThreshold;
-            axios.post(store.getters.URL_GET_BOX_ASPECT_RATIO_DIST, query===undefined?{}:{query: query})
+            axios.post(store.getters.URL_GET_BOX_ASPECT_RATIO_DIST, {})
                 .then(function(response) {
                     that.labelAspectRatioSplit = response.data.labelSplit;
                     that.predictAspectRatioSplit = response.data.predictSplit;
@@ -438,6 +427,23 @@ export default {
                     that.labelAspectRatioSelect = response.data.labelAspectRatioAll;
                     that.predictAspectRatioSelect = response.data.predictAspectRatioAll;
                     that.gettingAspectRatioBarchart = false;
+                });
+        },
+        setConfInfo: function() {
+            this.gettingConfBarchart = true;
+            const store = this.$store;
+            const that = this;
+            axios.post(store.getters.URL_GET_BOX_CONF_DIST, {})
+                .then(function(response) {
+                    that.confSplit = response.data.confSplit;
+                    that.confRange = [that.confSplit[0],
+                        that.confSplit[that.confSplit.length-1]];
+                    that.confShow = that.confRange;
+                    that.confAll = response.data.confAll;
+                    that.confBuffer = that.confAll;
+                    that.confConfusion = response.data.confConfusion;
+                    that.confSelect = response.data.confAll;
+                    that.gettingConfBarchart = false;
                 });
         },
         changeDataMode: function() {
@@ -497,17 +503,20 @@ export default {
                 this.predictSizeSelect = this.predictSizeSelectBuffer;
                 this.labelAspectRatioSelect = this.labelAspectRatioSelectBuffer;
                 this.predictAspectRatioSelect = this.predictAspectRatioSelectBuffer;
+                this.confSelect = this.confBuffer;
                 return;
             }
             const tmp1 = [];
             const tmp2 = [];
             const tmp3 = [];
             const tmp4 = [];
+            const tmp5 = [];
             for (let i = 0; i < this.barNum; ++i) {
                 tmp1.push(0);
                 tmp2.push(0);
                 tmp3.push(0);
                 tmp4.push(0);
+                tmp5.push(0);
             }
             for (const i of labelClasses) {
                 for (const j of predictClasses) {
@@ -516,6 +525,7 @@ export default {
                         tmp2[k] += this.predictSizeConfusion[i][j][k];
                         tmp3[k] += this.labelAspectRatioConfusion[i][j][k];
                         tmp4[k] += this.predictAspectRatioConfusion[i][j][k];
+                        tmp5[k] += this.confConfusion[i][j][k];
                     }
                 }
             }
@@ -523,19 +533,29 @@ export default {
             this.predictSizeSelect = tmp2;
             this.labelAspectRatioSelect = tmp3;
             this.predictAspectRatioSelect = tmp4;
+            this.confSelect = tmp5;
         },
         hoverBarchart: function(query) {
+            console.log(query);
             if (query===undefined) {
                 query = {};
             }
             query['iou_thres'] = this.iouThreshold;
-            query['conf_thres'] = this.confThreshold;
             this.query = {...this.query, ...query};
             this.setConfusionMatrix(this.query);
             this.gettingSizeBarchart = true;
             this.gettingAspectRatioBarchart = true;
+            this.gettingConfBarchart = true;
             const store = this.$store;
             const that = this;
+            axios.post(store.getters.URL_GET_BOX_CONF_DIST, {query: {...this.query,
+                'conf_range': that.confShow}})
+                .then(function(response) {
+                    that.confSelect = response.data.confAll;
+                    that.confConfusion = response.data.confConfusion;
+                    that.confBuffer = response.data.confAll;
+                    that.gettingConfBarchart = false;
+                });
             axios.post(store.getters.URL_GET_BOX_SIZE_DIST, {query: {...this.query,
                 'label_range': that.labelSizeShow, 'predict_range': that.predictSizeShow}})
                 .then(function(response) {
@@ -566,7 +586,6 @@ export default {
             query['query_key'] = queryKey;
             query['range'] = rangeShow;
             query['iou_thres'] = this.iouThreshold;
-            query['conf_thres'] = this.confThreshold;
             if (queryKey === 'label_size') {
                 that.labelSizeShow = rangeShow;
                 this.gettingSizeBarchart = true;
@@ -615,6 +634,18 @@ export default {
                         that.predictAspectRatioSelectBuffer = that.predictAspectRatioSelect;
                         that.gettingAspectRatioBarchart = false;
                     });
+            } else if (queryKey == 'conf_thres') {
+                that.confShow = rangeShow;
+                this.gettingConfBarchart = true;
+                axios.post(store.getters.URL_GET_ZOOM_IN_DIST, {query: query})
+                    .then(function(response) {
+                        that.confAll = response.data.allDist;
+                        that.confSelect = response.data.selectDist;
+                        that.confConfusion = response.data.confusion;
+                        that.confSplit = response.data.split;
+                        that.confBuffer = that.confSelect;
+                        that.gettingConfBarchart = false;
+                    });
             } else {
                 console.log('query_key error: ' + String(rangeShow));
             }
@@ -625,7 +656,7 @@ export default {
             axios.post(store.getters.URL_GET_PR_CURVES, {query: {
                 class: category,
                 iou_thres: that.iouThreshold,
-                conf_thres: that.confThreshold,
+                conf_thres: that.query['conf_thres'],
             }})
                 .then(function(response) {
                     console.log(response.data);
@@ -660,7 +691,6 @@ export default {
                 }
             }
             that.query['iou_thres'] = that.iouThreshold;
-            that.query['conf_thres'] = that.confThreshold;
 
             axios.post(store.getters.URL_GET_IMAGES_IN_MATRIX_CELL, {
                 labels: d.rowNode.leafs,
@@ -727,6 +757,7 @@ export default {
         },
     },
     mounted: function() {
+        this.setConfInfo();
         this.setBoxSizeInfo();
         this.setBoxAspectRatioInfo();
         this.setClassStatistics();

@@ -2,7 +2,6 @@ import os
 import json
 import copy
 import bisect
-from tkinter import N
 from matplotlib.pyplot import box
 import numpy as np
 import pickle
@@ -54,10 +53,9 @@ class DataCtrler(object):
         setting_name = os.path.basename(os.path.normpath(rawDataPath))
         self.raw_data_path = os.path.join(bufferPath, "{}_raw_data.pkl".format(setting_name))
         self.label_predict_iou_path = os.path.join(bufferPath, "{}_predict_label_iou.pkl".format(setting_name))
-        self.box_size_split_path = os.path.join(bufferPath, "{}_box_size_split.pkl".format(setting_name))
         self.box_size_dist_path = os.path.join(bufferPath, "{}_box_size_dist.pkl".format(setting_name))
-        self.box_aspect_ratio_split_path = os.path.join(bufferPath, "{}_box_aspect_ratio_split.pkl".format(setting_name))
         self.box_aspect_ratio_dist_path = os.path.join(bufferPath, "{}_box_aspect_ratio_dist.pkl".format(setting_name))
+        self.box_conf_dist_path = os.path.join(bufferPath, "{}_box_conf_dist.pkl".format(setting_name))
         self.hierarchy_sample_path = os.path.join(bufferPath, "{}_hierarchy_samples.pkl".format(setting_name))
         self.all_features_path = os.path.join(bufferPath, "{}_features.npy".format(setting_name))
         self.pr_curves_path = os.path.join(bufferPath, "{}_pr_curves.pkl".format(setting_name))
@@ -164,19 +162,7 @@ class DataCtrler(object):
             self.pr_curves_map, self.pr_index_map = self.compute_pr_curves()
             with open(self.pr_curves_path, 'wb') as f:
                 pickle.dump((self.pr_curves_map, self.pr_index_map), f)
-        
-        if os.path.exists(self.box_size_split_path):
-            with open(self.box_size_split_path, 'rb') as f:
-                self.box_size_split_map = pickle.load(f)
-        else:
-            self.box_size_split_map = {}
-        
-        if os.path.exists(self.box_aspect_ratio_split_path):
-            with open(self.box_aspect_ratio_split_path, 'rb') as f:
-                self.box_aspect_ratio_split_map = pickle.load(f)
-        else:
-            self.box_aspect_ratio_split_map = {}
-        
+
         # init size
         self.label_size = self.raw_labels[:,3]*self.raw_labels[:,4]
         self.predict_size = self.raw_predicts[:,4]*self.raw_predicts[:,5]
@@ -204,6 +190,16 @@ class DataCtrler(object):
             self.box_aspect_ratio_dist_map = self.getBoxAspectRatioDistribution()
             with open(self.box_aspect_ratio_dist_path, 'wb') as f:
                 pickle.dump(self.box_aspect_ratio_dist_map, f)
+        
+        if os.path.exists(self.box_conf_dist_path):
+            with open(self.box_conf_dist_path, 'rb')  as f:
+                self.box_conf_dist_map = pickle.load(f)
+        else:
+            self.box_conf_dist_map = None
+            self.box_conf_dist_map = self.getBoxConfidenceDistribution()
+            with open(self.box_conf_dist_path, 'wb') as f:
+                pickle.dump(self.box_conf_dist_map, f)
+
 
         # direction map, also use IoU threshold as key because different match results in different directions
         self.directions_map = {}
@@ -475,11 +471,11 @@ class DataCtrler(object):
             "label": np.arange(len(self.classID2Idx)-1),
             "predict": np.arange(len(self.classID2Idx)-1),
             "split": 10,
-            "conf_thres": 0.05,
+            "conf_thres": [0, 1],
             "iou_thres": 0.5
         }
         iou_thres = self.iou_thresholds[0]
-        conf_thres = 0.05
+        conf_thres = [0, 1]
         if query is not None:
             query = {**default_query, **query}
             iou_thres = query['iou_thres']
@@ -488,8 +484,10 @@ class DataCtrler(object):
         # separate matched pairs from unmatch ones
         # index of pred_label_pairs
         predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
-        filtered = np.arange(len(predict_label_pairs))[np.logical_and(predict_label_pairs[:,1]>-1, self.raw_predicts[predict_label_pairs[:,0], 1]>conf_thres)]
-        unmatch_predict = np.arange(len(predict_label_pairs))[np.logical_and(predict_label_pairs[:,1]==-1, self.raw_predicts[predict_label_pairs[:,0], 1]>conf_thres)]
+        filtered = np.arange(len(predict_label_pairs))[np.logical_and(predict_label_pairs[:,1]>-1, 
+                                                       np.logical_and(self.raw_predicts[predict_label_pairs[:,0], 1]>conf_thres[0], self.raw_predicts[predict_label_pairs[:,0], 1]<conf_thres[1]))]
+        unmatch_predict = np.arange(len(predict_label_pairs))[np.logical_and(predict_label_pairs[:,1]==-1, 
+                                                              np.logical_and(self.raw_predicts[predict_label_pairs[:,0], 1]>conf_thres[0], self.raw_predicts[predict_label_pairs[:,0], 1]<conf_thres[1]))]
         # this is index of gt, not pred_label_pairs, as this is calculated after filtering
         # should ignore iscrowd object
         unmatch_label = np.setdiff1d(np.arange(len(self.raw_labels))[self.raw_labels[:, 5]==0], predict_label_pairs[filtered, 1])
@@ -742,6 +740,25 @@ class DataCtrler(object):
                 confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_pos[1:-1], self.predict_aspect_ratio[pr])]+=1
             for (pr, gt) in predict_label_pairs[unmatch_predict]:
                 confusion[len(label_target)][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_pos[1:-1], self.predict_aspect_ratio[pr])]+=1
+        elif target == 'conf_thres':
+            all_dist = [0 for _ in range(K)]
+            for i in range(K):
+                last = split_pos[i]
+                cur = split_pos[i+1]
+                all_dist[i] = np.count_nonzero(np.logical_and(self.raw_predicts[:, 1]>last, self.raw_predicts[:, 1]<=cur))
+            match_select = self.raw_predicts[predict_label_pairs[filtered,0], 1]
+            unmatch_select = self.raw_predicts[predict_label_pairs[unmatch_predict,0], 1]
+            select_dist = [0 for _ in range(K)]
+            for i in range(K):
+                last = split_pos[i]
+                cur = split_pos[i+1]
+                select_dist[i] = np.count_nonzero(np.logical_and(match_select>last, match_select<=cur)) + \
+                    np.count_nonzero(np.logical_and(unmatch_select>last, unmatch_select<=cur))
+            confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
+            for (pr, gt) in predict_label_pairs[filtered]:
+                confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_pos[1:-1], self.raw_predicts[pr, 1])]+=1
+            for (pr, gt) in predict_label_pairs[unmatch_predict]:
+                confusion[len(label_target)][int(self.raw_predicts[pr, 0])][bisect.bisect_left(split_pos[1:-1], self.raw_predicts[pr, 1])]+=1
         else:
             raise NotImplementedError()
 
@@ -751,6 +768,48 @@ class DataCtrler(object):
             'confusion': confusion,
             'split': split_pos.tolist()
         }
+
+    def getBoxConfidenceDistribution(self, query = None):
+        """
+            return pred_confidence distribution
+        """
+        if query is None and self.box_conf_dist_map is not None:
+            return self.box_conf_dist_map
+        filtered, unmatch_predict, unmatch_label = self.filterSamples(query)
+        iou_thres = self.iou_thresholds[0]
+        if query is not None and "iou_thres" in query:
+            iou_thres = query["iou_thres"]
+        predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
+        filtered_conf = self.raw_predicts[predict_label_pairs[filtered,0], 1]
+        unmatched_conf = self.raw_predicts[predict_label_pairs[unmatch_predict,0], 1]
+        
+        K = 25
+        if query is not None and 'conf_range' in query:
+            conf_range = query['conf_range']
+        else:
+            conf_range = [0, 1]
+        conf_split = np.array([conf_range[0]+i*(conf_range[1]-conf_range[0])/K for i in range(K+1)])
+        
+        conf_dist = [0 for _ in range(K)]
+        for i in range(K):
+            conf_dist[i] = np.count_nonzero(np.logical_and(filtered_conf>conf_split[i], filtered_conf<=conf_split[i+1])) + \
+             np.count_nonzero(np.logical_and(unmatched_conf>conf_split[i], unmatched_conf<=conf_split[i+1]))
+            
+        label_target, pred_target = np.arange(len(self.classID2Idx)-1), np.arange(len(self.classID2Idx)-1)
+        conf_confusion = [[[0 for _ in range(K)] for _ in range(len(pred_target)+1)] for _ in range(len(label_target)+1)]
+        for (pr, gt) in predict_label_pairs[filtered]:
+            if conf_range[0] <= self.raw_predicts[pr, 1] <= conf_range[1]:
+                conf_confusion[int(self.raw_labels[gt, 0])][int(self.raw_predicts[pr, 0])][bisect.bisect_left(conf_split[1:-1], self.raw_predicts[pr, 1])]+=1
+        for (pr, gt) in predict_label_pairs[unmatch_predict]:
+            if conf_range[0] <= self.raw_predicts[pr, 1] <= conf_range[1]:
+                conf_confusion[len(label_target)][int(self.raw_predicts[pr, 0])][bisect.bisect_left(conf_split[1:-1], self.raw_predicts[pr, 1])]+=1
+                
+        return {
+            'confAll': conf_dist,
+            'confConfusion': conf_confusion,
+            'confSplit': conf_split.tolist()
+        }
+
 
    
     def getBoxSizeDistribution(self, query = None):
@@ -1091,12 +1150,13 @@ class DataCtrler(object):
             return self.raw_label2imageid[boxID-len(self.raw_predicts)]
         return self.raw_predict2imageid[boxID]
     
-    def _getBoxesByImgId(self, img_id: int, iou_thres: float, conf_thres: float):
+    def _getBoxesByImgId(self, img_id: int, iou_thres: float, conf_thres: list):
         predict_label_pairs, _, _ = self.pairs_map_under_iou_thresholds[iou_thres]
         # as 1 gt may occur in many pairs, so pr_boxes will only contain predict indexes, and so as gt_boxes
         pr_boxes = predict_label_pairs[np.logical_and(np.logical_and(predict_label_pairs[:, 0]>=self.imageid2raw_predict[img_id][0],
                                                                      predict_label_pairs[:, 0]< self.imageid2raw_predict[img_id][1]), 
-                                                      self.raw_predicts[predict_label_pairs[:, 0], 1] > conf_thres), 0]
+                                                      np.logical_and(self.raw_predicts[predict_label_pairs[:, 0], 1] > conf_thres[0],
+                                                                     self.raw_predicts[predict_label_pairs[:, 0], 1] < conf_thres[1])), 0]
         gt_boxes = np.arange(self.imageid2raw_label[img_id][0], self.imageid2raw_label[img_id][1])
         return pr_boxes.tolist(), gt_boxes.tolist()
 
@@ -1114,7 +1174,7 @@ class DataCtrler(object):
                 gt_box.append(-1)
         return pr_box, gt_box
         
-    def getImagebox(self, boxID: int, showall: str, iou_thres: float, conf_thres: float):
+    def getImagebox(self, boxID: int, showall: str, iou_thres: float, conf_thres: list):
         finalBoxes = []
         img = Image.open(os.path.join(self.images_path, self.index2image[self.pairIDtoImageID(boxID)]+'.jpg'))
         amp = [img.width,img.height]
@@ -1149,7 +1209,7 @@ class DataCtrler(object):
         }
         
         
-    def getImage(self, boxID: int, show: str, showall: str, iou_thres: float, conf_thres: float, hideBox = False):
+    def getImage(self, boxID: int, show: str, showall: str, iou_thres: float, conf_thres: list, hideBox = False):
         img = Image.open(os.path.join(self.images_path, self.index2image[self.pairIDtoImageID(boxID)]+'.jpg'))
         anno = Annotator(np.array(img), pil=True)
         amp = np.array([img.width,img.height,img.width,img.height])

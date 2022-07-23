@@ -33,6 +33,7 @@ export default new Vuex.Store({
         URL_GET_SIZE_MATRIX: (state) => state.APIBASE + '/api/sizeMatrix',
         URL_GET_BOX_ASPECT_RATIO_DIST: (state) => state.APIBASE + '/api/boxAspectRatioDist',
         URL_GET_BOX_SIZE_DIST: (state) => state.APIBASE + '/api/boxSizeDist',
+        URL_GET_BOX_CONF_DIST: (state) => state.APIBASE + '/api/boxConfDist',
         URL_GET_ZOOM_IN_DIST: (state) => state.APIBASE + '/api/zoomInDist',
         URL_GET_OVERALL_DIST: (state) => state.APIBASE + '/api/overallDist',
         URL_GET_IMAGE: (state) => {
